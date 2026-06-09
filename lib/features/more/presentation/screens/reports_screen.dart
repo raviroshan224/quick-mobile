@@ -40,8 +40,7 @@ class _SalesData {
   // hour label → revenue
   final Map<String, double> hourlyRevenue;
 
-  double get avgTicket =>
-      transactions == 0 ? 0 : revenue / transactions;
+  double get avgTicket => transactions == 0 ? 0 : revenue / transactions;
 }
 
 const _salesToday = _SalesData(
@@ -121,12 +120,7 @@ const _staffData = <_StaffRow>[
     revenue: 118500,
     commissionRate: 10,
   ),
-  _StaffRow(
-    name: 'Anil Rai',
-    services: 36,
-    revenue: 98200,
-    commissionRate: 10,
-  ),
+  _StaffRow(name: 'Anil Rai', services: 36, revenue: 98200, commissionRate: 10),
   _StaffRow(
     name: 'Maya Shrestha',
     services: 29,
@@ -316,9 +310,9 @@ const _stockMovements = <_StockMovement>[
 ];
 
 double get _totalStockValue => _allInventoryItems.fold(
-      0,
-      (sum, item) => sum + item.current * item.valuePerUnit,
-    );
+  0,
+  (sum, item) => sum + item.current * item.valuePerUnit,
+);
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
@@ -352,13 +346,24 @@ class ReportsScreen extends HookConsumerWidget {
                   const Spacer(),
                   const Text(
                     'Reports',
-                    style: TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
                   ),
                   const Spacer(),
-                  const SizedBox(width: 18),
+                  GestureDetector(
+                    onTap: () => _showDownloadSheet(context, tabIndex.value),
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF3F4F6),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(
+                        Icons.download_rounded,
+                        size: 18,
+                        color: Colors.black,
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -392,6 +397,176 @@ class ReportsScreen extends HookConsumerWidget {
                 _ => const _InventoryTab(),
               },
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Download sheet ───────────────────────────────────────────────────────────
+
+void _showDownloadSheet(BuildContext context, int tabIndex) {
+  final reportNames = ['Sales', 'Staff Performance', 'Services', 'Inventory'];
+  final reportName = reportNames[tabIndex];
+
+  showModalBottomSheet(
+    context: context,
+    backgroundColor: Colors.white,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+    ),
+    builder: (ctx) => SafeArea(
+      top: false,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(height: 8),
+          Container(
+            width: 36,
+            height: 4,
+            decoration: BoxDecoration(
+              color: const Color(0xFFE5E7EB),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
+            child: Row(
+              children: [
+                const Icon(Icons.download_rounded, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Download $reportName Report',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                GestureDetector(
+                  onTap: () => Navigator.pop(ctx),
+                  child: const Icon(
+                    Icons.close,
+                    size: 20,
+                    color: Color(0xFF6B7280),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 16),
+          _DownloadOption(
+            icon: Icons.picture_as_pdf_outlined,
+            label: 'Download as PDF',
+            subtitle: 'Best for printing and sharing',
+            color: const Color(0xFFEF4444),
+            onTap: () {
+              Navigator.pop(ctx);
+              _showDownloadSuccess(context, reportName, 'PDF');
+            },
+          ),
+          _DownloadOption(
+            icon: Icons.table_chart_outlined,
+            label: 'Download as Excel',
+            subtitle: 'Best for data analysis',
+            color: const Color(0xFF10B981),
+            onTap: () {
+              Navigator.pop(ctx);
+              _showDownloadSuccess(context, reportName, 'Excel');
+            },
+          ),
+          const SizedBox(height: 16),
+        ],
+      ),
+    ),
+  );
+}
+
+void _showDownloadSuccess(
+  BuildContext context,
+  String reportName,
+  String format,
+) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Row(
+        children: [
+          const Icon(
+            Icons.check_circle_rounded,
+            color: Color(0xFF10B981),
+            size: 18,
+          ),
+          const SizedBox(width: 10),
+          Text(
+            '$reportName report ($format) downloaded',
+            style: const TextStyle(color: Colors.white),
+          ),
+        ],
+      ),
+      backgroundColor: Colors.black,
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      duration: const Duration(seconds: 2),
+    ),
+  );
+}
+
+class _DownloadOption extends StatelessWidget {
+  const _DownloadOption({
+    required this.icon,
+    required this.label,
+    required this.subtitle,
+    required this.color,
+    required this.onTap,
+  });
+  final IconData icon;
+  final String label;
+  final String subtitle;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, size: 20, color: color),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFF6B7280),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right, size: 18, color: Color(0xFF9CA3AF)),
           ],
         ),
       ),
@@ -464,11 +639,7 @@ class _SectionLabel extends StatelessWidget {
 // ─── Bar widget ───────────────────────────────────────────────────────────────
 
 class _Bar extends StatelessWidget {
-  const _Bar({
-    required this.fraction,
-    required this.color,
-    this.height = 8,
-  });
+  const _Bar({required this.fraction, required this.color, this.height = 8});
   final double fraction; // 0.0 – 1.0
   final Color color;
   final double height;
@@ -525,8 +696,10 @@ class _SalesTab extends HookWidget {
       _ => 'Weekly Revenue',
     };
 
-    final maxBarValue =
-        data.hourlyRevenue.values.fold(0.0, (m, v) => v > m ? v : m);
+    final maxBarValue = data.hourlyRevenue.values.fold(
+      0.0,
+      (m, v) => v > m ? v : m,
+    );
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
@@ -721,10 +894,7 @@ class _SummaryMetric extends StatelessWidget {
         const SizedBox(height: 2),
         Text(
           label,
-          style: const TextStyle(
-            fontSize: 12,
-            color: Color(0xFF9CA3AF),
-          ),
+          style: const TextStyle(fontSize: 12, color: Color(0xFF9CA3AF)),
         ),
       ],
     );
@@ -792,18 +962,11 @@ class _HourBar extends StatelessWidget {
           width: 52,
           child: Text(
             label,
-            style: const TextStyle(
-              fontSize: 12,
-              color: Color(0xFF6B7280),
-            ),
+            style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
           ),
         ),
         Expanded(
-          child: _Bar(
-            fraction: fraction,
-            color: Colors.black,
-            height: 10,
-          ),
+          child: _Bar(fraction: fraction, color: Colors.black, height: 10),
         ),
         const SizedBox(width: 10),
         SizedBox(
@@ -987,10 +1150,7 @@ class _StaffTableRow extends StatelessWidget {
             child: Text(
               _npr(data.revenue),
               textAlign: TextAlign.right,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              ),
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
             ),
           ),
           const SizedBox(width: 8),
@@ -1057,10 +1217,13 @@ class _ServicesTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final maxCount =
-        _topServices.map((s) => s.count).fold(0, (m, v) => v > m ? v : m);
-    final totalCategoryRevenue =
-        _categoryStats.fold(0.0, (sum, c) => sum + c.revenue);
+    final maxCount = _topServices
+        .map((s) => s.count)
+        .fold(0, (m, v) => v > m ? v : m);
+    final totalCategoryRevenue = _categoryStats.fold(
+      0.0,
+      (sum, c) => sum + c.revenue,
+    );
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
@@ -1101,10 +1264,7 @@ class _ServicesTab extends StatelessWidget {
             children: [
               for (final (i, cat) in _categoryStats.indexed) ...[
                 if (i > 0) const SizedBox(height: 14),
-                _CategoryRow(
-                  cat: cat,
-                  totalRevenue: totalCategoryRevenue,
-                ),
+                _CategoryRow(cat: cat, totalRevenue: totalCategoryRevenue),
               ],
             ],
           ),
@@ -1138,9 +1298,7 @@ class _ServiceRow extends StatelessWidget {
                 width: 26,
                 height: 26,
                 decoration: BoxDecoration(
-                  color: rank == 1
-                      ? Colors.black
-                      : const Color(0xFFF3F4F6),
+                  color: rank == 1 ? Colors.black : const Color(0xFFF3F4F6),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Center(
@@ -1149,9 +1307,7 @@ class _ServiceRow extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
-                      color: rank == 1
-                          ? Colors.white
-                          : const Color(0xFF6B7280),
+                      color: rank == 1 ? Colors.white : const Color(0xFF6B7280),
                     ),
                   ),
                 ),
@@ -1202,17 +1358,19 @@ class _ServiceRow extends StatelessWidget {
           ),
         ),
         if (showDivider)
-          const Divider(height: 1, indent: 16, endIndent: 16, color: Color(0xFFF3F4F6)),
+          const Divider(
+            height: 1,
+            indent: 16,
+            endIndent: 16,
+            color: Color(0xFFF3F4F6),
+          ),
       ],
     );
   }
 }
 
 class _CategoryRow extends StatelessWidget {
-  const _CategoryRow({
-    required this.cat,
-    required this.totalRevenue,
-  });
+  const _CategoryRow({required this.cat, required this.totalRevenue});
   final _CategoryStat cat;
   final double totalRevenue;
 
@@ -1224,10 +1382,7 @@ class _CategoryRow extends StatelessWidget {
         Container(
           width: 10,
           height: 10,
-          decoration: BoxDecoration(
-            color: cat.color,
-            shape: BoxShape.circle,
-          ),
+          decoration: BoxDecoration(color: cat.color, shape: BoxShape.circle),
         ),
         const SizedBox(width: 10),
         SizedBox(
@@ -1237,7 +1392,9 @@ class _CategoryRow extends StatelessWidget {
             style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
           ),
         ),
-        Expanded(child: _Bar(fraction: pct, color: cat.color, height: 8)),
+        Expanded(
+          child: _Bar(fraction: pct, color: cat.color, height: 8),
+        ),
         const SizedBox(width: 10),
         SizedBox(
           width: 84,
@@ -1463,8 +1620,8 @@ class _MovementRow extends StatelessWidget {
     final timeLabel = movement.daysAgo == 0
         ? 'Today'
         : movement.daysAgo == 1
-            ? 'Yesterday'
-            : '${movement.daysAgo}d ago';
+        ? 'Yesterday'
+        : '${movement.daysAgo}d ago';
 
     return Column(
       children: [

@@ -18,7 +18,8 @@ class CustomerPickerSheet extends ConsumerStatefulWidget {
       isScrollControlled: true,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
       builder: (_) => const CustomerPickerSheet(),
     );
   }
@@ -28,8 +29,7 @@ class CustomerPickerSheet extends ConsumerStatefulWidget {
       _CustomerPickerSheetState();
 }
 
-class _CustomerPickerSheetState
-    extends ConsumerState<CustomerPickerSheet> {
+class _CustomerPickerSheetState extends ConsumerState<CustomerPickerSheet> {
   final _searchCtrl = TextEditingController();
   String _query = '';
 
@@ -47,7 +47,8 @@ class _CustomerPickerSheetState
     // Filter list — show recent 5 when empty, filtered when typing
     final List<Customer> list;
     if (_query.isEmpty) {
-      final sorted = [...all]..sort((a, b) {
+      final sorted = [...all]
+        ..sort((a, b) {
           if (a.lastVisitDate == null) return 1;
           if (b.lastVisitDate == null) return -1;
           return b.lastVisitDate!.compareTo(a.lastVisitDate!);
@@ -62,25 +63,27 @@ class _CustomerPickerSheetState
 
     // Check if query looks like a phone number or a new name
     final looksLikePhone = RegExp(r'^\d+$').hasMatch(_query);
-    final noExactMatch = _query.isNotEmpty &&
-        !all.any((c) =>
-            c.name.toLowerCase() == _query ||
-            c.phone == _query);
+    final noExactMatch =
+        _query.isNotEmpty &&
+        !all.any((c) => c.name.toLowerCase() == _query || c.phone == _query);
 
     return Padding(
       padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom),
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           // ── Handle ──────────────────────────────────────────────────────
           const SizedBox(height: 8),
           Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                  color: AppColors.divider,
-                  borderRadius: BorderRadius.circular(2))),
+            width: 36,
+            height: 4,
+            decoration: BoxDecoration(
+              color: AppColors.divider,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
 
           // ── Header ──────────────────────────────────────────────────────
           Padding(
@@ -88,25 +91,29 @@ class _CustomerPickerSheetState
             child: Row(
               children: [
                 const Expanded(
-                  child: Text('Add Customer',
-                      style: TextStyle(
-                          fontSize: 17, fontWeight: FontWeight.w600)),
+                  child: Text(
+                    'Add Customer',
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+                  ),
                 ),
                 if (attached != null)
                   TextButton(
                     onPressed: () {
-                      ref.read(checkoutCustomerProvider.notifier).state =
-                          null;
+                      ref.read(checkoutCustomerProvider.notifier).state = null;
                       Navigator.pop(context);
                     },
-                    child: const Text('Remove',
-                        style: TextStyle(
-                            color: AppColors.refund,
-                            fontWeight: FontWeight.w500)),
+                    child: const Text(
+                      'Remove',
+                      style: TextStyle(
+                        color: AppColors.refund,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
                   ),
                 IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.pop(context)),
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.pop(context),
+                ),
               ],
             ),
           ),
@@ -115,13 +122,13 @@ class _CustomerPickerSheetState
           if (attached != null)
             Container(
               margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
                 color: AppColors.accent.withValues(alpha: 0.07),
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(
-                    color: AppColors.accent.withValues(alpha: 0.3)),
+                  color: AppColors.accent.withValues(alpha: 0.3),
+                ),
               ),
               child: Row(
                 children: [
@@ -131,19 +138,28 @@ class _CustomerPickerSheetState
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(attached.name,
-                            style: const TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600)),
-                        Text(attached.phone,
-                            style: const TextStyle(
-                                fontSize: 12,
-                                color: AppColors.textSecondary)),
+                        Text(
+                          attached.name,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        Text(
+                          attached.phone,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
                       ],
                     ),
                   ),
-                  const Icon(Icons.check_circle,
-                      size: 18, color: AppColors.accent),
+                  const Icon(
+                    Icons.check_circle,
+                    size: 18,
+                    color: AppColors.accent,
+                  ),
                 ],
               ),
             ),
@@ -155,12 +171,14 @@ class _CustomerPickerSheetState
               controller: _searchCtrl,
               autofocus: attached == null,
               keyboardType: TextInputType.text,
-              onChanged: (v) =>
-                  setState(() => _query = v.trim().toLowerCase()),
+              onChanged: (v) => setState(() => _query = v.trim().toLowerCase()),
               decoration: InputDecoration(
                 hintText: 'Name or phone number…',
-                prefixIcon: const Icon(Icons.search,
-                    size: 20, color: AppColors.textTertiary),
+                prefixIcon: const Icon(
+                  Icons.search,
+                  size: 20,
+                  color: AppColors.textTertiary,
+                ),
                 suffixIcon: _query.isNotEmpty
                     ? IconButton(
                         icon: const Icon(Icons.close, size: 18),
@@ -179,12 +197,15 @@ class _CustomerPickerSheetState
               padding: EdgeInsets.fromLTRB(16, 0, 16, 4),
               child: Align(
                 alignment: Alignment.centerLeft,
-                child: Text('RECENT',
-                    style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.8,
-                        color: AppColors.textSecondary)),
+                child: Text(
+                  'RECENT',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.8,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
               ),
             ),
 
@@ -201,8 +222,7 @@ class _CustomerPickerSheetState
                     child: Center(
                       child: Text(
                         'No customer found for "$_query"',
-                        style: const TextStyle(
-                            color: AppColors.textSecondary),
+                        style: const TextStyle(color: AppColors.textSecondary),
                         textAlign: TextAlign.center,
                       ),
                     ),
@@ -219,9 +239,8 @@ class _CustomerPickerSheetState
                         customer: c,
                         isAttached: isAttached,
                         onTap: () {
-                          ref
-                              .read(checkoutCustomerProvider.notifier)
-                              .state = isAttached ? null : c;
+                          ref.read(checkoutCustomerProvider.notifier).state =
+                              isAttached ? null : c;
                           Navigator.pop(context);
                         },
                       );
@@ -247,11 +266,14 @@ class _CustomerPickerSheetState
                 Navigator.pop(context);
                 context.push('/customers');
               },
-              child: const Text('Manage all customers',
-                  style: TextStyle(
-                      color: AppColors.accent,
-                      fontWeight: FontWeight.w500,
-                      fontSize: 14)),
+              child: const Text(
+                'Manage all customers',
+                style: TextStyle(
+                  color: AppColors.accent,
+                  fontWeight: FontWeight.w500,
+                  fontSize: 14,
+                ),
+              ),
             ),
           ),
         ],
@@ -269,7 +291,8 @@ class _CustomerPickerSheetState
       isScrollControlled: true,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
       builder: (ctx) => _QuickCreateSheet(
         prefillName: looksLikePhone ? null : raw,
         prefillPhone: looksLikePhone ? raw : null,
@@ -277,7 +300,7 @@ class _CustomerPickerSheetState
           final newCustomer = Customer.create(name: name, phone: phone);
           ref.read(customersProvider.notifier).add(newCustomer);
           ref.read(checkoutCustomerProvider.notifier).state = newCustomer;
-          Navigator.pop(ctx);   // close quick-create sheet
+          Navigator.pop(ctx); // close quick-create sheet
           Navigator.pop(context); // close picker sheet
         },
       ),
@@ -309,26 +332,22 @@ class _CustomerTile extends StatelessWidget {
             CustomerAvatar(name: customer.name, size: 40),
             const SizedBox(width: 12),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(customer.name,
-                      style: const TextStyle(
-                          fontSize: 15, fontWeight: FontWeight.w500)),
-                  Text(
-                    '${customer.phone}  ·  ${customer.visitCount} visit${customer.visitCount == 1 ? '' : 's'}',
-                    style: const TextStyle(
-                        fontSize: 12, color: AppColors.textSecondary),
-                  ),
-                ],
+              child: Text(
+                customer.name,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ),
             if (isAttached)
-              const Icon(Icons.check_circle,
-                  size: 20, color: AppColors.accent)
+              const Icon(Icons.check_circle, size: 20, color: AppColors.accent)
             else
-              const Icon(Icons.add_circle_outline,
-                  size: 20, color: AppColors.textTertiary),
+              const Icon(
+                Icons.add_circle_outline,
+                size: 20,
+                color: AppColors.textTertiary,
+              ),
           ],
         ),
       ),
@@ -364,8 +383,11 @@ class _QuickCreateTile extends StatelessWidget {
                 color: AppColors.accent.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.person_add_outlined,
-                  size: 20, color: AppColors.accent),
+              child: const Icon(
+                Icons.person_add_outlined,
+                size: 20,
+                color: AppColors.accent,
+              ),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -375,17 +397,18 @@ class _QuickCreateTile extends StatelessWidget {
                   style: const TextStyle(fontSize: 15),
                   children: [
                     TextSpan(
-                      text: looksLikePhone
-                          ? 'with phone $query'
-                          : '"$query"',
+                      text: looksLikePhone ? 'with phone $query' : '"$query"',
                       style: const TextStyle(fontWeight: FontWeight.w600),
                     ),
                   ],
                 ),
               ),
             ),
-            const Icon(Icons.chevron_right,
-                size: 18, color: AppColors.textTertiary),
+            const Icon(
+              Icons.chevron_right,
+              size: 18,
+              color: AppColors.textTertiary,
+            ),
           ],
         ),
       ),
@@ -433,10 +456,11 @@ class _QuickCreateSheetState extends State<_QuickCreateSheet> {
   Widget build(BuildContext context) {
     return Padding(
       padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom,
-          left: 16,
-          right: 16,
-          top: 16),
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+        left: 16,
+        right: 16,
+        top: 16,
+      ),
       child: Form(
         key: _formKey,
         child: Column(
@@ -446,13 +470,15 @@ class _QuickCreateSheetState extends State<_QuickCreateSheet> {
             Row(
               children: [
                 const Expanded(
-                  child: Text('New Customer',
-                      style: TextStyle(
-                          fontSize: 17, fontWeight: FontWeight.w600)),
+                  child: Text(
+                    'New Customer',
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+                  ),
                 ),
                 IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.pop(context)),
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.pop(context),
+                ),
               ],
             ),
             const SizedBox(height: 12),
@@ -470,7 +496,8 @@ class _QuickCreateSheetState extends State<_QuickCreateSheet> {
             const SizedBox(height: 10),
             TextFormField(
               controller: _phoneCtrl,
-              autofocus: widget.prefillPhone == null && widget.prefillName != null,
+              autofocus:
+                  widget.prefillPhone == null && widget.prefillName != null,
               keyboardType: TextInputType.phone,
               decoration: const InputDecoration(
                 labelText: 'Phone Number',
@@ -489,18 +516,24 @@ class _QuickCreateSheetState extends State<_QuickCreateSheet> {
                 onPressed: () {
                   if (_formKey.currentState!.validate()) {
                     widget.onCreate(
-                        _nameCtrl.text.trim(), _phoneCtrl.text.trim());
+                      _nameCtrl.text.trim(),
+                      _phoneCtrl.text.trim(),
+                    );
                   }
                 },
                 style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10)),
-                    padding: const EdgeInsets.symmetric(vertical: 14)),
-                child: const Text('Add & Attach to Sale',
-                    style: TextStyle(fontWeight: FontWeight.w600)),
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+                child: const Text(
+                  'Add & Attach to Sale',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
               ),
             ),
             const SizedBox(height: 12),

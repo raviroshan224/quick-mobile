@@ -9,6 +9,7 @@ import '../../../../features/pos/presentation/providers/cart_provider.dart';
 import '../../../../features/services/data/mock_services_repository.dart';
 import '../../../../features/services/domain/service_models.dart';
 import 'review_sale_sheet.dart';
+import 'calendar_tab.dart';
 import '../../../../features/discounts/widgets/discount_picker_sheet.dart';
 import '../../../../features/discounts/providers/discounts_provider.dart';
 
@@ -18,7 +19,9 @@ final _checkoutServicesProvider = FutureProvider<List<ServiceModel>>((ref) {
   return MockServicesRepository().getServices();
 });
 
-final _checkoutCategoriesProvider = FutureProvider<List<ServiceCategory>>((ref) {
+final _checkoutCategoriesProvider = FutureProvider<List<ServiceCategory>>((
+  ref,
+) {
   return MockServicesRepository().getCategories();
 });
 
@@ -29,7 +32,7 @@ class CheckoutScreen extends HookConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final tabIndex = useState(0); // 0=Keypad 1=Library 2=Services
+    final tabIndex = useState(0); // 0=Keypad 1=Calendar 2=Services
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -43,7 +46,7 @@ class CheckoutScreen extends HookConsumerWidget {
             Expanded(
               child: switch (tabIndex.value) {
                 0 => _KeypadView(),
-                1 => _LibraryView(),
+                1 => const CalendarTab(),
                 _ => _ServicesView(),
               },
             ),
@@ -57,8 +60,7 @@ class CheckoutScreen extends HookConsumerWidget {
 // ─── 3-tab segmented header ───────────────────────────────────────────────────
 
 class _SegmentedHeader extends StatelessWidget {
-  const _SegmentedHeader(
-      {required this.selected, required this.onChanged});
+  const _SegmentedHeader({required this.selected, required this.onChanged});
   final int selected;
   final ValueChanged<int> onChanged;
 
@@ -68,7 +70,8 @@ class _SegmentedHeader extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: const BoxDecoration(
         border: Border(
-            bottom: BorderSide(color: Color(0xFFE5E7EB), width: 0.5)),
+          bottom: BorderSide(color: Color(0xFFE5E7EB), width: 0.5),
+        ),
       ),
       child: Row(
         children: [
@@ -82,7 +85,7 @@ class _SegmentedHeader extends StatelessWidget {
           const SizedBox(width: 6),
           Expanded(
             child: _SegTab(
-              label: 'Library',
+              label: 'Calendar',
               active: selected == 1,
               onTap: () => onChanged(1),
             ),
@@ -102,10 +105,11 @@ class _SegmentedHeader extends StatelessWidget {
 }
 
 class _SegTab extends StatelessWidget {
-  const _SegTab(
-      {required this.label,
-      required this.active,
-      required this.onTap});
+  const _SegTab({
+    required this.label,
+    required this.active,
+    required this.onTap,
+  });
   final String label;
   final bool active;
   final VoidCallback onTap;
@@ -207,12 +211,14 @@ class _KeypadView extends HookConsumerWidget {
                   Expanded(
                     child: Row(
                       children: row
-                          .map((k) => Expanded(
-                                child: _KeypadKey(
-                                  label: k,
-                                  onTap: () => press(k),
-                                ),
-                              ))
+                          .map(
+                            (k) => Expanded(
+                              child: _KeypadKey(
+                                label: k,
+                                onTap: () => press(k),
+                              ),
+                            ),
+                          )
                           .toList(),
                     ),
                   ),
@@ -234,8 +240,7 @@ class _KeypadView extends HookConsumerWidget {
     );
   }
 
-  void _showReviewSale(
-      BuildContext context, WidgetRef ref, double amount) {
+  void _showReviewSale(BuildContext context, WidgetRef ref, double amount) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -346,25 +351,34 @@ class _NoteSheet extends HookConsumerWidget {
                       child: const Icon(Icons.close, size: 22),
                     ),
                     const Spacer(),
-                    const Text('Add Note',
-                        style: TextStyle(
-                            fontSize: 17, fontWeight: FontWeight.w600)),
+                    const Text(
+                      'Add Note',
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                     const Spacer(),
                     GestureDetector(
                       onTap: () {
                         ref.read(cartProvider.notifier).setNotes(ctrl.text);
                         Navigator.pop(context);
                       },
-                      child: const Text('Save',
-                          style: TextStyle(
-                              fontWeight: FontWeight.w600, fontSize: 15)),
+                      child: const Text(
+                        'Save',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 15,
+                        ),
+                      ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 20),
-                const Text('Note',
-                    style: TextStyle(
-                        fontSize: 13, color: Color(0xFF6B7280))),
+                const Text(
+                  'Note',
+                  style: TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
+                ),
                 const SizedBox(height: 8),
                 TextField(
                   controller: ctrl,
@@ -372,39 +386,50 @@ class _NoteSheet extends HookConsumerWidget {
                   maxLength: 500,
                   decoration: const InputDecoration(
                     border: OutlineInputBorder(
-                        borderSide: BorderSide(color: Color(0xFFE5E7EB))),
+                      borderSide: BorderSide(color: Color(0xFFE5E7EB)),
+                    ),
                     enabledBorder: OutlineInputBorder(
-                        borderSide: BorderSide(color: Color(0xFFE5E7EB))),
+                      borderSide: BorderSide(color: Color(0xFFE5E7EB)),
+                    ),
                     contentPadding: EdgeInsets.all(12),
                     counterStyle: TextStyle(
-                        fontSize: 11, color: Color(0xFF9CA3AF)),
+                      fontSize: 11,
+                      color: Color(0xFF9CA3AF),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 16),
-                const Text('Quick add',
-                    style: TextStyle(
-                        fontSize: 13, color: Color(0xFF6B7280))),
+                const Text(
+                  'Quick add',
+                  style: TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
+                ),
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 8,
                   children: quickTags
-                      .map((t) => GestureDetector(
-                            onTap: () {
-                              ctrl.text = ctrl.text.isEmpty
-                                  ? t
-                                  : '${ctrl.text} $t';
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF3F4F6),
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child:
-                                  Text(t, style: const TextStyle(fontSize: 13)),
+                      .map(
+                        (t) => GestureDetector(
+                          onTap: () {
+                            ctrl.text = ctrl.text.isEmpty
+                                ? t
+                                : '${ctrl.text} $t';
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
                             ),
-                          ))
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF3F4F6),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              t,
+                              style: const TextStyle(fontSize: 13),
+                            ),
+                          ),
+                        ),
+                      )
                       .toList(),
                 ),
                 const SizedBox(height: 24),
@@ -418,10 +443,11 @@ class _NoteSheet extends HookConsumerWidget {
 }
 
 class _ChargeButton extends StatelessWidget {
-  const _ChargeButton(
-      {required this.amount,
-      required this.itemCount,
-      required this.onTap});
+  const _ChargeButton({
+    required this.amount,
+    required this.itemCount,
+    required this.onTap,
+  });
   final double amount;
   final int itemCount;
   final VoidCallback? onTap;
@@ -475,17 +501,21 @@ class _LibraryView extends HookConsumerWidget {
             decoration: InputDecoration(
               hintText: 'Search',
               hintStyle: const TextStyle(
-                  color: Color(0xFF9CA3AF), fontSize: 15),
-              prefixIcon: const Icon(Icons.search,
-                  size: 18, color: Color(0xFF9CA3AF)),
+                color: Color(0xFF9CA3AF),
+                fontSize: 15,
+              ),
+              prefixIcon: const Icon(
+                Icons.search,
+                size: 18,
+                color: Color(0xFF9CA3AF),
+              ),
               filled: true,
               fillColor: const Color(0xFFF3F4F6),
               border: OutlineInputBorder(
                 borderSide: BorderSide.none,
                 borderRadius: BorderRadius.circular(10),
               ),
-              contentPadding:
-                  const EdgeInsets.symmetric(vertical: 10),
+              contentPadding: const EdgeInsets.symmetric(vertical: 10),
             ),
           ),
         ),
@@ -519,9 +549,10 @@ class _LibraryView extends HookConsumerWidget {
             child: Text(
               'Recently Used',
               style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  color: Color(0xFF6B7280)),
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: Color(0xFF6B7280),
+              ),
             ),
           ),
         ),
@@ -538,12 +569,13 @@ class _LibraryView extends HookConsumerWidget {
 }
 
 class _LibraryRow extends StatelessWidget {
-  const _LibraryRow(
-      {required this.icon,
-      required this.label,
-      required this.onTap,
-      this.subtitle,
-      this.subtitleColor});
+  const _LibraryRow({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.subtitle,
+    this.subtitleColor,
+  });
   final IconData icon;
   final String label;
   final String? subtitle;
@@ -555,8 +587,7 @@ class _LibraryRow extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       child: Padding(
-        padding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Row(
           children: [
             Icon(icon, size: 20, color: Colors.black87),
@@ -565,19 +596,25 @@ class _LibraryRow extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(label,
-                      style: const TextStyle(
-                          fontSize: 15, fontWeight: FontWeight.w400)),
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w400,
+                    ),
+                  ),
                   if (subtitle != null)
-                    Text(subtitle!,
-                        style: TextStyle(
-                            fontSize: 12,
-                            color: subtitleColor ?? const Color(0xFF9CA3AF))),
+                    Text(
+                      subtitle!,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: subtitleColor ?? const Color(0xFF9CA3AF),
+                      ),
+                    ),
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right,
-                size: 20, color: Color(0xFF9CA3AF)),
+            const Icon(Icons.chevron_right, size: 20, color: Color(0xFF9CA3AF)),
           ],
         ),
       ),
@@ -601,9 +638,8 @@ class _RecentServicesList extends ConsumerWidget {
     final filtered = query.isEmpty
         ? _recent
         : _recent
-            .where((s) =>
-                s.name.toLowerCase().contains(query.toLowerCase()))
-            .toList();
+              .where((s) => s.name.toLowerCase().contains(query.toLowerCase()))
+              .toList();
 
     return ListView.separated(
       padding: EdgeInsets.zero,
@@ -627,8 +663,7 @@ class _ServiceTile extends ConsumerWidget {
         HapticFeedback.selectionClick();
       },
       child: Padding(
-        padding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Row(
           children: [
             Container(
@@ -638,25 +673,32 @@ class _ServiceTile extends ConsumerWidget {
                 color: const Color(0xFFF3F4F6),
                 borderRadius: BorderRadius.circular(6),
               ),
-              child: const Icon(Icons.spa_outlined,
-                  size: 16, color: Color(0xFF6B7280)),
+              child: const Icon(
+                Icons.spa_outlined,
+                size: 16,
+                color: Color(0xFF6B7280),
+              ),
             ),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(service.name,
-                      style: const TextStyle(fontSize: 15)),
-                  Text(service.durationLabel,
-                      style: const TextStyle(
-                          fontSize: 12, color: Color(0xFF9CA3AF))),
+                  Text(service.name, style: const TextStyle(fontSize: 15)),
+                  Text(
+                    service.durationLabel,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFF9CA3AF),
+                    ),
+                  ),
                 ],
               ),
             ),
-            Text('NPR ${service.price.toStringAsFixed(0)}',
-                style: const TextStyle(
-                    fontSize: 15, color: Color(0xFF6B7280))),
+            Text(
+              'NPR ${service.price.toStringAsFixed(0)}',
+              style: const TextStyle(fontSize: 15, color: Color(0xFF6B7280)),
+            ),
           ],
         ),
       ),
@@ -673,9 +715,10 @@ class _CreateNewItemButton extends StatelessWidget {
         child: Text(
           'Create a new item',
           style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w500,
-              color: Colors.black),
+            fontSize: 15,
+            fontWeight: FontWeight.w500,
+            color: Colors.black,
+          ),
         ),
       ),
     );
@@ -706,15 +749,17 @@ class _ReviewSaleButton extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('Review Sale',
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600)),
+              const Text(
+                'Review Sale',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
               Text(
                 '${cart.itemCount} item${cart.itemCount == 1 ? '' : 's'}',
-                style: const TextStyle(
-                    color: Color(0xFF9CA3AF), fontSize: 11),
+                style: const TextStyle(color: Color(0xFF9CA3AF), fontSize: 11),
               ),
             ],
           ),
@@ -762,17 +807,21 @@ class _ServicesView extends HookConsumerWidget {
             decoration: InputDecoration(
               hintText: 'Search services',
               hintStyle: const TextStyle(
-                  color: Color(0xFF9CA3AF), fontSize: 15),
-              prefixIcon: const Icon(Icons.search,
-                  size: 18, color: Color(0xFF9CA3AF)),
+                color: Color(0xFF9CA3AF),
+                fontSize: 15,
+              ),
+              prefixIcon: const Icon(
+                Icons.search,
+                size: 18,
+                color: Color(0xFF9CA3AF),
+              ),
               filled: true,
               fillColor: const Color(0xFFF3F4F6),
               border: OutlineInputBorder(
                 borderSide: BorderSide.none,
                 borderRadius: BorderRadius.circular(10),
               ),
-              contentPadding:
-                  const EdgeInsets.symmetric(vertical: 10),
+              contentPadding: const EdgeInsets.symmetric(vertical: 10),
             ),
           ),
         ),
@@ -784,19 +833,20 @@ class _ServicesView extends HookConsumerWidget {
             error: (_, _) => const SizedBox.shrink(),
             data: (cats) => ListView(
               scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 16, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
               children: [
                 _CatChip(
                   label: 'All',
                   selected: selectedCat.value == null,
                   onTap: () => selectedCat.value = null,
                 ),
-                ...cats.map((c) => _CatChip(
-                      label: c.name,
-                      selected: selectedCat.value == c.id,
-                      onTap: () => selectedCat.value = c.id,
-                    )),
+                ...cats.map(
+                  (c) => _CatChip(
+                    label: c.name,
+                    selected: selectedCat.value == c.id,
+                    onTap: () => selectedCat.value = c.id,
+                  ),
+                ),
               ],
             ),
           ),
@@ -805,25 +855,25 @@ class _ServicesView extends HookConsumerWidget {
         // Service list
         Expanded(
           child: servicesAsync.when(
-            loading: () =>
-                const Center(child: CircularProgressIndicator()),
+            loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) => Center(child: Text('$e')),
             data: (services) {
               final filtered = services.where((s) {
-                final matchCat = selectedCat.value == null ||
+                final matchCat =
+                    selectedCat.value == null ||
                     s.category?.id == selectedCat.value;
-                final matchSearch = searchQ.value.isEmpty ||
-                    s.name
-                        .toLowerCase()
-                        .contains(searchQ.value.toLowerCase());
+                final matchSearch =
+                    searchQ.value.isEmpty ||
+                    s.name.toLowerCase().contains(searchQ.value.toLowerCase());
                 return matchCat && matchSearch;
               }).toList();
 
               if (filtered.isEmpty) {
                 return const Center(
-                  child: Text('No services found',
-                      style: TextStyle(
-                          color: Color(0xFF9CA3AF), fontSize: 14)),
+                  child: Text(
+                    'No services found',
+                    style: TextStyle(color: Color(0xFF9CA3AF), fontSize: 14),
+                  ),
                 );
               }
 
@@ -831,16 +881,16 @@ class _ServicesView extends HookConsumerWidget {
                 padding: EdgeInsets.zero,
                 itemCount: filtered.length,
                 separatorBuilder: (_, _) => const Divider(
-                    height: 1,
-                    indent: 62,
-                    color: Color(0xFFF3F4F6)),
+                  height: 1,
+                  indent: 62,
+                  color: Color(0xFFF3F4F6),
+                ),
                 itemBuilder: (_, i) {
                   final s = filtered[i];
                   final catId = s.category?.id ?? '';
                   return _ServiceListTile(
                     service: s,
-                    iconBg: _catColors[catId] ??
-                        const Color(0xFFF3F4F6),
+                    iconBg: _catColors[catId] ?? const Color(0xFFF3F4F6),
                     icon: _catIcons[catId] ?? Icons.spa_outlined,
                   );
                 },
@@ -860,10 +910,11 @@ class _ServicesView extends HookConsumerWidget {
 }
 
 class _CatChip extends StatelessWidget {
-  const _CatChip(
-      {required this.label,
-      required this.selected,
-      required this.onTap});
+  const _CatChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
   final String label;
   final bool selected;
   final VoidCallback onTap;
@@ -875,29 +926,30 @@ class _CatChip extends StatelessWidget {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
         margin: const EdgeInsets.only(right: 6),
-        padding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         decoration: BoxDecoration(
           color: selected ? Colors.black : const Color(0xFFF3F4F6),
           borderRadius: BorderRadius.circular(20),
         ),
-        child: Text(label,
-            style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: selected
-                    ? Colors.white
-                    : const Color(0xFF374151))),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+            color: selected ? Colors.white : const Color(0xFF374151),
+          ),
+        ),
       ),
     );
   }
 }
 
 class _ServiceListTile extends ConsumerWidget {
-  const _ServiceListTile(
-      {required this.service,
-      required this.iconBg,
-      required this.icon});
+  const _ServiceListTile({
+    required this.service,
+    required this.iconBg,
+    required this.icon,
+  });
   final ServiceModel service;
   final Color iconBg;
   final IconData icon;
@@ -916,7 +968,8 @@ class _ServiceListTile extends ConsumerWidget {
             backgroundColor: Colors.black,
             margin: const EdgeInsets.fromLTRB(16, 0, 16, 80),
             shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10)),
+              borderRadius: BorderRadius.circular(10),
+            ),
           ),
         );
       },
@@ -931,29 +984,38 @@ class _ServiceListTile extends ConsumerWidget {
                 color: iconBg,
                 borderRadius: BorderRadius.circular(8),
               ),
-              child:
-                  Icon(icon, size: 18, color: Colors.black54),
+              child: Icon(icon, size: 18, color: Colors.black54),
             ),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(service.name,
-                      style: const TextStyle(
-                          fontSize: 15, fontWeight: FontWeight.w400)),
-                  Text(service.durationLabel,
-                      style: const TextStyle(
-                          fontSize: 12,
-                          color: Color(0xFF9CA3AF))),
+                  Text(
+                    service.name,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w400,
+                    ),
+                  ),
+                  Text(
+                    service.durationLabel,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFF9CA3AF),
+                    ),
+                  ),
                 ],
               ),
             ),
-            Text('NPR ${service.price.toStringAsFixed(0)}',
-                style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.black)),
+            Text(
+              'NPR ${service.price.toStringAsFixed(0)}',
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
+                color: Colors.black,
+              ),
+            ),
           ],
         ),
       ),

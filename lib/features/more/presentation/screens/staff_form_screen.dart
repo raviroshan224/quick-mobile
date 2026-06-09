@@ -30,18 +30,18 @@ class _StaffListNotifier extends StateNotifier<List<StaffModel>> {
 
   void update(StaffModel updated) {
     state = [
-      for (final s in state) if (s.id == updated.id) updated else s,
+      for (final s in state)
+        if (s.id == updated.id) updated else s,
     ];
   }
 
-  void delete(String id) =>
-      state = state.where((s) => s.id != id).toList();
+  void delete(String id) => state = state.where((s) => s.id != id).toList();
 }
 
 final staffListProvider =
     StateNotifierProvider<_StaffListNotifier, List<StaffModel>>(
-  (_) => _StaffListNotifier(),
-);
+      (_) => _StaffListNotifier(),
+    );
 
 // ─── Predefined specialties ───────────────────────────────────────────────────
 
@@ -76,21 +76,27 @@ class StaffFormScreen extends ConsumerStatefulWidget {
 
 class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _firstNameCtrl = TextEditingController();
-  final _lastNameCtrl = TextEditingController();
-  final _phoneCtrl = TextEditingController();
-  final _commissionCtrl = TextEditingController();
+  final _fullNameCtrl = TextEditingController();
+  final _mobileCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
+  final _emergencyContactCtrl = TextEditingController();
+  final _emergencyNameCtrl = TextEditingController();
+  final _relationshipCtrl = TextEditingController();
+  final _addressCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
   final _confirmCtrl = TextEditingController();
 
   PickedImage? _pickedImage;
+  PickedImage? _govIdImage;
+  String _govIdType = 'Citizenship';
 
-  Set<String> _selectedSpecialties = {};
   bool _isActive = true;
   bool _loading = true;
   bool _showPassword = false;
   bool _showConfirm = false;
+
+  Set<String> _selectedSpecialties = {};
+  final _commissionCtrl = TextEditingController();
 
   StaffModel? _original;
 
@@ -102,9 +108,7 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
     } else {
       setState(() => _loading = false);
     }
-    // Rebuild live preview on every text change
-    _firstNameCtrl.addListener(() => setState(() {}));
-    _lastNameCtrl.addListener(() => setState(() {}));
+    _fullNameCtrl.addListener(() => setState(() {}));
     _commissionCtrl.addListener(() => setState(() {}));
   }
 
@@ -113,15 +117,13 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
       final s = await MockStaffRepository().getById(widget.staffId!);
       if (!mounted) return;
       _original = s;
-      _firstNameCtrl.text = s.firstName;
-      _lastNameCtrl.text = s.lastName;
-      _phoneCtrl.text = s.phone ?? '';
-      _commissionCtrl.text =
-          s.commissionRate != null
-              ? s.commissionRate!
-                  .toStringAsFixed(s.commissionRate! % 1 == 0 ? 0 : 1)
-              : '';
-      // Populate the email field from the auth registry using userId
+      _fullNameCtrl.text = '${s.firstName} ${s.lastName}';
+      _mobileCtrl.text = s.phone ?? '';
+      _commissionCtrl.text = s.commissionRate != null
+          ? s.commissionRate!.toStringAsFixed(
+              s.commissionRate! % 1 == 0 ? 0 : 1,
+            )
+          : '';
       final email = MockAuthRepository.getEmailByUserId(s.userId);
       if (email != null) _emailCtrl.text = email;
       setState(() {
@@ -137,11 +139,14 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
 
   @override
   void dispose() {
-    _firstNameCtrl.dispose();
-    _lastNameCtrl.dispose();
-    _phoneCtrl.dispose();
-    _commissionCtrl.dispose();
+    _fullNameCtrl.dispose();
+    _mobileCtrl.dispose();
     _emailCtrl.dispose();
+    _emergencyContactCtrl.dispose();
+    _emergencyNameCtrl.dispose();
+    _relationshipCtrl.dispose();
+    _addressCtrl.dispose();
+    _commissionCtrl.dispose();
     _passwordCtrl.dispose();
     _confirmCtrl.dispose();
     super.dispose();
@@ -149,22 +154,29 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
 
   // ── Derived display values ─────────────────────────────────────────────────
 
+  String get _previewFullName {
+    final t = _fullNameCtrl.text.trim();
+    return t.isEmpty ? 'Full Name' : t;
+  }
+
+  String get _previewInitials {
+    final parts = _previewFullName.split(' ');
+    if (parts.length >= 2) {
+      return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+    }
+    return _previewFullName.isNotEmpty
+        ? _previewFullName[0].toUpperCase()
+        : '?';
+  }
+
   String get _previewFirstName {
-    final t = _firstNameCtrl.text.trim();
-    return t.isEmpty ? 'First' : t;
+    final parts = _fullNameCtrl.text.trim().split(' ');
+    return parts.isNotEmpty ? parts[0] : '';
   }
 
   String get _previewLastName {
-    final t = _lastNameCtrl.text.trim();
-    return t.isEmpty ? 'Last' : t;
-  }
-
-  String get _previewFullName => '$_previewFirstName $_previewLastName';
-
-  String get _previewInitials {
-    final f = _previewFirstName.isNotEmpty ? _previewFirstName[0] : '';
-    final l = _previewLastName.isNotEmpty ? _previewLastName[0] : '';
-    return '$f$l'.toUpperCase();
+    final parts = _fullNameCtrl.text.trim().split(' ');
+    return parts.length > 1 ? parts.sublist(1).join(' ') : '';
   }
 
   double? get _previewCommission =>
@@ -174,8 +186,7 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
     if (widget.isEditing && _original != null) {
       // Use a stable color derived from the existing staff's position — just
       // use a fixed color seeded from the id characters.
-      final seed = widget.staffId!.codeUnits
-          .fold(0, (sum, c) => sum + c);
+      final seed = widget.staffId!.codeUnits.fold(0, (sum, c) => sum + c);
       return _avatarColors[seed % _avatarColors.length];
     }
     return _avatarColors[0];
@@ -196,14 +207,16 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     final commission = double.tryParse(_commissionCtrl.text.trim());
-    final phone = _phoneCtrl.text.trim().isEmpty ? null : _phoneCtrl.text.trim();
+    final phone = _mobileCtrl.text.trim().isEmpty
+        ? null
+        : _mobileCtrl.text.trim();
     final email = _emailCtrl.text.trim().toLowerCase();
     final password = _passwordCtrl.text;
 
     if (widget.isEditing && _original != null) {
       final updated = _original!.copyWith(
-        firstName: _firstNameCtrl.text.trim(),
-        lastName: _lastNameCtrl.text.trim(),
+        firstName: _previewFirstName,
+        lastName: _previewLastName,
         phone: phone,
         specialties: _selectedSpecialties.toList(),
         commissionRate: commission,
@@ -212,12 +225,13 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
       ref.read(staffListProvider.notifier).update(updated);
       context.go('/more/staff/${widget.staffId}');
     } else {
-      final userId = 'u-${_firstNameCtrl.text.trim().toLowerCase()}-${DateTime.now().millisecondsSinceEpoch}';
+      final userId =
+          'u-${_previewFirstName.toLowerCase()}-${DateTime.now().millisecondsSinceEpoch}';
       final newStaff = StaffModel(
         id: 'st-${DateTime.now().millisecondsSinceEpoch}',
         userId: userId,
-        firstName: _firstNameCtrl.text.trim(),
-        lastName: _lastNameCtrl.text.trim(),
+        firstName: _previewFirstName,
+        lastName: _previewLastName,
         phone: phone,
         specialties: _selectedSpecialties.toList(),
         commissionRate: commission,
@@ -230,8 +244,8 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
         user: UserModel(
           id: userId,
           email: email,
-          firstName: _firstNameCtrl.text.trim(),
-          lastName: _lastNameCtrl.text.trim(),
+          firstName: _previewFirstName,
+          lastName: _previewLastName,
           role: UserRole.staff,
         ),
       );
@@ -245,21 +259,33 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(children: [
-          Container(
-            width: 36, height: 36,
-            decoration: const BoxDecoration(color: Color(0xFFDCFCE7), shape: BoxShape.circle),
-            child: const Icon(Icons.check_rounded, color: Color(0xFF16A34A), size: 20),
-          ),
-          const SizedBox(width: 12),
-          const Text('Staff Account Created', style: TextStyle(fontSize: 16)),
-        ]),
+        title: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: const BoxDecoration(
+                color: Color(0xFFDCFCE7),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.check_rounded,
+                color: Color(0xFF16A34A),
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Text('Staff Account Created', style: TextStyle(fontSize: 16)),
+          ],
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Share these login credentials with the staff member:',
-                style: TextStyle(fontSize: 13, color: Color(0xFF6B7280))),
+            const Text(
+              'Share these login credentials with the staff member:',
+              style: TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
+            ),
             const SizedBox(height: 16),
             Container(
               width: double.infinity,
@@ -279,8 +305,10 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
               ),
             ),
             const SizedBox(height: 10),
-            const Text('The staff member can log in and change their password from Settings.',
-                style: TextStyle(fontSize: 12, color: Color(0xFF9CA3AF))),
+            const Text(
+              'The staff member can log in and change their password from Settings.',
+              style: TextStyle(fontSize: 12, color: Color(0xFF9CA3AF)),
+            ),
           ],
         ),
         actions: [
@@ -289,7 +317,13 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
               Navigator.pop(ctx);
               context.go('/more/staff');
             },
-            child: const Text('Done', style: TextStyle(color: Colors.black, fontWeight: FontWeight.w600)),
+            child: const Text(
+              'Done',
+              style: TextStyle(
+                color: Colors.black,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
         ],
       ),
@@ -307,8 +341,10 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Set a new password for ${_firstNameCtrl.text.trim()}:',
-                style: const TextStyle(fontSize: 13, color: Color(0xFF6B7280))),
+            Text(
+              'Set a new password for ${_previewFirstName}:',
+              style: const TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
+            ),
             const SizedBox(height: 12),
             TextField(
               controller: resetCtrl,
@@ -329,23 +365,37 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel', style: TextStyle(color: Color(0xFF6B7280))),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: Color(0xFF6B7280)),
+            ),
           ),
           TextButton(
             onPressed: () {
               final newPw = resetCtrl.text.trim();
               if (newPw.length < 4) return;
               final email = _emailCtrl.text.trim().toLowerCase();
-              MockAuthRepository.resetPassword(email: email, newPassword: newPw);
+              MockAuthRepository.resetPassword(
+                email: email,
+                newPassword: newPw,
+              );
               Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                content: Text('Password reset successfully'),
-                backgroundColor: Colors.black,
-                behavior: SnackBarBehavior.floating,
-                duration: Duration(seconds: 2),
-              ));
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Password reset successfully'),
+                  backgroundColor: Colors.black,
+                  behavior: SnackBarBehavior.floating,
+                  duration: Duration(seconds: 2),
+                ),
+              );
             },
-            child: const Text('Reset', style: TextStyle(color: Colors.black, fontWeight: FontWeight.w600)),
+            child: const Text(
+              'Reset',
+              style: TextStyle(
+                color: Colors.black,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
         ],
       ),
@@ -360,7 +410,7 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
       builder: (ctx) => AlertDialog(
         title: const Text('Remove Staff Member'),
         content: Text(
-          'Remove ${_firstNameCtrl.text.trim()} ${_lastNameCtrl.text.trim()}? '
+          'Remove ${_previewFullName}? '
           'This cannot be undone.',
         ),
         actions: [
@@ -371,9 +421,7 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
-              ref
-                  .read(staffListProvider.notifier)
-                  .delete(widget.staffId!);
+              ref.read(staffListProvider.notifier).delete(widget.staffId!);
               context.go('/more/staff');
             },
             child: const Text(
@@ -408,8 +456,8 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
               onBack: () => Navigator.canPop(context)
                   ? Navigator.pop(context)
                   : widget.isEditing
-                      ? context.go('/more/staff/${widget.staffId}')
-                      : context.go('/more/staff'),
+                  ? context.go('/more/staff/${widget.staffId}')
+                  : context.go('/more/staff'),
               onDelete: widget.isEditing ? _delete : null,
             ),
             // ── Scrollable form body ───────────────────────────────────────
@@ -428,110 +476,385 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
                         avatarColor: _previewAvatarColor,
                         commission: _previewCommission,
                         isActive: _isActive,
-                        specialties:
-                            _selectedSpecialties.take(3).toList(),
+                        specialties: _selectedSpecialties.take(3).toList(),
                         pickedImage: _pickedImage,
                         onPickImage: _pickImage,
                       ),
                     ),
 
-                    // ── Personal details ──────────────────────────────────
-                    const _SectionHeader(label: 'Personal Details'),
-                    _FormCard(children: [
-                      _Field(
-                        label: 'First Name',
-                        child: TextFormField(
-                          controller: _firstNameCtrl,
-                          textCapitalization: TextCapitalization.words,
-                          decoration: const InputDecoration(
-                              hintText: 'e.g. Priya'),
-                          validator: (v) =>
-                              (v == null || v.trim().isEmpty)
-                                  ? 'First name is required'
+                    // ── Basic Information ──────────────────────────────────
+                    const _SectionHeader(label: 'Basic Information'),
+                    _FormCard(
+                      children: [
+                        _Field(
+                          label: 'Full Name *',
+                          child: TextFormField(
+                            controller: _fullNameCtrl,
+                            textCapitalization: TextCapitalization.words,
+                            decoration: const InputDecoration(
+                              hintText: 'e.g. Priya Thapa',
+                            ),
+                            validator: (v) => (v == null || v.trim().isEmpty)
+                                ? 'Full name is required'
+                                : null,
+                          ),
+                        ),
+                        const _FieldDivider(),
+                        _Field(
+                          label: 'Mobile Number *',
+                          child: TextFormField(
+                            controller: _mobileCtrl,
+                            keyboardType: TextInputType.phone,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                              LengthLimitingTextInputFormatter(15),
+                            ],
+                            decoration: const InputDecoration(
+                              hintText: 'e.g. 9841001001',
+                            ),
+                            validator: (v) => (v == null || v.trim().isEmpty)
+                                ? 'Phone number is required'
+                                : null,
+                          ),
+                        ),
+                        const _FieldDivider(),
+                        _Field(
+                          label: 'Email',
+                          child: TextFormField(
+                            controller: _emailCtrl,
+                            keyboardType: TextInputType.emailAddress,
+                            readOnly: widget.isEditing,
+                            style: TextStyle(
+                              color: widget.isEditing
+                                  ? const Color(0xFF6B7280)
+                                  : Colors.black,
+                            ),
+                            decoration: InputDecoration(
+                              hintText: 'e.g. priya@salon.com',
+                              suffixIcon: widget.isEditing
+                                  ? const Icon(
+                                      Icons.lock_outline,
+                                      size: 16,
+                                      color: Color(0xFF9CA3AF),
+                                    )
                                   : null,
+                            ),
+                            validator: (v) {
+                              if (v == null || v.trim().isEmpty) {
+                                return widget.isEditing
+                                    ? null
+                                    : 'Email is required';
+                              }
+                              if (!v.contains('@'))
+                                return 'Enter a valid email';
+                              if (!widget.isEditing &&
+                                  MockAuthRepository.emailExists(v.trim())) {
+                                return 'This email is already registered';
+                              }
+                              return null;
+                            },
+                          ),
                         ),
-                      ),
-                      const _FieldDivider(),
-                      _Field(
-                        label: 'Last Name',
-                        child: TextFormField(
-                          controller: _lastNameCtrl,
-                          textCapitalization: TextCapitalization.words,
-                          decoration: const InputDecoration(
-                              hintText: 'e.g. Thapa'),
-                          validator: (v) =>
-                              (v == null || v.trim().isEmpty)
-                                  ? 'Last name is required'
-                                  : null,
+                      ],
+                    ),
+
+                    // ── Emergency Contact ─────────────────────────────────
+                    const _SectionHeader(label: 'Emergency Contact'),
+                    _FormCard(
+                      children: [
+                        _Field(
+                          label: 'Emergency Contact Number',
+                          child: TextFormField(
+                            controller: _emergencyContactCtrl,
+                            keyboardType: TextInputType.phone,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                              LengthLimitingTextInputFormatter(15),
+                            ],
+                            decoration: const InputDecoration(
+                              hintText: 'e.g. 9801234567',
+                            ),
+                          ),
                         ),
-                      ),
-                      const _FieldDivider(),
-                      _Field(
-                        label: 'Phone Number',
-                        child: TextFormField(
-                          controller: _phoneCtrl,
-                          keyboardType: TextInputType.number,
-                          inputFormatters: [
-                            FilteringTextInputFormatter.digitsOnly,
-                            LengthLimitingTextInputFormatter(15),
-                          ],
-                          decoration: const InputDecoration(
-                              hintText: 'e.g. 9841001001'),
+                        const _FieldDivider(),
+                        _Field(
+                          label: 'Emergency Contact Name',
+                          child: TextFormField(
+                            controller: _emergencyNameCtrl,
+                            textCapitalization: TextCapitalization.words,
+                            decoration: const InputDecoration(
+                              hintText: 'e.g. Ram Thapa',
+                            ),
+                          ),
                         ),
-                      ),
-                    ]),
+                        const _FieldDivider(),
+                        _Field(
+                          label: 'Relationship',
+                          child: TextFormField(
+                            controller: _relationshipCtrl,
+                            textCapitalization: TextCapitalization.words,
+                            decoration: const InputDecoration(
+                              hintText: 'e.g. Father, Mother, Spouse',
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    // ── Address ────────────────────────────────────────────
+                    const _SectionHeader(label: 'Address'),
+                    _FormCard(
+                      children: [
+                        _Field(
+                          label: 'Address',
+                          child: TextFormField(
+                            controller: _addressCtrl,
+                            textCapitalization: TextCapitalization.words,
+                            maxLines: 2,
+                            decoration: const InputDecoration(
+                              hintText: 'e.g. Kathmandu, Nepal',
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    // ── Government Identification ─────────────────────────
+                    const _SectionHeader(label: 'Government Identification'),
+                    _FormCard(
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'ID Type',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  color: Color(0xFF6B7280),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 8,
+                                children:
+                                    [
+                                      'Citizenship',
+                                      'Passport',
+                                      'Driving License',
+                                    ].map((type) {
+                                      final selected = _govIdType == type;
+                                      return GestureDetector(
+                                        onTap: () =>
+                                            setState(() => _govIdType = type),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 7,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: selected
+                                                ? Colors.black
+                                                : const Color(0xFFF3F4F6),
+                                            borderRadius: BorderRadius.circular(
+                                              20,
+                                            ),
+                                            border: Border.all(
+                                              color: selected
+                                                  ? Colors.black
+                                                  : const Color(0xFFE5E7EB),
+                                            ),
+                                          ),
+                                          child: Text(
+                                            type,
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: selected
+                                                  ? FontWeight.w600
+                                                  : FontWeight.w400,
+                                              color: selected
+                                                  ? Colors.white
+                                                  : const Color(0xFF374151),
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    }).toList(),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const _FieldDivider(),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Government Photo',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  color: Color(0xFF6B7280),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              GestureDetector(
+                                onTap: () async {
+                                  final picked = await ImagePickerSheet.show(
+                                    context,
+                                    title: 'Upload ID Photo',
+                                  );
+                                  if (picked != null)
+                                    setState(() => _govIdImage = picked);
+                                },
+                                child: Container(
+                                  width: double.infinity,
+                                  height: _govIdImage != null ? 100 : 80,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF9FAFB),
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(
+                                      color: const Color(0xFFE5E7EB),
+                                      style: BorderStyle.solid,
+                                    ),
+                                  ),
+                                  child: _govIdImage != null
+                                      ? Stack(
+                                          children: [
+                                            Center(
+                                              child: Column(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Icon(
+                                                    _govIdImage!.iconData,
+                                                    size: 32,
+                                                    color: _govIdImage!.color,
+                                                  ),
+                                                  const SizedBox(height: 4),
+                                                  Text(
+                                                    _govIdImage!.name,
+                                                    style: const TextStyle(
+                                                      fontSize: 12,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            Positioned(
+                                              top: 6,
+                                              right: 6,
+                                              child: GestureDetector(
+                                                onTap: () => setState(
+                                                  () => _govIdImage = null,
+                                                ),
+                                                child: Container(
+                                                  padding: const EdgeInsets.all(
+                                                    4,
+                                                  ),
+                                                  decoration:
+                                                      const BoxDecoration(
+                                                        color: Color(
+                                                          0xFFF3F4F6,
+                                                        ),
+                                                        shape: BoxShape.circle,
+                                                      ),
+                                                  child: const Icon(
+                                                    Icons.close,
+                                                    size: 14,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        )
+                                      : const Column(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: [
+                                            Icon(
+                                              Icons.cloud_upload_outlined,
+                                              size: 24,
+                                              color: Color(0xFF9CA3AF),
+                                            ),
+                                            SizedBox(height: 6),
+                                            Text(
+                                              'Tap to upload photo',
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                color: Color(0xFF6B7280),
+                                              ),
+                                            ),
+                                            Text(
+                                              'Camera or Gallery',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                color: Color(0xFF9CA3AF),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
 
                     // ── Commission ────────────────────────────────────────
                     const _SectionHeader(label: 'Commission'),
-                    _FormCard(children: [
-                      _Field(
-                        label: 'Commission Rate (%)',
-                        child: TextFormField(
-                          controller: _commissionCtrl,
-                          keyboardType:
-                              const TextInputType.numberWithOptions(
-                                  decimal: true),
-                          inputFormatters: [
-                            FilteringTextInputFormatter.allow(
-                                RegExp(r'^\d*\.?\d{0,2}')),
-                          ],
-                          decoration: const InputDecoration(
-                            hintText: 'e.g. 15',
-                            suffixText: '%',
+                    _FormCard(
+                      children: [
+                        _Field(
+                          label: 'Commission Rate (%)',
+                          child: TextFormField(
+                            controller: _commissionCtrl,
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            inputFormatters: [
+                              FilteringTextInputFormatter.allow(
+                                RegExp(r'^\d*\.?\d{0,2}'),
+                              ),
+                            ],
+                            decoration: const InputDecoration(
+                              hintText: 'e.g. 15',
+                              suffixText: '%',
+                            ),
+                            validator: (v) {
+                              if (v == null || v.trim().isEmpty) {
+                                return null; // optional
+                              }
+                              final n = double.tryParse(v);
+                              if (n == null || n < 0 || n > 100) {
+                                return 'Enter a value between 0 and 100';
+                              }
+                              return null;
+                            },
                           ),
-                          validator: (v) {
-                            if (v == null || v.trim().isEmpty) {
-                              return null; // optional
-                            }
-                            final n = double.tryParse(v);
-                            if (n == null || n < 0 || n > 100) {
-                              return 'Enter a value between 0 and 100';
-                            }
-                            return null;
-                          },
                         ),
-                      ),
-                    ]),
+                      ],
+                    ),
 
                     // ── Specialties ───────────────────────────────────────
                     const _SectionHeader(label: 'Specialties'),
                     Padding(
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 16),
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: Container(
                         padding: const EdgeInsets.all(14),
                         decoration: BoxDecoration(
                           color: Colors.white,
-                          border: Border.all(
-                              color: const Color(0xFFE5E7EB)),
+                          border: Border.all(color: const Color(0xFFE5E7EB)),
                           borderRadius: BorderRadius.circular(14),
                         ),
                         child: Wrap(
                           spacing: 8,
                           runSpacing: 8,
                           children: _kSpecialties.map((sp) {
-                            final selected =
-                                _selectedSpecialties.contains(sp);
+                            final selected = _selectedSpecialties.contains(sp);
                             return _SpecialtyToggleChip(
                               label: sp,
                               selected: selected,
@@ -550,121 +873,103 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
 
                     // ── Status ────────────────────────────────────────────
                     const _SectionHeader(label: 'Status'),
-                    _FormCard(children: [
-                      SwitchListTile.adaptive(
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 4),
-                        title: const Text(
-                          'Active',
-                          style: TextStyle(
-                              fontSize: 15, fontWeight: FontWeight.w400),
-                        ),
-                        subtitle: Text(
-                          _isActive
-                              ? 'Staff member appears in checkout & scheduling'
-                              : 'Staff member is hidden from active lists',
-                          style: const TextStyle(
-                              fontSize: 12, color: Color(0xFF6B7280)),
-                        ),
-                        value: _isActive,
-                        onChanged: (v) => setState(() => _isActive = v),
-                        activeThumbColor: Colors.white,
-                        activeTrackColor: Colors.black,
-                      ),
-                    ]),
-
-                    // ── Login Credentials ─────────────────────────────────
-                    const _SectionHeader(label: 'Login Credentials'),
-                    _FormCard(children: [
-                      _Field(
-                        label: 'Email Address',
-                        child: TextFormField(
-                          controller: _emailCtrl,
-                          keyboardType: TextInputType.emailAddress,
-                          readOnly: widget.isEditing,
-                          style: TextStyle(
-                            color: widget.isEditing
-                                ? const Color(0xFF6B7280)
-                                : Colors.black,
+                    _FormCard(
+                      children: [
+                        SwitchListTile.adaptive(
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 4,
                           ),
-                          decoration: InputDecoration(
-                            hintText: 'e.g. priya@salon.com',
-                            suffixIcon: widget.isEditing
-                                ? const Icon(Icons.lock_outline,
-                                    size: 16, color: Color(0xFF9CA3AF))
-                                : null,
-                          ),
-                          validator: (v) {
-                            if (v == null || v.trim().isEmpty) {
-                              return 'Email is required';
-                            }
-                            if (!v.contains('@')) return 'Enter a valid email';
-                            if (!widget.isEditing &&
-                                MockAuthRepository.emailExists(v.trim())) {
-                              return 'This email is already registered';
-                            }
-                            return null;
-                          },
-                        ),
-                      ),
-                      if (!widget.isEditing) ...[
-                        const _FieldDivider(),
-                        _Field(
-                          label: 'Password',
-                          child: TextFormField(
-                            controller: _passwordCtrl,
-                            obscureText: !_showPassword,
-                            decoration: InputDecoration(
-                              hintText: 'Min 4 characters',
-                              suffixIcon: IconButton(
-                                icon: Icon(
-                                  _showPassword
-                                      ? Icons.visibility_outlined
-                                      : Icons.visibility_off_outlined,
-                                  size: 18,
-                                  color: const Color(0xFF9CA3AF),
-                                ),
-                                onPressed: () =>
-                                    setState(() => _showPassword = !_showPassword),
-                              ),
+                          title: const Text(
+                            'Active',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w400,
                             ),
-                            validator: (v) {
-                              if (v == null || v.isEmpty) return 'Password is required';
-                              if (v.length < 4) return 'At least 4 characters';
-                              return null;
-                            },
                           ),
-                        ),
-                        const _FieldDivider(),
-                        _Field(
-                          label: 'Confirm Password',
-                          child: TextFormField(
-                            controller: _confirmCtrl,
-                            obscureText: !_showConfirm,
-                            decoration: InputDecoration(
-                              hintText: 'Re-enter password',
-                              suffixIcon: IconButton(
-                                icon: Icon(
-                                  _showConfirm
-                                      ? Icons.visibility_outlined
-                                      : Icons.visibility_off_outlined,
-                                  size: 18,
-                                  color: const Color(0xFF9CA3AF),
-                                ),
-                                onPressed: () =>
-                                    setState(() => _showConfirm = !_showConfirm),
-                              ),
+                          subtitle: Text(
+                            _isActive
+                                ? 'Staff member appears in checkout & scheduling'
+                                : 'Staff member is hidden from active lists',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF6B7280),
                             ),
-                            validator: (v) {
-                              if (v != _passwordCtrl.text) {
-                                return 'Passwords do not match';
-                              }
-                              return null;
-                            },
                           ),
+                          value: _isActive,
+                          onChanged: (v) => setState(() => _isActive = v),
+                          activeThumbColor: Colors.white,
+                          activeTrackColor: Colors.black,
                         ),
                       ],
-                    ]),
+                    ),
+
+                    // ── Login Credentials ─────────────────────────────────
+                    if (!widget.isEditing) ...[
+                      const _SectionHeader(label: 'Login Credentials'),
+                      _FormCard(
+                        children: [
+                          _Field(
+                            label: 'Password',
+                            child: TextFormField(
+                              controller: _passwordCtrl,
+                              obscureText: !_showPassword,
+                              decoration: InputDecoration(
+                                hintText: 'Min 4 characters',
+                                suffixIcon: IconButton(
+                                  icon: Icon(
+                                    _showPassword
+                                        ? Icons.visibility_outlined
+                                        : Icons.visibility_off_outlined,
+                                    size: 18,
+                                    color: const Color(0xFF9CA3AF),
+                                  ),
+                                  onPressed: () => setState(
+                                    () => _showPassword = !_showPassword,
+                                  ),
+                                ),
+                              ),
+                              validator: (v) {
+                                if (v == null || v.isEmpty)
+                                  return 'Password is required';
+                                if (v.length < 4)
+                                  return 'At least 4 characters';
+                                return null;
+                              },
+                            ),
+                          ),
+                          const _FieldDivider(),
+                          _Field(
+                            label: 'Confirm Password',
+                            child: TextFormField(
+                              controller: _confirmCtrl,
+                              obscureText: !_showConfirm,
+                              decoration: InputDecoration(
+                                hintText: 'Re-enter password',
+                                suffixIcon: IconButton(
+                                  icon: Icon(
+                                    _showConfirm
+                                        ? Icons.visibility_outlined
+                                        : Icons.visibility_off_outlined,
+                                    size: 18,
+                                    color: const Color(0xFF9CA3AF),
+                                  ),
+                                  onPressed: () => setState(
+                                    () => _showConfirm = !_showConfirm,
+                                  ),
+                                ),
+                              ),
+                              validator: (v) {
+                                if (v != _passwordCtrl.text) {
+                                  return 'Passwords do not match';
+                                }
+                                return null;
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                     if (widget.isEditing) ...[
                       Padding(
                         padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
@@ -676,7 +981,8 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
                             foregroundColor: const Color(0xFF374151),
                             side: const BorderSide(color: Color(0xFFD1D5DB)),
                             shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10)),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
                             padding: const EdgeInsets.symmetric(vertical: 13),
                             minimumSize: const Size(double.infinity, 0),
                           ),
@@ -694,28 +1000,26 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
                     if (widget.isEditing) ...[
                       const _SectionHeader(label: 'Danger Zone'),
                       Padding(
-                        padding:
-                            const EdgeInsets.symmetric(horizontal: 16),
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
                         child: OutlinedButton(
                           onPressed: _delete,
                           style: OutlinedButton.styleFrom(
                             foregroundColor: const Color(0xFFEF4444),
-                            side: const BorderSide(
-                                color: Color(0xFFEF4444)),
+                            side: const BorderSide(color: Color(0xFFEF4444)),
                             shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10)),
-                            padding: const EdgeInsets.symmetric(
-                                vertical: 14),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            padding: const EdgeInsets.symmetric(vertical: 14),
                           ),
                           child: const Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.person_remove_outlined,
-                                  size: 18),
+                              Icon(Icons.person_remove_outlined, size: 18),
                               SizedBox(width: 6),
-                              Text('Remove Staff Member',
-                                  style: TextStyle(
-                                      fontWeight: FontWeight.w600)),
+                              Text(
+                                'Remove Staff Member',
+                                style: TextStyle(fontWeight: FontWeight.w600),
+                              ),
                             ],
                           ),
                         ),
@@ -766,21 +1070,26 @@ class _FormHeader extends StatelessWidget {
         children: [
           GestureDetector(
             onTap: onBack,
-            child: const Icon(Icons.arrow_back_ios_new_rounded,
-                size: 18, color: Colors.black),
+            child: const Icon(
+              Icons.arrow_back_ios_new_rounded,
+              size: 18,
+              color: Colors.black,
+            ),
           ),
           const Spacer(),
           Text(
             isEditing ? 'Edit Staff' : 'New Staff Member',
-            style:
-                const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
           ),
           const Spacer(),
           if (onDelete != null)
             GestureDetector(
               onTap: onDelete,
-              child: const Icon(Icons.delete_outline,
-                  size: 22, color: Color(0xFFEF4444)),
+              child: const Icon(
+                Icons.delete_outline,
+                size: 22,
+                color: Color(0xFFEF4444),
+              ),
             )
           else
             const SizedBox(width: 22),
@@ -880,8 +1189,7 @@ class _PreviewCard extends StatelessWidget {
           if (commission != null) ...[
             const SizedBox(width: 8),
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
               decoration: BoxDecoration(
                 color: const Color(0xFFEEF2FF),
                 borderRadius: BorderRadius.circular(8),
@@ -920,8 +1228,7 @@ class _SpecialtyToggleChip extends StatelessWidget {
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
-        padding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
         decoration: BoxDecoration(
           color: selected ? Colors.black : const Color(0xFFF3F4F6),
           borderRadius: BorderRadius.circular(20),
@@ -933,8 +1240,7 @@ class _SpecialtyToggleChip extends StatelessWidget {
           label,
           style: TextStyle(
             fontSize: 13,
-            fontWeight:
-                selected ? FontWeight.w600 : FontWeight.w400,
+            fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
             color: selected ? Colors.white : const Color(0xFF374151),
           ),
         ),
@@ -1087,15 +1393,33 @@ class _ActivityEntry {
 // different numbers without needing a real backend.
 List<_ActivityEntry> _mockActivity(String staffId) {
   final seed = staffId.codeUnits.fold(0, (s, c) => s + c);
-  final services = ['Haircut', 'Hair Color', 'Facial', 'Manicure', 'Blow Dry', 'Waxing', 'Massage'];
-  final customers = ['Sita Rai', 'Anita Gurung', 'Bipana Thapa', 'Nirmala KC', 'Sabita Shrestha'];
+  final services = [
+    'Haircut',
+    'Hair Color',
+    'Facial',
+    'Manicure',
+    'Blow Dry',
+    'Waxing',
+    'Massage',
+  ];
+  final customers = [
+    'Sita Rai',
+    'Anita Gurung',
+    'Bipana Thapa',
+    'Nirmala KC',
+    'Sabita Shrestha',
+  ];
   final base = 800 + (seed % 600);
   return List.generate(5, (i) {
     final svc = services[(seed + i * 3) % services.length];
     final amt = (base + i * 150).toDouble();
     final rate = 10.0 + (seed % 3) * 5;
     return _ActivityEntry(
-      date: i == 0 ? 'Today' : i == 1 ? 'Yesterday' : '${i + 1} days ago',
+      date: i == 0
+          ? 'Today'
+          : i == 1
+          ? 'Yesterday'
+          : '${i + 1} days ago',
       service: svc,
       amount: amt,
       commission: amt * rate / 100,
@@ -1119,34 +1443,36 @@ class _ActivitySection extends StatelessWidget {
       child: Column(
         children: [
           // Stats row
-          Row(children: [
-            Expanded(
-              child: _StatBox(
-                label: 'This Week',
-                value: 'NPR ${totalSales.toStringAsFixed(0)}',
-                icon: Icons.trending_up_rounded,
-                iconColor: const Color(0xFF10B981),
+          Row(
+            children: [
+              Expanded(
+                child: _StatBox(
+                  label: 'This Week',
+                  value: 'NPR ${totalSales.toStringAsFixed(0)}',
+                  icon: Icons.trending_up_rounded,
+                  iconColor: const Color(0xFF10B981),
+                ),
               ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _StatBox(
-                label: 'Commission',
-                value: 'NPR ${totalComm.toStringAsFixed(0)}',
-                icon: Icons.payments_outlined,
-                iconColor: const Color(0xFF6366F1),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _StatBox(
+                  label: 'Commission',
+                  value: 'NPR ${totalComm.toStringAsFixed(0)}',
+                  icon: Icons.payments_outlined,
+                  iconColor: const Color(0xFF6366F1),
+                ),
               ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _StatBox(
-                label: 'Services',
-                value: '${entries.length}',
-                icon: Icons.spa_outlined,
-                iconColor: const Color(0xFFF59E0B),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _StatBox(
+                  label: 'Services',
+                  value: '${entries.length}',
+                  icon: Icons.spa_outlined,
+                  iconColor: const Color(0xFFF59E0B),
+                ),
               ),
-            ),
-          ]),
+            ],
+          ),
           const SizedBox(height: 10),
           // Recent transactions
           Container(
@@ -1160,9 +1486,10 @@ class _ActivitySection extends StatelessWidget {
               children: [
                 const Padding(
                   padding: EdgeInsets.fromLTRB(16, 14, 16, 8),
-                  child: Text('Recent Services',
-                      style: TextStyle(
-                          fontSize: 13, fontWeight: FontWeight.w600)),
+                  child: Text(
+                    'Recent Services',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                  ),
                 ),
                 const Divider(height: 1, color: Color(0xFFF3F4F6)),
                 ...entries.map((e) => _ActivityTile(entry: e)),
@@ -1201,13 +1528,15 @@ class _StatBox extends StatelessWidget {
         children: [
           Icon(icon, size: 18, color: iconColor),
           const SizedBox(height: 8),
-          Text(value,
-              style: const TextStyle(
-                  fontSize: 14, fontWeight: FontWeight.w700)),
+          Text(
+            value,
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+          ),
           const SizedBox(height: 2),
-          Text(label,
-              style: const TextStyle(
-                  fontSize: 11, color: Color(0xFF9CA3AF))),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 11, color: Color(0xFF9CA3AF)),
+          ),
         ],
       ),
     );
@@ -1231,33 +1560,47 @@ class _ActivityTile extends StatelessWidget {
               color: const Color(0xFFF3F4F6),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: const Icon(Icons.spa_outlined,
-                size: 18, color: Color(0xFF6B7280)),
+            child: const Icon(
+              Icons.spa_outlined,
+              size: 18,
+              color: Color(0xFF6B7280),
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(entry.service,
-                    style: const TextStyle(
-                        fontSize: 13, fontWeight: FontWeight.w500)),
-                Text(entry.customer,
-                    style: const TextStyle(
-                        fontSize: 12, color: Color(0xFF9CA3AF))),
+                Text(
+                  entry.service,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                Text(
+                  entry.customer,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFF9CA3AF),
+                  ),
+                ),
               ],
             ),
           ),
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text('NPR ${entry.amount.toStringAsFixed(0)}',
-                  style: const TextStyle(
-                      fontSize: 13, fontWeight: FontWeight.w600)),
+              Text(
+                'NPR ${entry.amount.toStringAsFixed(0)}',
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
               Text(
                 '+NPR ${entry.commission.toStringAsFixed(0)} comm.',
-                style: const TextStyle(
-                    fontSize: 11, color: Color(0xFF10B981)),
+                style: const TextStyle(fontSize: 11, color: Color(0xFF10B981)),
               ),
             ],
           ),
@@ -1281,12 +1624,16 @@ class _CredRow extends StatelessWidget {
       children: [
         SizedBox(
           width: 68,
-          child: Text(label,
-              style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280))),
+          child: Text(
+            label,
+            style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
+          ),
         ),
         Expanded(
-          child: Text(value,
-              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+          child: Text(
+            value,
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+          ),
         ),
       ],
     );
