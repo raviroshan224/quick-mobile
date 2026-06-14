@@ -16,6 +16,7 @@ class ImageLibraryScreen extends HookWidget {
         children: [
           Container(
             color: Colors.white,
+            
             padding: const EdgeInsets.fromLTRB(
                 AppSpacing.lg, AppSpacing.md, AppSpacing.lg, 0),
             child: Column(
