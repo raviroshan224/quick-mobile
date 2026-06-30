@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:uuid/uuid.dart';
+import '../../../../core/theme/app_theme.dart';
 
 const _uuid = Uuid();
 
@@ -76,11 +77,11 @@ class Booking {
   Color get statusColor {
     switch (status) {
       case BookingStatus.scheduled:
-        return const Color(0xFF6366F1);
+        return AppColors.primary;
       case BookingStatus.completed:
         return const Color(0xFF10B981);
       case BookingStatus.cancelled:
-        return const Color(0xFFEF4444);
+        return AppColors.danger;
     }
   }
 }
@@ -176,7 +177,7 @@ class CalendarTab extends HookConsumerWidget {
           selectedDate: selectedDate.value,
           onDateChanged: (d) => selectedDate.value = d,
         ),
-        const Divider(height: 1, color: Color(0xFFF3F4F6)),
+        const Divider(height: 1, color: AppColors.surfaceVariant),
 
         // ── Bookings list or empty state ────────────────────────────────
         Expanded(
@@ -188,7 +189,7 @@ class CalendarTab extends HookConsumerWidget {
               : ListView.separated(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 80),
                   itemCount: todayBookings.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 10),
+                  separatorBuilder: (_, _) => const SizedBox(height: 10),
                   itemBuilder: (_, i) => _BookingCard(
                     booking: todayBookings[i],
                     onEdit: () => _showBookingForm(
@@ -259,14 +260,14 @@ class CalendarTab extends HookConsumerWidget {
         title: const Text('Delete Booking', style: TextStyle(fontSize: 16)),
         content: Text(
           'Delete booking for ${booking.customerName}?',
-          style: const TextStyle(fontSize: 14, color: Color(0xFF6B7280)),
+          style: const TextStyle(fontSize: 14, color: AppColors.textSecondary),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
             child: const Text(
               'Cancel',
-              style: TextStyle(color: Color(0xFF6B7280)),
+              style: TextStyle(color: AppColors.textSecondary),
             ),
           ),
           TextButton(
@@ -277,7 +278,7 @@ class CalendarTab extends HookConsumerWidget {
             child: const Text(
               'Delete',
               style: TextStyle(
-                color: Color(0xFFEF4444),
+                color: AppColors.danger,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -343,7 +344,7 @@ class _DateStrip extends StatelessWidget {
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF3F4F6),
+                      color: AppColors.surfaceVariant,
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: const Text(
@@ -381,7 +382,7 @@ class _DateStrip extends StatelessWidget {
                       color: isSelected ? Colors.black : Colors.transparent,
                       borderRadius: BorderRadius.circular(10),
                       border: isToday && !isSelected
-                          ? Border.all(color: const Color(0xFFE5E7EB))
+                          ? Border.all(color: AppColors.divider)
                           : null,
                     ),
                     child: Column(
@@ -393,8 +394,8 @@ class _DateStrip extends StatelessWidget {
                             fontSize: 11,
                             fontWeight: FontWeight.w500,
                             color: isSelected
-                                ? const Color(0xFF9CA3AF)
-                                : const Color(0xFF6B7280),
+                                ? AppColors.textTertiary
+                                : AppColors.textSecondary,
                           ),
                         ),
                         const SizedBox(height: 4),
@@ -437,13 +438,13 @@ class _EmptyBookings extends StatelessWidget {
               width: 64,
               height: 64,
               decoration: BoxDecoration(
-                color: const Color(0xFFF3F4F6),
+                color: AppColors.surfaceVariant,
                 borderRadius: BorderRadius.circular(16),
               ),
               child: const Icon(
                 Icons.calendar_today_outlined,
                 size: 28,
-                color: Color(0xFF9CA3AF),
+                color: AppColors.textTertiary,
               ),
             ),
             const SizedBox(height: 16),
@@ -455,7 +456,7 @@ class _EmptyBookings extends StatelessWidget {
             const Text(
               'No bookings scheduled for this date.\nTap below to create one.',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
+              style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
             ),
           ],
         ),
@@ -485,7 +486,7 @@ class _BookingCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
+        border: Border.all(color: AppColors.divider),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -496,7 +497,7 @@ class _BookingCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF3F4F6),
+                  color: AppColors.surfaceVariant,
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
@@ -530,7 +531,7 @@ class _BookingCard extends StatelessWidget {
                 icon: const Icon(
                   Icons.more_vert,
                   size: 18,
-                  color: Color(0xFF6B7280),
+                  color: AppColors.textSecondary,
                 ),
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
@@ -553,7 +554,7 @@ class _BookingCard extends StatelessWidget {
                     value: 'delete',
                     child: Text(
                       'Delete',
-                      style: TextStyle(color: Color(0xFFEF4444)),
+                      style: TextStyle(color: AppColors.danger),
                     ),
                   ),
                 ],
@@ -589,12 +590,12 @@ class _BookingCard extends StatelessWidget {
               const Icon(
                 Icons.spa_outlined,
                 size: 14,
-                color: Color(0xFF6B7280),
+                color: AppColors.textSecondary,
               ),
               const SizedBox(width: 6),
               Text(
                 booking.service,
-                style: const TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
+                style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
               ),
             ],
           ),
@@ -605,14 +606,14 @@ class _BookingCard extends StatelessWidget {
                 const Icon(
                   Icons.person_outline,
                   size: 14,
-                  color: Color(0xFF6B7280),
+                  color: AppColors.textSecondary,
                 ),
                 const SizedBox(width: 6),
                 Text(
                   booking.staff!,
                   style: const TextStyle(
                     fontSize: 13,
-                    color: Color(0xFF6B7280),
+                    color: AppColors.textSecondary,
                   ),
                 ),
               ],
@@ -696,7 +697,7 @@ class BookingFormSheet extends HookConsumerWidget {
             height: 4,
             margin: const EdgeInsets.symmetric(vertical: 12),
             decoration: BoxDecoration(
-              color: const Color(0xFFE5E7EB),
+              color: AppColors.divider,
               borderRadius: BorderRadius.circular(2),
             ),
           ),
@@ -842,10 +843,10 @@ class BookingFormSheet extends HookConsumerWidget {
                                   vertical: 12,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFFF1F5F9),
+                                  color: AppColors.surfaceVariant,
                                   borderRadius: BorderRadius.circular(10),
                                   border: Border.all(
-                                    color: const Color(0xFFCBD5E1),
+                                    color: AppColors.border,
                                   ),
                                 ),
                                 child: Row(
@@ -853,7 +854,7 @@ class BookingFormSheet extends HookConsumerWidget {
                                     const Icon(
                                       Icons.calendar_today,
                                       size: 16,
-                                      color: Color(0xFF6B7280),
+                                      color: AppColors.textSecondary,
                                     ),
                                     const SizedBox(width: 8),
                                     Text(
@@ -890,10 +891,10 @@ class BookingFormSheet extends HookConsumerWidget {
                                   vertical: 12,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFFF1F5F9),
+                                  color: AppColors.surfaceVariant,
                                   borderRadius: BorderRadius.circular(10),
                                   border: Border.all(
-                                    color: const Color(0xFFCBD5E1),
+                                    color: AppColors.border,
                                   ),
                                 ),
                                 child: Row(
@@ -901,7 +902,7 @@ class BookingFormSheet extends HookConsumerWidget {
                                     const Icon(
                                       Icons.access_time,
                                       size: 16,
-                                      color: Color(0xFF6B7280),
+                                      color: AppColors.textSecondary,
                                     ),
                                     const SizedBox(width: 8),
                                     Text(
@@ -948,7 +949,7 @@ class _FormLabel extends StatelessWidget {
       style: const TextStyle(
         fontSize: 12,
         fontWeight: FontWeight.w500,
-        color: Color(0xFF6B7280),
+        color: AppColors.textSecondary,
       ),
     );
   }

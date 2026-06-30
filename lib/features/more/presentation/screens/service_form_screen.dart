@@ -3,32 +3,15 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_constants.dart';
-import '../../../../features/services/data/mock_services_repository.dart';
+import '../../../../core/theme/app_theme.dart';
+import '../../../../core/network/api_client.dart';
+import '../../../../features/services/data/services_repository.dart';
 import '../../../../features/services/domain/service_models.dart';
+import '../../../../features/services/presentation/providers/services_provider.dart';
 import '../../../../shared/widgets/image_picker_sheet.dart';
 
-// ─── Runtime service list provider ───────────────────────────────────────────
-
-class _ServiceListNotifier extends StateNotifier<List<ServiceModel>> {
-  _ServiceListNotifier() : super([]);
-
-  void add(ServiceModel s) => state = [...state, s];
-
-  void update(ServiceModel updated) {
-    state = [for (final s in state) if (s.id == updated.id) updated else s];
-  }
-
-  void toggleActive(String id) {
-    state = [
-      for (final s in state)
-        if (s.id == id) s.copyWith(isActive: !s.isActive) else s,
-    ];
-  }
-}
-
-final serviceListProvider =
-    StateNotifierProvider<_ServiceListNotifier, List<ServiceModel>>(
-  (_) => _ServiceListNotifier(),
+final _servicesRepoProvider = Provider<ServicesRepository>(
+  (ref) => ServicesRepository(ref.read(apiClientProvider)),
 );
 
 // ─── Quick duration presets ───────────────────────────────────────────────────
@@ -45,11 +28,11 @@ String _durationLabel(int minutes) {
 // ─── Category colors ──────────────────────────────────────────────────────────
 
 const _kCatColors = {
-  'cat-1': Color(0xFFDBEAFE),
-  'cat-2': Color(0xFFFCE7F3),
-  'cat-3': Color(0xFFD1FAE5),
-  'cat-4': Color(0xFFEDE9FE),
-  'cat-5': Color(0xFFFFEDD5),
+  'cat-1': Color(0xFFE8EDD6), // olive-50
+  'cat-2': Color(0xFFEEEEEB), // warm grey
+  'cat-3': Color(0xFFD1FAE5), // green (keep semantic)
+  'cat-4': Color(0xFFDCE0C8), // deeper olive
+  'cat-5': Color(0xFFFFEDD5), // orange (keep warm)
 };
 const _kCatIcons = {
   'cat-1': Icons.content_cut_rounded,
@@ -94,42 +77,38 @@ class _ServiceFormScreenState extends ConsumerState<ServiceFormScreen> {
   }
 
   Future<void> _loadData() async {
-    final repo = MockServicesRepository();
-    final cats = await repo.getCategories();
-    if (!mounted) return;
+    final repo = ref.read(_servicesRepoProvider);
+    try {
+      final cats = await repo.getCategories();
+      if (!mounted) return;
 
-    if (widget.isEditing) {
-      try {
-        // Check runtime list first, then fall back to mock repo
-        final runtime = ref.read(serviceListProvider);
-        ServiceModel? s = runtime.where((x) => x.id == widget.serviceId).firstOrNull;
-        s ??= await repo.getService(widget.serviceId!);
+      if (widget.isEditing) {
+        final s = await repo.getById(widget.serviceId!);
         if (!mounted) return;
         _original = s;
-        _nameCtrl.text = s!.name;
+        _nameCtrl.text = s.name;
         _priceCtrl.text = s.price.toStringAsFixed(0);
         _durationCtrl.text = s.duration.toString();
         _descCtrl.text = s.description ?? '';
         setState(() {
           _categories = cats;
-          _selectedCategory = cats.firstWhere(
-            (c) => c.id == s!.category?.id,
-            orElse: () => cats.first,
-          );
-          _isActive = s!.isActive;
+          _selectedCategory = cats.where((c) => c.id == s.category?.id).firstOrNull
+              ?? (cats.isNotEmpty ? cats.first : null);
+          _isActive = s.isActive;
           _loading = false;
         });
-      } catch (_) {
+      } else {
         setState(() {
           _categories = cats;
           _loading = false;
         });
       }
-    } else {
-      setState(() {
-        _categories = cats;
-        _loading = false;
-      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load: $e'), backgroundColor: Colors.red),
+      );
     }
   }
 
@@ -155,34 +134,47 @@ class _ServiceFormScreenState extends ConsumerState<ServiceFormScreen> {
 
   // ── Save ───────────────────────────────────────────────────────────────────
 
-  void _save() {
+  Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     final price = double.tryParse(_priceCtrl.text.trim()) ?? 0;
     final duration = int.tryParse(_durationCtrl.text.trim()) ?? 30;
+    final description = _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim();
+    final repo = ref.read(_servicesRepoProvider);
 
-    if (widget.isEditing && _original != null) {
-      final updated = _original!.copyWith(
-        name: _nameCtrl.text.trim(),
-        price: price,
-        duration: duration,
-        description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
-        category: _selectedCategory,
-        isActive: _isActive,
-      );
-      ref.read(serviceListProvider.notifier).update(updated);
-      context.go(AppRoutes.moreServices);
-    } else {
-      final newService = ServiceModel(
-        id: 'svc-${DateTime.now().millisecondsSinceEpoch}',
-        name: _nameCtrl.text.trim(),
-        price: price,
-        duration: duration,
-        description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
-        category: _selectedCategory,
-        isActive: _isActive,
-      );
-      ref.read(serviceListProvider.notifier).add(newService);
-      context.go(AppRoutes.moreServices);
+    try {
+      if (widget.isEditing && _original != null) {
+        await repo.update(
+          _original!.id,
+          name: _nameCtrl.text.trim(),
+          price: price,
+          duration: duration,
+          description: description,
+          categoryId: _selectedCategory?.id,
+          isActive: _isActive,
+        );
+      } else {
+        await repo.create(
+          name: _nameCtrl.text.trim(),
+          price: price,
+          duration: duration,
+          description: description,
+          categoryId: _selectedCategory?.id,
+          isActive: _isActive,
+        );
+      }
+      ref.invalidate(servicesListProvider);
+      ref.invalidate(serviceCategoriesListProvider);
+      if (mounted) context.go(AppRoutes.moreServices);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString()),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     }
   }
 
@@ -201,12 +193,26 @@ class _ServiceFormScreenState extends ConsumerState<ServiceFormScreen> {
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(ctx);
-              context.go(AppRoutes.moreServices);
+              try {
+                await ref.read(_servicesRepoProvider).delete(widget.serviceId!);
+                ref.invalidate(servicesListProvider);
+                if (mounted) context.go(AppRoutes.moreServices);
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(e.toString()),
+                      backgroundColor: Colors.red,
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                }
+              }
             },
             child: const Text('Delete',
-                style: TextStyle(color: Color(0xFFEF4444))),
+                style: TextStyle(color: AppColors.danger)),
           ),
         ],
       ),
@@ -219,7 +225,7 @@ class _ServiceFormScreenState extends ConsumerState<ServiceFormScreen> {
   Widget build(BuildContext context) {
     if (_loading) {
       return const Scaffold(
-        backgroundColor: Color(0xFFF9FAFB),
+        backgroundColor: AppColors.background,
         body: Center(child: CircularProgressIndicator()),
       );
     }
@@ -227,11 +233,11 @@ class _ServiceFormScreenState extends ConsumerState<ServiceFormScreen> {
     final previewName = _nameCtrl.text.trim().isEmpty ? 'Service Name' : _nameCtrl.text.trim();
     final previewPrice = double.tryParse(_priceCtrl.text.trim());
     final catId = _selectedCategory?.id ?? '';
-    final catColor = _kCatColors[catId] ?? const Color(0xFFF3F4F6);
+    final catColor = _kCatColors[catId] ?? AppColors.surfaceVariant;
     final catIcon = _kCatIcons[catId] ?? Icons.spa_outlined;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF9FAFB),
+      backgroundColor: AppColors.background,
       body: SafeArea(
         child: Column(
           children: [
@@ -257,7 +263,7 @@ class _ServiceFormScreenState extends ConsumerState<ServiceFormScreen> {
                   GestureDetector(
                     onTap: _confirmDelete,
                     child: const Icon(Icons.delete_outline,
-                        size: 22, color: Color(0xFFEF4444)),
+                        size: 22, color: AppColors.danger),
                   )
                 else
                   const SizedBox(width: 22),
@@ -279,7 +285,7 @@ class _ServiceFormScreenState extends ConsumerState<ServiceFormScreen> {
                         decoration: BoxDecoration(
                           color: Colors.white,
                           border:
-                              Border.all(color: const Color(0xFFE5E7EB)),
+                              Border.all(color: AppColors.divider),
                           borderRadius: BorderRadius.circular(14),
                         ),
                         child: Row(children: [
@@ -334,7 +340,7 @@ class _ServiceFormScreenState extends ConsumerState<ServiceFormScreen> {
                                     fontSize: 15,
                                     fontWeight: FontWeight.w600,
                                     color: _nameCtrl.text.trim().isEmpty
-                                        ? const Color(0xFF9CA3AF)
+                                        ? AppColors.textTertiary
                                         : Colors.black,
                                   ),
                                 ),
@@ -344,7 +350,7 @@ class _ServiceFormScreenState extends ConsumerState<ServiceFormScreen> {
                                     _selectedCategory!.name,
                                     style: const TextStyle(
                                         fontSize: 12,
-                                        color: Color(0xFF6B7280)),
+                                        color: AppColors.textSecondary),
                                   ),
                                 ],
                               ],
@@ -367,7 +373,7 @@ class _ServiceFormScreenState extends ConsumerState<ServiceFormScreen> {
                                 decoration: BoxDecoration(
                                   color: _isActive
                                       ? const Color(0xFFDCFCE7)
-                                      : const Color(0xFFF3F4F6),
+                                      : AppColors.surfaceVariant,
                                   borderRadius: BorderRadius.circular(10),
                                 ),
                                 child: Text(
@@ -377,7 +383,7 @@ class _ServiceFormScreenState extends ConsumerState<ServiceFormScreen> {
                                     fontWeight: FontWeight.w600,
                                     color: _isActive
                                         ? const Color(0xFF16A34A)
-                                        : const Color(0xFF6B7280),
+                                        : AppColors.textSecondary,
                                   ),
                                 ),
                               ),
@@ -408,7 +414,7 @@ class _ServiceFormScreenState extends ConsumerState<ServiceFormScreen> {
                         label: 'Category',
                         child: _categories.isEmpty
                             ? const Text('Loading…',
-                                style: TextStyle(color: Color(0xFF9CA3AF)))
+                                style: TextStyle(color: AppColors.textTertiary))
                             : DropdownButtonFormField<ServiceCategory>(
                                 initialValue: _selectedCategory,
                                 isExpanded: true,
@@ -489,7 +495,7 @@ class _ServiceFormScreenState extends ConsumerState<ServiceFormScreen> {
                                     decoration: BoxDecoration(
                                       color: selected
                                           ? Colors.black
-                                          : const Color(0xFFF3F4F6),
+                                          : AppColors.surfaceVariant,
                                       borderRadius: BorderRadius.circular(20),
                                     ),
                                     child: Text(
@@ -501,7 +507,7 @@ class _ServiceFormScreenState extends ConsumerState<ServiceFormScreen> {
                                             : FontWeight.w400,
                                         color: selected
                                             ? Colors.white
-                                            : const Color(0xFF374151),
+                                            : AppColors.textSecondary,
                                       ),
                                     ),
                                   ),
@@ -550,7 +556,7 @@ class _ServiceFormScreenState extends ConsumerState<ServiceFormScreen> {
                               ? 'Service appears in checkout'
                               : 'Hidden from checkout & billing',
                           style: const TextStyle(
-                              fontSize: 12, color: Color(0xFF6B7280)),
+                              fontSize: 12, color: AppColors.textSecondary),
                         ),
                         value: _isActive,
                         onChanged: (v) => setState(() => _isActive = v),
@@ -566,7 +572,7 @@ class _ServiceFormScreenState extends ConsumerState<ServiceFormScreen> {
         ),
       ),
       bottomNavigationBar: Container(
-        color: const Color(0xFFF9FAFB),
+        color: AppColors.background,
         padding: EdgeInsets.fromLTRB(
             16, 12, 16, MediaQuery.of(context).padding.bottom + 12),
         child: SizedBox(
@@ -604,7 +610,7 @@ class _SectionLabel extends StatelessWidget {
             style: const TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
-                color: Color(0xFF6B7280),
+                color: AppColors.textSecondary,
                 letterSpacing: 0.8)),
       );
 }
@@ -617,7 +623,7 @@ class _Card extends StatelessWidget {
         margin: const EdgeInsets.symmetric(horizontal: 16),
         decoration: BoxDecoration(
           color: Colors.white,
-          border: Border.all(color: const Color(0xFFE5E7EB)),
+          border: Border.all(color: AppColors.divider),
           borderRadius: BorderRadius.circular(14),
         ),
         child: Column(children: children),
@@ -638,7 +644,7 @@ class _Field extends StatelessWidget {
                 style: const TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
-                    color: Color(0xFF6B7280))),
+                    color: AppColors.textSecondary)),
             const SizedBox(height: 5),
             child,
           ],
@@ -649,5 +655,5 @@ class _Field extends StatelessWidget {
 class _Divider extends StatelessWidget {
   @override
   Widget build(BuildContext context) => const Divider(
-      height: 1, indent: 16, endIndent: 16, color: Color(0xFFE5E7EB));
+      height: 1, indent: 16, endIndent: 16, color: AppColors.divider);
 }

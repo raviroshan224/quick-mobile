@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/theme/app_theme.dart';
 
 // ─── Value returned when user picks an image ─────────────────────────────────
 
@@ -48,10 +49,10 @@ class _LibImage {
       );
 }
 
-const _kServiceColor = Color(0xFF3B82F6);
-const _kStaffColor = Color(0xFF8B5CF6);
+const _kServiceColor = AppColors.primary;
+const _kStaffColor = AppColors.primaryDark;
 const _kProductColor = Color(0xFFF59E0B);
-const _kNeutralColor = Color(0xFF6B7280);
+const _kNeutralColor = AppColors.textSecondary;
 
 const _kLibrary = <_LibImage>[
   // ── Services ──────────────────────────────────────────────────────────────
@@ -69,7 +70,7 @@ const _kLibrary = <_LibImage>[
   _LibImage(id: 'svc-nailart', name: 'Nail Art',  category: ImagePickerCategory.service, iconData: Icons.brush,                    color: _kServiceColor),
   // ── Staff ─────────────────────────────────────────────────────────────────
   _LibImage(id: 'stf-f1',  name: 'Female Stylist', category: ImagePickerCategory.staff, iconData: Icons.person,  color: _kStaffColor, initials: 'FS'),
-  _LibImage(id: 'stf-m1',  name: 'Male Stylist',   category: ImagePickerCategory.staff, iconData: Icons.person,  color: Color(0xFF0EA5E9), initials: 'MS'),
+  _LibImage(id: 'stf-m1',  name: 'Male Stylist',   category: ImagePickerCategory.staff, iconData: Icons.person,  color: AppColors.primary, initials: 'MS'),
   _LibImage(id: 'stf-mgr', name: 'Manager',        category: ImagePickerCategory.staff, iconData: Icons.manage_accounts, color: Color(0xFF10B981), initials: 'MG'),
   _LibImage(id: 'stf-rec', name: 'Receptionist',   category: ImagePickerCategory.staff, iconData: Icons.support_agent,   color: Color(0xFFF59E0B), initials: 'RC'),
   // ── Products ──────────────────────────────────────────────────────────────
@@ -85,9 +86,9 @@ const _kLibrary = <_LibImage>[
   _LibImage(id: 'prd-towel',   name: 'Towel',        category: ImagePickerCategory.product, iconData: Icons.dry_cleaning,         color: _kProductColor),
   // ── Neutral / general ──────────────────────────────────────────────────────
   _LibImage(id: 'gen-star',  name: 'Star',        category: ImagePickerCategory.all, iconData: Icons.star_rounded,       color: _kNeutralColor),
-  _LibImage(id: 'gen-heart', name: 'Heart',       category: ImagePickerCategory.all, iconData: Icons.favorite_rounded,   color: Color(0xFFEF4444)),
+  _LibImage(id: 'gen-heart', name: 'Heart',       category: ImagePickerCategory.all, iconData: Icons.favorite_rounded,   color: AppColors.danger),
   _LibImage(id: 'gen-crown', name: 'Crown',       category: ImagePickerCategory.all, iconData: Icons.workspace_premium,  color: Color(0xFFD97706)),
-  _LibImage(id: 'gen-leaf',  name: 'Leaf',        category: ImagePickerCategory.all, iconData: Icons.eco_rounded,        color: Color(0xFF16A34A)),
+  _LibImage(id: 'gen-leaf',  name: 'Leaf',        category: ImagePickerCategory.all, iconData: Icons.eco_rounded,        color: AppColors.success),
 ];
 
 // ─── Sheet ────────────────────────────────────────────────────────────────────
@@ -174,7 +175,7 @@ class _ImagePickerSheetState extends State<ImagePickerSheet> {
               width: 36,
               height: 4,
               decoration: BoxDecoration(
-                color: const Color(0xFFD1D5DB),
+                color: AppColors.border,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -192,7 +193,7 @@ class _ImagePickerSheetState extends State<ImagePickerSheet> {
                 GestureDetector(
                   onTap: () => Navigator.pop(context),
                   child: const Icon(Icons.close_rounded,
-                      size: 20, color: Color(0xFF6B7280)),
+                      size: 20, color: AppColors.textSecondary),
                 ),
               ]),
             ),
@@ -207,9 +208,9 @@ class _ImagePickerSheetState extends State<ImagePickerSheet> {
                 decoration: InputDecoration(
                   hintText: 'Search images…',
                   hintStyle: const TextStyle(
-                      fontSize: 14, color: Color(0xFF9CA3AF)),
+                      fontSize: 14, color: AppColors.textTertiary),
                   prefixIcon: const Icon(Icons.search,
-                      size: 18, color: Color(0xFF9CA3AF)),
+                      size: 18, color: AppColors.textTertiary),
                   suffixIcon: _query.isNotEmpty
                       ? GestureDetector(
                           onTap: () {
@@ -217,11 +218,11 @@ class _ImagePickerSheetState extends State<ImagePickerSheet> {
                             _searchCtrl.clear();
                           },
                           child: const Icon(Icons.close,
-                              size: 16, color: Color(0xFF9CA3AF)),
+                              size: 16, color: AppColors.textTertiary),
                         )
                       : null,
                   filled: true,
-                  fillColor: const Color(0xFFF3F4F6),
+                  fillColor: AppColors.surfaceVariant,
                   border: OutlineInputBorder(
                     borderSide: BorderSide.none,
                     borderRadius: BorderRadius.circular(10),
@@ -276,14 +277,14 @@ class _ImagePickerSheetState extends State<ImagePickerSheet> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           const Icon(Icons.image_not_supported_outlined,
-                              size: 40, color: Color(0xFFD1D5DB)),
+                              size: 40, color: AppColors.border),
                           const SizedBox(height: 10),
                           Text(
                             _query.isNotEmpty
                                 ? 'No results for "$_query"'
                                 : 'No images in this category',
                             style: const TextStyle(
-                                fontSize: 14, color: Color(0xFF6B7280)),
+                                fontSize: 14, color: AppColors.textSecondary),
                           ),
                         ],
                       ),
@@ -333,7 +334,7 @@ class _Tab extends StatelessWidget {
           padding:
               const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
           decoration: BoxDecoration(
-            color: selected ? Colors.black : const Color(0xFFF3F4F6),
+            color: selected ? Colors.black : AppColors.surfaceVariant,
             borderRadius: BorderRadius.circular(20),
           ),
           child: Text(
@@ -342,7 +343,7 @@ class _Tab extends StatelessWidget {
               fontSize: 13,
               fontWeight:
                   selected ? FontWeight.w600 : FontWeight.w400,
-              color: selected ? Colors.white : const Color(0xFF374151),
+              color: selected ? Colors.white : AppColors.textSecondary,
             ),
           ),
         ),
@@ -385,7 +386,7 @@ class _ImageCell extends StatelessWidget {
             Text(
               image.name,
               style: const TextStyle(
-                  fontSize: 10, color: Color(0xFF6B7280)),
+                  fontSize: 10, color: AppColors.textSecondary),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,

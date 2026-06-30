@@ -307,12 +307,12 @@ class _Avatar extends StatelessWidget {
 
   Color _color() {
     final colors = [
-      const Color(0xFF5856D6),
-      const Color(0xFF34AADC),
-      const Color(0xFF4CD964),
-      const Color(0xFFFF9500),
-      const Color(0xFFFF3B30),
-      const Color(0xFFFF2D55),
+      const Color(0xFF6B7A3D), // olive
+      const Color(0xFF4D5A2C), // dark olive
+      const Color(0xFF8A9950), // medium olive
+      const Color(0xFF111111), // black
+      const Color(0xFF3A3A3A), // dark grey
+      const Color(0xFF5A5A5A), // grey
     ];
     return colors[name.codeUnitAt(0) % colors.length];
   }
@@ -362,13 +362,13 @@ class _StockBadge extends StatelessWidget {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
         decoration: BoxDecoration(
-          color: const Color(0xFFFF9500).withValues(alpha: 0.12),
+          color: AppColors.warning.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(4),
         ),
         child: Text(
           '${item.stockQty} left',
           style: const TextStyle(
-              fontSize: 10, color: Color(0xFFCC7700), fontWeight: FontWeight.w600),
+              fontSize: 10, color: AppColors.warning, fontWeight: FontWeight.w600),
         ),
       );
     }

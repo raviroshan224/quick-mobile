@@ -6,59 +6,87 @@ import 'package:flutter/services.dart';
 class AppColors {
   AppColors._();
 
-  // Brand
-  static const Color primary = Color(0xFF6366F1);        // indigo
-  static const Color primaryDark = Color(0xFF4F46E5);
-  static const Color primaryLight = Color(0xFFEEF2FF);
+  // Brand — Quick Corporation
+  static const Color primary = Color(0xFF6B7A3D);        // olive green (CTA, buttons, active)
+  static const Color primaryDark = Color(0xFF4D5A2C);     // dark olive
+  static const Color primaryLight = Color(0xFFF0F2E8);    // light olive tint
 
-  // Sidebar
-  static const Color sidebarBg = Color(0xFF0F172A);
-  static const Color sidebarHover = Color(0xFF1E293B);
-  static const Color sidebarActive = Color(0xFF1E293B);
-  static const Color sidebarText = Color(0xFF94A3B8);
-  static const Color sidebarTextActive = Color(0xFFF1F5F9);
-  static const Color sidebarDivider = Color(0xFF1E293B);
-  static const Color sidebarAccentBar = Color(0xFF6366F1);
+  // Sidebar / dark panels (auth brand panel, side nav)
+  static const Color sidebarBg = Color(0xFF111111);
+  static const Color sidebarHover = Color(0xFF1C1C1C);
+  static const Color sidebarActive = Color(0xFF1C1C1C);
+  static const Color sidebarText = Color(0xFF9A9A9A);
+  static const Color sidebarTextActive = Color(0xFFFFFFFF);
+  static const Color sidebarDivider = Color(0xFF2A2A2A);
+  static const Color sidebarAccentBar = Color(0xFF6B7A3D);
 
-  // Content
-  static const Color background = Color(0xFFF8FAFC);
+  // Content backgrounds
+  static const Color background = Color(0xFFFFFFFF);      // 70% White
   static const Color surface = Color(0xFFFFFFFF);
-  static const Color surfaceVariant = Color(0xFFF1F5F9);
-  static const Color cardBg = Color(0xFFFFFFFF);
+  static const Color surfaceVariant = Color(0xFFF8F8F5);  // Cards / Sections
+  static const Color cardBg = Color(0xFFF8F8F5);
 
-  // Text
-  static const Color textPrimary = Color(0xFF0F172A);
-  static const Color textSecondary = Color(0xFF64748B);
-  static const Color textTertiary = Color(0xFF94A3B8);
-  static const Color textHint = Color(0xFFCBD5E1);
+  // Text (20% Black / Grey usage)
+  static const Color textPrimary = Color(0xFF111111);     // headings
+  static const Color textSecondary = Color(0xFF5A5A5A);   // body / icons
+  static const Color textTertiary = Color(0xFF9A9A9A);    // captions / placeholders
+  static const Color textHint = Color(0xFFBBBBBB);
 
   // Borders / Dividers
-  static const Color divider = Color(0xFFE2E8F0);
-  static const Color border = Color(0xFFCBD5E1);
+  static const Color divider = Color(0xFFD9D9D9);
+  static const Color border = Color(0xFFD9D9D9);
 
-  // Semantic
+  // Semantic — kept as universal UX signals; not brand accent colors
   static const Color success = Color(0xFF10B981);
   static const Color successLight = Color(0xFFD1FAE5);
   static const Color warning = Color(0xFFF59E0B);
   static const Color warningLight = Color(0xFFFEF3C7);
   static const Color danger = Color(0xFFEF4444);
   static const Color dangerLight = Color(0xFFFEE2E2);
-  static const Color info = Color(0xFF0EA5E9);
-  static const Color infoLight = Color(0xFFE0F2FE);
+  static const Color info = Color(0xFF6B7A3D);            // olive (replaces blue)
+  static const Color infoLight = Color(0xFFF0F2E8);       // light olive
 
-  // POS specific
-  static const Color cartBg = Color(0xFFF8FAFC);
+  // POS-specific
+  static const Color cartBg = Color(0xFFF8F8F5);
   static const Color cartItemBg = Color(0xFFFFFFFF);
-  static const Color fonepayColor = Color(0xFF6BBD44);
+  static const Color fonepayColor = Color(0xFF6BBD44);    // Fonepay brand green (keep as-is)
   static const Color cashColor = Color(0xFF10B981);
-  static const Color splitColor = Color(0xFF6366F1);
+  static const Color splitColor = Color(0xFF6B7A3D);      // olive
 
-  // Legacy aliases
+  // Aliases
   static const Color accent = primary;
   static const Color refund = danger;
-  static const Color navSelected = textPrimary;
+  static const Color navSelected = primary;               // olive for active nav
   static const Color navUnselected = textTertiary;
   static const Color keypadKey = surfaceVariant;
+
+  // Avatar / category palette — olive-family tints, no blue/purple
+  static const List<Color> avatarColors = [
+    Color(0xFF6B7A3D), // olive
+    Color(0xFF4D5A2C), // dark olive
+    Color(0xFF8A9950), // medium olive
+    Color(0xFF111111), // black
+    Color(0xFF3A3A3A), // dark grey
+    Color(0xFF5A5A5A), // grey
+    Color(0xFF9A9A9A), // light grey
+    Color(0xFFB5C090), // pale olive
+  ];
+
+  // Category chip palette — subtle tints for visual differentiation
+  static const List<Color> categoryBg = [
+    Color(0xFFE8EDD6), // olive-50
+    Color(0xFFF8F8F5), // surface white
+    Color(0xFFEEEEEB), // warm grey
+    Color(0xFFE0E4D0), // olive-grey
+    Color(0xFFDCE0C8), // deeper olive tint
+  ];
+  static const List<Color> categoryFg = [
+    Color(0xFF4D5A2C), // dark olive
+    Color(0xFF5A5A5A), // grey
+    Color(0xFF5A5A5A),
+    Color(0xFF4D5A2C),
+    Color(0xFF3A4520),
+  ];
 }
 
 // ─── Typography ───────────────────────────────────────────────────────────────
@@ -103,7 +131,7 @@ class AppTextStyles {
     fontSize: 11, fontWeight: FontWeight.w500, color: AppColors.textTertiary, letterSpacing: 0.5,
   );
 
-  // POS specific
+  // POS-specific
   static const TextStyle priceTag = TextStyle(
     fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.textPrimary,
   );
@@ -186,10 +214,10 @@ class AppTheme {
       onPrimary: Colors.white,
       primaryContainer: AppColors.primaryLight,
       onPrimaryContainer: AppColors.primaryDark,
-      secondary: AppColors.info,
+      secondary: AppColors.textSecondary,
       onSecondary: Colors.white,
-      secondaryContainer: AppColors.infoLight,
-      onSecondaryContainer: Color(0xFF0369A1),
+      secondaryContainer: AppColors.surfaceVariant,
+      onSecondaryContainer: AppColors.textPrimary,
       tertiary: AppColors.success,
       onTertiary: Colors.white,
       error: AppColors.danger,
@@ -206,7 +234,7 @@ class AppTheme {
       scrim: Color(0x40000000),
       inverseSurface: AppColors.sidebarBg,
       onInverseSurface: AppColors.sidebarTextActive,
-      inversePrimary: Color(0xFF818CF8),
+      inversePrimary: Color(0xFF8A9950),
     );
 
     return ThemeData(
@@ -239,7 +267,7 @@ class AppTheme {
       ),
 
       cardTheme: CardThemeData(
-        color: AppColors.surface,
+        color: AppColors.cardBg,
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: AppRadius.lgBR,
@@ -369,7 +397,6 @@ class AppTheme {
         dragHandleColor: AppColors.border,
       ),
 
-      // Legacy bottom nav (unused in tablet layout, kept for phone compat)
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
         backgroundColor: AppColors.surface,
         selectedItemColor: AppColors.primary,
@@ -380,4 +407,3 @@ class AppTheme {
     );
   }
 }
-

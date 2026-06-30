@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/widgets/empty_state.dart';
 import '../../../../shared/widgets/search_field.dart';
+import '../../../customers/presentation/providers/customers_provider.dart';
 import '../../../services/domain/service_models.dart';
 import '../../domain/pos_models.dart';
 import '../providers/cart_provider.dart';
@@ -103,7 +103,7 @@ class _CategoryChips extends ConsumerWidget {
       color: Colors.white,
       child: categories.when(
         loading: () => const SizedBox(),
-        error: (_, __) => const SizedBox(),
+        error: (_, _) => const SizedBox(),
         data: (cats) => ListView(
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(
@@ -431,38 +431,77 @@ class _CustomerChip extends ConsumerWidget {
 class _CustomerPickerSheet extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return Padding(
-      padding: const EdgeInsets.all(AppSpacing.lg),
+    final customersAsync = ref.watch(customersProvider);
+    return Container(
+      constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.72),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Add Customer', style: AppTextStyles.headlineMedium),
-          const SizedBox(height: AppSpacing.md),
-          ListTile(
-            leading: const Icon(Icons.person_outline),
-            title: const Text('Guest Checkout'),
-            subtitle: const Text('No account required'),
-            onTap: () {
-              ref.read(cartProvider.notifier).setGuest();
-              Navigator.pop(context);
-            },
+          // Handle + header
+          Container(
+            width: 36, height: 4,
+            margin: const EdgeInsets.symmetric(vertical: 10),
+            decoration: BoxDecoration(color: AppColors.divider, borderRadius: AppRadius.pillBR),
           ),
-          const Divider(),
-          for (final name in ['Sita Thapa', 'Rina Gurung', 'Maya Sharma'])
-            ListTile(
-              leading: CircleAvatar(
-                  backgroundColor: AppColors.primaryLight,
-                  child: Text(name[0],
-                      style: const TextStyle(
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.w700))),
-              title: Text(name),
-              onTap: () {
-                ref.read(cartProvider.notifier).setGuest(name: name);
-                Navigator.pop(context);
-              },
+          Padding(
+            padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.md),
+            child: Row(
+              children: [
+                Text('Add Customer', style: AppTextStyles.headlineMedium),
+                const Spacer(),
+                GestureDetector(
+                  onTap: () => Navigator.pop(context),
+                  child: Text('Cancel', style: AppTextStyles.bodyMedium.copyWith(color: AppColors.primary)),
+                ),
+              ],
             ),
+          ),
+          const Divider(height: 1),
+          Flexible(
+            child: ListView(
+              shrinkWrap: true,
+              padding: EdgeInsets.zero,
+              children: [
+                ListTile(
+                  leading: Container(
+                    width: 38, height: 38,
+                    decoration: BoxDecoration(color: AppColors.surfaceVariant, shape: BoxShape.circle),
+                    child: const Icon(Icons.person_outline, size: 18, color: AppColors.textSecondary),
+                  ),
+                  title: const Text('Guest Checkout'),
+                  subtitle: const Text('No account required'),
+                  onTap: () {
+                    ref.read(cartProvider.notifier).setGuest();
+                    Navigator.pop(context);
+                  },
+                ),
+                const Divider(height: 1, indent: 66),
+                ...customersAsync.when(
+                  loading: () => [const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator()))],
+                  error: (e, _) => [Padding(padding: const EdgeInsets.all(16), child: Text('$e'))],
+                  data: (list) => list.isEmpty
+                      ? [const Padding(padding: EdgeInsets.all(24), child: Center(child: Text('No customers yet')))]
+                      : list.map((c) => ListTile(
+                            leading: CircleAvatar(
+                              backgroundColor: AppColors.primaryLight,
+                              child: Text(c.initials, style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w700, fontSize: 13)),
+                            ),
+                            title: Text(c.fullName),
+                            subtitle: c.phone != null ? Text(c.phone!, style: AppTextStyles.bodySmall) : null,
+                            onTap: () {
+                              ref.read(cartProvider.notifier).setCustomer(c);
+                              Navigator.pop(context);
+                            },
+                          )).toList(),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(height: MediaQuery.of(context).padding.bottom + AppSpacing.sm),
         ],
       ),
     );
@@ -740,35 +779,47 @@ class _DiscountSheet extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final ctrl = useTextEditingController();
     final isPercent = useState(true);
+    final cart = ref.watch(cartProvider);
 
-    return Padding(
-      padding: EdgeInsets.fromLTRB(
-          AppSpacing.lg,
-          AppSpacing.md,
-          AppSpacing.lg,
+    return Container(
+      constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.65),
+      padding: EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.md, AppSpacing.lg,
           MediaQuery.of(context).viewInsets.bottom + AppSpacing.lg),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Center(
+            child: Container(
+              width: 36, height: 4,
+              margin: const EdgeInsets.only(bottom: AppSpacing.md),
+              decoration: BoxDecoration(color: AppColors.divider, borderRadius: AppRadius.pillBR),
+            ),
+          ),
           Text('Apply Discount', style: AppTextStyles.headlineMedium),
+          const SizedBox(height: 4),
+          Text('Subtotal: NPR ${cart.subtotal.toStringAsFixed(0)}',
+              style: AppTextStyles.bodyMedium),
           const SizedBox(height: AppSpacing.md),
-          SegmentedButton<bool>(
-            segments: const [
-              ButtonSegment(value: true, label: Text('Percentage %')),
-              ButtonSegment(value: false, label: Text('Fixed Amount')),
-            ],
-            selected: {isPercent.value},
-            onSelectionChanged: (s) => isPercent.value = s.first,
+          // Toggle tabs
+          Container(
+            height: 44,
+            decoration: BoxDecoration(color: AppColors.surfaceVariant, borderRadius: AppRadius.mdBR),
+            child: Row(
+              children: [
+                _ToggleTab(label: 'Percentage %', selected: isPercent.value, onTap: () => isPercent.value = true),
+                _ToggleTab(label: 'Fixed Amount', selected: !isPercent.value, onTap: () => isPercent.value = false),
+              ],
+            ),
           ),
           const SizedBox(height: AppSpacing.md),
           TextField(
             controller: ctrl,
-            keyboardType: TextInputType.number,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            autofocus: true,
             decoration: InputDecoration(
-              hintText: isPercent.value ? 'e.g. 10' : 'Amount in NPR',
-              prefixText: isPercent.value ? '' : 'NPR ',
-              suffixText: isPercent.value ? '%' : '',
+              hintText: isPercent.value ? 'e.g. 10' : 'e.g. 500',
+              suffixText: isPercent.value ? '%' : 'NPR',
             ),
           ),
           const SizedBox(height: AppSpacing.md),
@@ -804,58 +855,118 @@ class _DiscountSheet extends HookConsumerWidget {
   }
 }
 
+class _ToggleTab extends StatelessWidget {
+  const _ToggleTab({required this.label, required this.selected, required this.onTap});
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          margin: const EdgeInsets.all(3),
+          decoration: BoxDecoration(
+            color: selected ? Colors.white : Colors.transparent,
+            borderRadius: AppRadius.smBR,
+            boxShadow: selected
+                ? [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 4, offset: const Offset(0, 1))]
+                : null,
+          ),
+          child: Center(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                color: selected ? AppColors.primary : AppColors.textSecondary,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 // ─── Tip Sheet ────────────────────────────────────────────────────────────────
 
 class _TipSheet extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final ctrl = useTextEditingController();
-    const tips = [100.0, 200.0, 500.0];
+    const tips = [50.0, 100.0, 200.0, 500.0];
 
-    return Padding(
-      padding: EdgeInsets.fromLTRB(
-          AppSpacing.lg,
-          AppSpacing.md,
-          AppSpacing.lg,
+    return Container(
+      constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.6),
+      padding: EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.md, AppSpacing.lg,
           MediaQuery.of(context).viewInsets.bottom + AppSpacing.lg),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Center(
+            child: Container(
+              width: 36, height: 4,
+              margin: const EdgeInsets.only(bottom: AppSpacing.md),
+              decoration: BoxDecoration(color: AppColors.divider, borderRadius: AppRadius.pillBR),
+            ),
+          ),
           Text('Add Tip', style: AppTextStyles.headlineMedium),
           const SizedBox(height: AppSpacing.md),
-          Row(
-            children: tips
-                .map((t) => Padding(
-                      padding:
-                          const EdgeInsets.only(right: AppSpacing.sm),
-                      child: OutlinedButton(
-                        onPressed: () =>
-                            ctrl.text = t.toStringAsFixed(0),
-                        child: Text('NPR ${t.toStringAsFixed(0)}'),
-                      ),
-                    ))
-                .toList(),
+          // Quick tip chips
+          Wrap(
+            spacing: AppSpacing.sm,
+            children: tips.map((t) => GestureDetector(
+              onTap: () => ctrl.text = t.toStringAsFixed(0),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceVariant,
+                  borderRadius: AppRadius.pillBR,
+                  border: Border.all(color: AppColors.divider),
+                ),
+                child: Text('NPR ${t.toStringAsFixed(0)}',
+                    style: AppTextStyles.labelMedium.copyWith(color: AppColors.textPrimary)),
+              ),
+            )).toList(),
           ),
           const SizedBox(height: AppSpacing.md),
           TextField(
             controller: ctrl,
             keyboardType: TextInputType.number,
             decoration: const InputDecoration(
-                hintText: 'Custom tip amount',
-                prefixText: 'NPR '),
+              hintText: 'Custom amount',
+              suffixText: 'NPR',
+            ),
           ),
           const SizedBox(height: AppSpacing.md),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              onPressed: () {
-                final v = double.tryParse(ctrl.text) ?? 0;
-                ref.read(cartProvider.notifier).setTip(v);
-                Navigator.pop(context);
-              },
-              child: const Text('Apply Tip'),
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () {
+                    ref.read(cartProvider.notifier).setTip(0);
+                    Navigator.pop(context);
+                  },
+                  child: const Text('Remove'),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: FilledButton(
+                  onPressed: () {
+                    final v = double.tryParse(ctrl.text) ?? 0;
+                    ref.read(cartProvider.notifier).setTip(v);
+                    Navigator.pop(context);
+                  },
+                  child: const Text('Apply Tip'),
+                ),
+              ),
+            ],
           ),
         ],
       ),

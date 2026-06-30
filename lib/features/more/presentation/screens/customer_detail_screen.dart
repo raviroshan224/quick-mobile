@@ -2,58 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_constants.dart';
-import '../../../../features/customers/data/mock_customers_repository.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../../../../features/customers/domain/customer_models.dart';
-
-// ── Provider ──────────────────────────────────────────────────────────────────
-
-final _customerByIdProvider =
-    FutureProvider.family<CustomerModel?, String>((ref, id) {
-  return MockCustomersRepository().getById(id);
-});
-
-// ── Mock visit history ────────────────────────────────────────────────────────
-
-class _VisitRecord {
-  _VisitRecord({
-    required this.date,
-    required this.services,
-    required this.amount,
-  });
-  final DateTime date;
-  final List<String> services;
-  final double amount;
-}
-
-// Three pools of 5 visits; chosen by a hash of the customer ID.
-List<_VisitRecord> _mockVisitsFor(String customerId) {
-  final pools = [
-    [
-      _VisitRecord(date: DateTime(2026, 6, 3),  services: ['Haircut & Blow Dry'],                       amount: 800),
-      _VisitRecord(date: DateTime(2026, 5, 15), services: ['Hair Color (Full)', 'Classic Facial'],       amount: 3700),
-      _VisitRecord(date: DateTime(2026, 4, 20), services: ['Haircut & Blow Dry', 'Keratin Shampoo'],     amount: 1250),
-      _VisitRecord(date: DateTime(2026, 3, 10), services: ['Manicure'],                                  amount: 600),
-      _VisitRecord(date: DateTime(2026, 2, 2),  services: ['Swedish Massage (60 min)'],                  amount: 1800),
-    ],
-    [
-      _VisitRecord(date: DateTime(2026, 6, 1),  services: ['Manicure', 'Pedicure'],                      amount: 1300),
-      _VisitRecord(date: DateTime(2026, 5, 5),  services: ['Classic Facial'],                            amount: 1200),
-      _VisitRecord(date: DateTime(2026, 4, 14), services: ['Waxing (Full Legs)', 'Eyebrow Threading'],   amount: 950),
-      _VisitRecord(date: DateTime(2026, 3, 22), services: ['Haircut & Blow Dry'],                        amount: 800),
-      _VisitRecord(date: DateTime(2026, 2, 18), services: ['Hair Color (Highlights)'],                   amount: 2800),
-    ],
-    [
-      _VisitRecord(date: DateTime(2026, 5, 28), services: ['Swedish Massage (60 min)'],                  amount: 1800),
-      _VisitRecord(date: DateTime(2026, 4, 10), services: ['Haircut & Blow Dry', 'Eyebrow Threading'],   amount: 900),
-      _VisitRecord(date: DateTime(2026, 3, 3),  services: ['Classic Facial', 'Manicure'],                amount: 1800),
-      _VisitRecord(date: DateTime(2026, 2, 14), services: ['Hair Color (Root Touch-Up)'],                amount: 1500),
-      _VisitRecord(date: DateTime(2026, 1, 20), services: ['Pedicure'],                                  amount: 700),
-    ],
-  ];
-  final seed =
-      customerId.codeUnits.fold(0, (a, b) => a + b) % pools.length;
-  return pools[seed];
-}
+import '../../../../features/customers/presentation/providers/customers_provider.dart';
+import '../../../../features/transactions/domain/transaction_models.dart';
+import '../../../../features/transactions/presentation/providers/transactions_provider.dart';
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 
@@ -63,10 +16,10 @@ class CustomerDetailScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final customerAsync = ref.watch(_customerByIdProvider(customerId));
+    final customerAsync = ref.watch(customerDetailProvider(customerId));
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF9FAFB),
+      backgroundColor: AppColors.background,
       body: SafeArea(
         child: customerAsync.when(
           loading: () => Column(
@@ -90,29 +43,14 @@ class CustomerDetailScreen extends ConsumerWidget {
                 child: Center(
                   child: Text('Error: $e',
                       style: const TextStyle(
-                          color: Color(0xFF6B7280))),
+                          color: AppColors.textSecondary)),
                 ),
               ),
             ],
           ),
           data: (customer) {
-            if (customer == null) {
-              return Column(
-                children: [
-                  _Header(customerId: customerId, onEdit: () {}),
-                  const Expanded(
-                    child: Center(
-                      child: Text('Customer not found',
-                          style: TextStyle(
-                              color: Color(0xFF6B7280))),
-                    ),
-                  ),
-                ],
-              );
-            }
             return _CustomerDetailBody(
               customer: customer,
-              visits: _mockVisitsFor(customerId),
               onEdit: () =>
                   context.push(AppRoutes.customerEdit(customerId)),
             );
@@ -168,14 +106,12 @@ class _Header extends StatelessWidget {
 
 // ── Full body ─────────────────────────────────────────────────────────────────
 
-class _CustomerDetailBody extends StatelessWidget {
+class _CustomerDetailBody extends ConsumerWidget {
   const _CustomerDetailBody({
     required this.customer,
-    required this.visits,
     required this.onEdit,
   });
   final CustomerModel customer;
-  final List<_VisitRecord> visits;
   final VoidCallback onEdit;
 
   String _fmt(double v) {
@@ -186,7 +122,8 @@ class _CustomerDetailBody extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final txAsync = ref.watch(customerTransactionsProvider(customer.id));
     return Column(
       children: [
         _Header(customerId: customer.id, onEdit: onEdit),
@@ -239,7 +176,7 @@ class _CustomerDetailBody extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
-                    color: Color(0xFF6B7280),
+                    color: AppColors.textSecondary,
                     letterSpacing: 0.8,
                   ),
                 ),
@@ -251,21 +188,47 @@ class _CustomerDetailBody extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: const Color(0xFFE5E7EB)),
+                  border: Border.all(color: AppColors.divider),
                 ),
-                child: Column(
-                  children: [
-                    for (int i = 0; i < visits.length; i++) ...[
-                      _VisitRow(visit: visits[i]),
-                      if (i < visits.length - 1)
-                        const Divider(
-                          height: 1,
-                          indent: 36,
-                          endIndent: 16,
-                          color: Color(0xFFF3F4F6),
+                child: txAsync.when(
+                  loading: () => const Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Center(
+                        child: CircularProgressIndicator(strokeWidth: 2)),
+                  ),
+                  error: (e, _) => Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Text('Could not load visits: $e',
+                        style: const TextStyle(
+                            fontSize: 13, color: AppColors.textSecondary)),
+                  ),
+                  data: (transactions) {
+                    if (transactions.isEmpty) {
+                      return const Padding(
+                        padding: EdgeInsets.all(24),
+                        child: Center(
+                          child: Text('No visits yet',
+                              style: TextStyle(
+                                  fontSize: 14,
+                                  color: AppColors.textSecondary)),
                         ),
-                    ],
-                  ],
+                      );
+                    }
+                    return Column(
+                      children: [
+                        for (int i = 0; i < transactions.length; i++) ...[
+                          _VisitRow(transaction: transactions[i]),
+                          if (i < transactions.length - 1)
+                            const Divider(
+                              height: 1,
+                              indent: 36,
+                              endIndent: 16,
+                              color: AppColors.surfaceVariant,
+                            ),
+                        ],
+                      ],
+                    );
+                  },
                 ),
               ),
               const SizedBox(height: 24),
@@ -352,12 +315,12 @@ class _HeroSection extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 const Icon(Icons.phone_outlined,
-                    size: 13, color: Color(0xFF6B7280)),
+                    size: 13, color: AppColors.textSecondary),
                 const SizedBox(width: 4),
                 Text(
                   customer.phone!,
                   style: const TextStyle(
-                      fontSize: 13, color: Color(0xFF6B7280)),
+                      fontSize: 13, color: AppColors.textSecondary),
                 ),
               ],
             ),
@@ -368,12 +331,12 @@ class _HeroSection extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 const Icon(Icons.mail_outline_rounded,
-                    size: 13, color: Color(0xFF6B7280)),
+                    size: 13, color: AppColors.textSecondary),
                 const SizedBox(width: 4),
                 Text(
                   customer.email!,
                   style: const TextStyle(
-                      fontSize: 13, color: Color(0xFF6B7280)),
+                      fontSize: 13, color: AppColors.textSecondary),
                 ),
               ],
             ),
@@ -386,22 +349,22 @@ class _HeroSection extends StatelessWidget {
               padding: const EdgeInsets.symmetric(
                   horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
-                color: const Color(0xFFF9FAFB),
+                color: AppColors.background,
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: const Color(0xFFE5E7EB)),
+                border: Border.all(color: AppColors.divider),
               ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Icon(Icons.sticky_note_2_outlined,
-                      size: 14, color: Color(0xFF9CA3AF)),
+                      size: 14, color: AppColors.textTertiary),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       customer.notes!,
                       style: const TextStyle(
                           fontSize: 13,
-                          color: Color(0xFF374151),
+                          color: AppColors.textSecondary,
                           height: 1.4),
                     ),
                   ),
@@ -435,11 +398,11 @@ class _StatCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
+        border: Border.all(color: AppColors.divider),
       ),
       child: Column(
         children: [
-          Icon(icon, size: 18, color: const Color(0xFF6B7280)),
+          Icon(icon, size: 18, color: AppColors.textSecondary),
           const SizedBox(height: 6),
           Text(
             value,
@@ -454,7 +417,7 @@ class _StatCard extends StatelessWidget {
             label,
             style: const TextStyle(
                 fontSize: 10,
-                color: Color(0xFF9CA3AF),
+                color: AppColors.textTertiary,
                 fontWeight: FontWeight.w500),
             textAlign: TextAlign.center,
           ),
@@ -467,8 +430,8 @@ class _StatCard extends StatelessWidget {
 // ── Visit row ─────────────────────────────────────────────────────────────────
 
 class _VisitRow extends StatelessWidget {
-  const _VisitRow({required this.visit});
-  final _VisitRecord visit;
+  const _VisitRow({required this.transaction});
+  final Transaction transaction;
 
   static const _months = [
     'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -480,6 +443,14 @@ class _VisitRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final services = transaction.items
+            ?.map((i) => i.displayName)
+            .where((n) => n.isNotEmpty)
+            .toList() ??
+        [];
+    final label =
+        services.isEmpty ? 'Service' : services.join(', ');
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       child: Row(
@@ -500,15 +471,15 @@ class _VisitRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _formatDate(visit.date),
+                  _formatDate(transaction.createdAt),
                   style: const TextStyle(
                       fontSize: 12,
-                      color: Color(0xFF6B7280),
+                      color: AppColors.textSecondary,
                       fontWeight: FontWeight.w500),
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  visit.services.join(', '),
+                  label,
                   style: const TextStyle(
                       fontSize: 14, fontWeight: FontWeight.w500),
                 ),
@@ -516,7 +487,7 @@ class _VisitRow extends StatelessWidget {
             ),
           ),
           Text(
-            'NPR ${visit.amount.toStringAsFixed(0)}',
+            'NPR ${transaction.total.toStringAsFixed(0)}',
             style: const TextStyle(
                 fontSize: 14, fontWeight: FontWeight.w600),
           ),

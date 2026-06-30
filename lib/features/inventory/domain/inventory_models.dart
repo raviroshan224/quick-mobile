@@ -27,6 +27,20 @@ class ProductModel {
   final String? imageUrl;
   final bool isActive;
 
+  factory ProductModel.fromJson(Map<String, dynamic> j) => ProductModel(
+        id: j['id'] as String,
+        name: j['name'] as String,
+        price: (j['price'] as num).toDouble(),
+        stock: j['stock'] as int? ?? 0,
+        description: j['description'] as String?,
+        sku: j['sku'] as String?,
+        cost: (j['cost'] as num?)?.toDouble(),
+        lowStockThreshold: j['lowStockThreshold'] as int? ?? 5,
+        category: j['category'] as String?,
+        imageUrl: j['imageUrl'] as String?,
+        isActive: j['isActive'] as bool? ?? true,
+      );
+
   bool get isLowStock => stock <= lowStockThreshold;
   String get priceLabel => 'NPR ${price.toStringAsFixed(0)}';
 
@@ -55,6 +69,7 @@ class InventoryLogEntry {
     required this.stockBefore,
     required this.stockAfter,
     required this.createdAt,
+    this.createdByName,
   });
 
   final String id;
@@ -66,4 +81,5 @@ class InventoryLogEntry {
   final int stockBefore;
   final int stockAfter;
   final DateTime createdAt;
+  final String? createdByName;
 }

@@ -42,6 +42,12 @@ dependencies:
   intl: ^0.19.0
   uuid: ^4.4.2
 
+  # Image picking (image library upload)
+  image_picker: ^1.1.2
+
+  # URL launching (support contacts — phone, email, WhatsApp)
+  url_launcher: ^6.3.1
+
   # UI helpers
   cupertino_icons: ^1.0.8
   flutter_svg: ^2.0.10+1
@@ -57,6 +63,15 @@ dev_dependencies:
   drift_dev: ^2.18.0
   riverpod_generator: ^2.4.2
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.3
+
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/images/black white .png"
+  min_sdk_android: 21
+  adaptive_icon_background: "#0F172A"
+  adaptive_icon_foreground: "assets/images/black white .png"
 
 flutter:
   uses-material-design: true

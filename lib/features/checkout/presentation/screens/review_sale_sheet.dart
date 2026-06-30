@@ -2,13 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import '../../../../features/customers/data/mock_customers_repository.dart';
+import '../../../../core/network/api_client.dart';
 import '../../../../features/customers/domain/customer_models.dart';
+import '../../../../features/customers/presentation/providers/customers_provider.dart';
 import '../../../../features/pos/domain/pos_models.dart';
 import '../../../../features/pos/presentation/providers/cart_provider.dart';
+import '../../../../features/transactions/data/transactions_repository.dart';
+import '../../../../features/transactions/presentation/providers/transactions_provider.dart';
 import '../widgets/manual_discount_sheet.dart';
+import '../../../../core/theme/app_theme.dart';
 
 enum _Step { pick, cash, qr, split, success }
+
+final _reviewRepoProvider = Provider.autoDispose<TransactionsRepository>(
+  (ref) => TransactionsRepository(ref.read(apiClientProvider)),
+);
 
 // ─── Entry point ──────────────────────────────────────────────────────────────
 
@@ -22,18 +30,58 @@ class ReviewSaleSheet extends HookConsumerWidget {
     final method = useState(PaymentMethod.cash);
     final customer = useState<CustomerModel?>(null);
     final cashInput = useState('0');
+    final isProcessing = useState(false);
 
-    useEffect(() {
-      return null;
-    }, const []);
+    useEffect(() => null, const []);
 
     final cart = ref.watch(cartProvider);
     final total = cart.items.isEmpty ? keypadAmount : cart.total;
     final tendered = double.tryParse(cashInput.value) ?? 0;
 
     void done() {
-      ref.read(cartProvider.notifier).clear();
-      step.value = _Step.success;
+      if (isProcessing.value) return;
+      isProcessing.value = true;
+
+      final manualDiscount = ref.read(manualDiscountProvider);
+      var checkoutCart = ref.read(cartProvider);
+      if (manualDiscount != null && checkoutCart.discount == null) {
+        checkoutCart = checkoutCart.copyWith(
+          discount: DiscountEntry(
+            label: manualDiscount.label,
+            amount: manualDiscount.value,
+            isPercentage: manualDiscount.type == ManualDiscountType.percentage,
+          ),
+        );
+      }
+
+      final splitCash = method.value == PaymentMethod.split
+          ? double.tryParse(cashInput.value)
+          : null;
+      final splitFonepay = splitCash != null
+          ? (total - splitCash).clamp(0.0, total)
+          : null;
+
+      ref.read(_reviewRepoProvider).checkout(
+        cart: checkoutCart,
+        paymentMethod: method.value,
+        splitCash: splitCash,
+        splitFonepay: splitFonepay,
+      ).then((_) {
+        ref.read(cartProvider.notifier).clear();
+        ref.read(manualDiscountProvider.notifier).state = null;
+        ref.read(transactionListProvider.notifier).refresh();
+        isProcessing.value = false;
+        step.value = _Step.success;
+      }).catchError((dynamic e) {
+        isProcessing.value = false;
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(e.toString()),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ));
+        }
+      });
     }
 
     void go(PaymentMethod m) {
@@ -72,18 +120,21 @@ class ReviewSaleSheet extends HookConsumerWidget {
           tendered: tendered,
           onBack: () => step.value = _Step.pick,
           onConfirm: done,
+          isProcessing: isProcessing.value,
         ),
         _Step.qr => _QRStep(
           total: total,
           customer: customer.value,
           onBack: () => step.value = _Step.pick,
           onConfirm: done,
+          isProcessing: isProcessing.value,
         ),
         _Step.split => _SplitStep(
           total: total,
           cashInput: cashInput,
           onBack: () => step.value = _Step.pick,
           onConfirm: done,
+          isProcessing: isProcessing.value,
         ),
         _Step.success => _SuccessStep(
           total: total,
@@ -132,7 +183,7 @@ class _Handle extends StatelessWidget {
       height: 4,
       margin: const EdgeInsets.symmetric(vertical: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFFE5E7EB),
+        color: AppColors.divider,
         borderRadius: BorderRadius.circular(2),
       ),
     ),
@@ -144,45 +195,51 @@ class _BigBtn extends StatelessWidget {
     required this.label,
     this.onTap,
     this.enabled = true,
+    this.isLoading = false,
     this.color,
     this.outlined = false,
   });
   final String label;
   final VoidCallback? onTap;
   final bool enabled;
+  final bool isLoading;
   final Color? color;
   final bool outlined;
 
   @override
   Widget build(BuildContext context) {
+    final active = enabled && !isLoading;
     final bg = outlined
         ? Colors.white
-        : (enabled ? (color ?? Colors.black) : const Color(0xFFD1D5DB));
+        : (active ? (color ?? Colors.black) : AppColors.border);
     final fg = outlined
         ? Colors.black
-        : (enabled ? Colors.white : const Color(0xFF9CA3AF));
+        : (active ? Colors.white : AppColors.textTertiary);
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 6, 20, 0),
       child: GestureDetector(
-        onTap: enabled ? onTap : null,
+        onTap: active ? onTap : null,
         child: Container(
           height: 52,
           decoration: BoxDecoration(
             color: bg,
             borderRadius: BorderRadius.circular(26),
-            border: outlined
-                ? Border.all(color: const Color(0xFFE5E7EB))
-                : null,
+            border: outlined ? Border.all(color: AppColors.divider) : null,
           ),
           child: Center(
-            child: Text(
-              label,
-              style: TextStyle(
-                color: fg,
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
+            child: isLoading
+                ? const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.5,
+                      valueColor: AlwaysStoppedAnimation(Colors.white),
+                    ),
+                  )
+                : Text(
+                    label,
+                    style: TextStyle(color: fg, fontSize: 16, fontWeight: FontWeight.w600),
+                  ),
           ),
         ),
       ),
@@ -226,7 +283,7 @@ class _BackHeader extends StatelessWidget {
             ],
           ),
         ),
-        const Divider(height: 1, color: Color(0xFFE5E7EB)),
+        const Divider(height: 1, color: AppColors.divider),
       ],
     );
   }
@@ -262,8 +319,8 @@ class _FlexNumpad extends StatelessWidget {
                           margin: const EdgeInsets.all(3),
                           decoration: BoxDecoration(
                             color: k == 'C'
-                                ? const Color(0xFFFEE2E2)
-                                : const Color(0xFFF3F4F6),
+                                ? AppColors.dangerLight
+                                : AppColors.surfaceVariant,
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Center(
@@ -273,7 +330,7 @@ class _FlexNumpad extends StatelessWidget {
                                 fontSize: 24,
                                 fontWeight: FontWeight.w400,
                                 color: k == 'C'
-                                    ? const Color(0xFFDC2626)
+                                    ? AppColors.danger
                                     : Colors.black,
                               ),
                             ),
@@ -335,7 +392,7 @@ class _PickStep extends HookConsumerWidget {
                       '${cart.itemCount} item${cart.itemCount == 1 ? '' : 's'}',
                       style: const TextStyle(
                         fontSize: 13,
-                        color: Color(0xFF9CA3AF),
+                        color: AppColors.textTertiary,
                       ),
                     ),
                 ],
@@ -346,7 +403,7 @@ class _PickStep extends HookConsumerWidget {
                 child: const Icon(
                   Icons.close,
                   size: 22,
-                  color: Color(0xFF9CA3AF),
+                  color: AppColors.textTertiary,
                 ),
               ),
             ],
@@ -360,7 +417,7 @@ class _PickStep extends HookConsumerWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
-                color: const Color(0xFFF9FAFB),
+                color: AppColors.background,
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Column(
@@ -380,7 +437,7 @@ class _PickStep extends HookConsumerWidget {
                               '×${item.quantity}',
                               style: const TextStyle(
                                 fontSize: 13,
-                                color: Color(0xFF9CA3AF),
+                                color: AppColors.textTertiary,
                               ),
                             ),
                             const SizedBox(width: 12),
@@ -404,10 +461,10 @@ class _PickStep extends HookConsumerWidget {
           onTap: () => _pickCustomer(context),
           onRemove: () => onCustomerChanged(null),
         ),
-        const Divider(height: 1, color: Color(0xFFE5E7EB)),
+        const Divider(height: 1, color: AppColors.divider),
         // Discount row
         _DiscountRow(subtotal: total),
-        const Divider(height: 1, color: Color(0xFFE5E7EB)),
+        const Divider(height: 1, color: AppColors.divider),
         const SizedBox(height: 12),
         // Payment method label
         const Padding(
@@ -418,7 +475,7 @@ class _PickStep extends HookConsumerWidget {
               'Pay with',
               style: TextStyle(
                 fontSize: 12,
-                color: Color(0xFF9CA3AF),
+                color: AppColors.textTertiary,
                 fontWeight: FontWeight.w500,
                 letterSpacing: 0.4,
               ),
@@ -430,7 +487,7 @@ class _PickStep extends HookConsumerWidget {
           padding: const EdgeInsets.symmetric(horizontal: 20),
           child: Container(
             decoration: BoxDecoration(
-              border: Border.all(color: const Color(0xFFE5E7EB)),
+              border: Border.all(color: AppColors.divider),
               borderRadius: BorderRadius.circular(14),
             ),
             child: Column(
@@ -452,7 +509,7 @@ class _PickStep extends HookConsumerWidget {
                 _MethodRow(
                   icon: Icons.call_split_rounded,
                   label: 'Split Payment',
-                  color: const Color(0xFF6366F1),
+                  color: AppColors.primary,
                   onTap: () => onPick(PaymentMethod.split),
                   showDivider: false,
                 ),
@@ -527,7 +584,7 @@ class _MethodRow extends StatelessWidget {
           ),
         ),
         if (showDivider)
-          const Divider(height: 1, indent: 66, color: Color(0xFFF3F4F6)),
+          const Divider(height: 1, indent: 66, color: AppColors.surfaceVariant),
       ],
     );
   }
@@ -555,12 +612,12 @@ class _CustomerRow extends StatelessWidget {
               Icon(
                 Icons.person_add_outlined,
                 size: 18,
-                color: Color(0xFF9CA3AF),
+                color: AppColors.textTertiary,
               ),
               SizedBox(width: 10),
               Text(
                 'Add customer (optional)',
-                style: TextStyle(fontSize: 14, color: Color(0xFF9CA3AF)),
+                style: TextStyle(fontSize: 14, color: AppColors.textTertiary),
               ),
             ],
           ),
@@ -573,7 +630,7 @@ class _CustomerRow extends StatelessWidget {
         children: [
           CircleAvatar(
             radius: 16,
-            backgroundColor: const Color(0xFFF3F4F6),
+            backgroundColor: AppColors.surfaceVariant,
             child: Text(
               customer!.initials,
               style: const TextStyle(
@@ -592,7 +649,7 @@ class _CustomerRow extends StatelessWidget {
           ),
           GestureDetector(
             onTap: onRemove,
-            child: const Icon(Icons.close, size: 16, color: Color(0xFF9CA3AF)),
+            child: const Icon(Icons.close, size: 16, color: AppColors.textTertiary),
           ),
         ],
       ),
@@ -620,12 +677,12 @@ class _DiscountRow extends ConsumerWidget {
               Icon(
                 Icons.local_offer_outlined,
                 size: 18,
-                color: Color(0xFF9CA3AF),
+                color: AppColors.textTertiary,
               ),
               SizedBox(width: 10),
               Text(
                 'Add discount (optional)',
-                style: TextStyle(fontSize: 14, color: Color(0xFF9CA3AF)),
+                style: TextStyle(fontSize: 14, color: AppColors.textTertiary),
               ),
             ],
           ),
@@ -668,7 +725,7 @@ class _DiscountRow extends ConsumerWidget {
                   '- NPR ${discountAmt.toStringAsFixed(0)}',
                   style: const TextStyle(
                     fontSize: 12,
-                    color: Color(0xFF6B7280),
+                    color: AppColors.textSecondary,
                   ),
                 ),
               ],
@@ -676,7 +733,7 @@ class _DiscountRow extends ConsumerWidget {
           ),
           GestureDetector(
             onTap: () => ref.read(manualDiscountProvider.notifier).state = null,
-            child: const Icon(Icons.close, size: 16, color: Color(0xFF9CA3AF)),
+            child: const Icon(Icons.close, size: 16, color: AppColors.textTertiary),
           ),
         ],
       ),
@@ -686,9 +743,8 @@ class _DiscountRow extends ConsumerWidget {
 
 // ─── Customer Picker ──────────────────────────────────────────────────────────
 
-final _cpProvider = FutureProvider<List<CustomerModel>>(
-  (_) => MockCustomersRepository().getAll(),
-);
+// Use the shared customersProvider (no search query needed here).
+final _cpProvider = customersProvider;
 
 class _CustomerPicker extends HookConsumerWidget {
   const _CustomerPicker({required this.onSelected});
@@ -722,7 +778,7 @@ class _CustomerPicker extends HookConsumerWidget {
                   onTap: () => Navigator.pop(context),
                   child: const Text(
                     'Cancel',
-                    style: TextStyle(fontSize: 14, color: Color(0xFF6B7280)),
+                    style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
                   ),
                 ),
               ],
@@ -737,16 +793,16 @@ class _CustomerPicker extends HookConsumerWidget {
               decoration: InputDecoration(
                 hintText: 'Search name or phone…',
                 hintStyle: const TextStyle(
-                  color: Color(0xFF9CA3AF),
+                  color: AppColors.textTertiary,
                   fontSize: 14,
                 ),
                 prefixIcon: const Icon(
                   Icons.search,
                   size: 18,
-                  color: Color(0xFF9CA3AF),
+                  color: AppColors.textTertiary,
                 ),
                 filled: true,
-                fillColor: const Color(0xFFF3F4F6),
+                fillColor: AppColors.surfaceVariant,
                 border: OutlineInputBorder(
                   borderSide: BorderSide.none,
                   borderRadius: BorderRadius.circular(10),
@@ -756,7 +812,7 @@ class _CustomerPicker extends HookConsumerWidget {
             ),
           ),
           const SizedBox(height: 4),
-          const Divider(height: 1, color: Color(0xFFE5E7EB)),
+          const Divider(height: 1, color: AppColors.divider),
           Expanded(
             child: all.when(
               loading: () => const Center(child: CircularProgressIndicator()),
@@ -780,7 +836,7 @@ class _CustomerPicker extends HookConsumerWidget {
                   separatorBuilder: (_, _) => const Divider(
                     height: 1,
                     indent: 66,
-                    color: Color(0xFFF3F4F6),
+                    color: AppColors.surfaceVariant,
                   ),
                   itemBuilder: (_, i) {
                     if (i == filtered.length) {
@@ -789,19 +845,19 @@ class _CustomerPicker extends HookConsumerWidget {
                           width: 40,
                           height: 40,
                           decoration: BoxDecoration(
-                            color: const Color(0xFFF3F4F6),
+                            color: AppColors.surfaceVariant,
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: const Icon(
                             Icons.person_outline_rounded,
                             size: 20,
-                            color: Color(0xFF9CA3AF),
+                            color: AppColors.textTertiary,
                           ),
                         ),
                         title: const Text(
                           'Continue as Guest',
                           style: TextStyle(
-                            color: Color(0xFF6B7280),
+                            color: AppColors.textSecondary,
                             fontSize: 14,
                           ),
                         ),
@@ -814,7 +870,7 @@ class _CustomerPicker extends HookConsumerWidget {
                     final c = filtered[i];
                     return ListTile(
                       leading: CircleAvatar(
-                        backgroundColor: const Color(0xFFF3F4F6),
+                        backgroundColor: AppColors.surfaceVariant,
                         child: Text(
                           c.initials,
                           style: const TextStyle(
@@ -833,7 +889,7 @@ class _CustomerPicker extends HookConsumerWidget {
                               c.phone!,
                               style: const TextStyle(
                                 fontSize: 12,
-                                color: Color(0xFF9CA3AF),
+                                color: AppColors.textTertiary,
                               ),
                             )
                           : null,
@@ -841,7 +897,7 @@ class _CustomerPicker extends HookConsumerWidget {
                         '${c.visitCount} visits',
                         style: const TextStyle(
                           fontSize: 12,
-                          color: Color(0xFF9CA3AF),
+                          color: AppColors.textTertiary,
                         ),
                       ),
                       onTap: () {
@@ -869,12 +925,14 @@ class _CashStep extends HookWidget {
     required this.tendered,
     required this.onBack,
     required this.onConfirm,
+    this.isProcessing = false,
   });
   final double total;
   final ValueNotifier<String> cashInput;
   final double tendered;
   final VoidCallback onBack;
   final VoidCallback onConfirm;
+  final bool isProcessing;
 
   @override
   Widget build(BuildContext context) {
@@ -894,7 +952,7 @@ class _CashStep extends HookWidget {
                 'Tendered',
                 style: TextStyle(
                   fontSize: 12,
-                  color: Color(0xFF9CA3AF),
+                  color: AppColors.textTertiary,
                   letterSpacing: 0.3,
                 ),
               ),
@@ -938,7 +996,7 @@ class _CashStep extends HookWidget {
                         'Short: NPR ${(-change).toStringAsFixed(2)}',
                         style: const TextStyle(
                           fontSize: 14,
-                          color: Color(0xFFDC2626),
+                          color: AppColors.danger,
                           fontWeight: FontWeight.w500,
                         ),
                       )
@@ -984,6 +1042,7 @@ class _CashStep extends HookWidget {
               : 'Enter Amount',
           onTap: onConfirm,
           enabled: ok,
+          isLoading: isProcessing,
         ),
         const SizedBox(height: 16),
       ],
@@ -1030,11 +1089,13 @@ class _QRStep extends HookWidget {
     required this.customer,
     required this.onBack,
     required this.onConfirm,
+    this.isProcessing = false,
   });
   final double total;
   final CustomerModel? customer;
   final VoidCallback onBack;
   final VoidCallback onConfirm;
+  final bool isProcessing;
 
   @override
   Widget build(BuildContext context) {
@@ -1097,7 +1158,7 @@ class _QRStep extends HookWidget {
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                            color: const Color(0xFFE5E7EB),
+                            color: AppColors.divider,
                             width: 2,
                           ),
                           boxShadow: [
@@ -1130,7 +1191,7 @@ class _QRStep extends HookWidget {
                           customer!.fullName,
                           style: const TextStyle(
                             fontSize: 13,
-                            color: Color(0xFF6B7280),
+                            color: AppColors.textSecondary,
                           ),
                         ),
                       ],
@@ -1159,7 +1220,7 @@ class _QRStep extends HookWidget {
                         'Waiting for payment…',
                         style: TextStyle(
                           fontSize: 13,
-                          color: Color(0xFF6B7280),
+                          color: AppColors.textSecondary,
                         ),
                       ),
                     ],
@@ -1180,7 +1241,7 @@ class _QRStep extends HookWidget {
                           width: 20,
                           height: 20,
                           decoration: BoxDecoration(
-                            color: const Color(0xFFF3F4F6),
+                            color: AppColors.surfaceVariant,
                             shape: BoxShape.circle,
                           ),
                           child: Center(
@@ -1199,7 +1260,7 @@ class _QRStep extends HookWidget {
                             s.$2,
                             style: const TextStyle(
                               fontSize: 13,
-                              color: Color(0xFF6B7280),
+                              color: AppColors.textSecondary,
                             ),
                           ),
                         ),
@@ -1215,6 +1276,7 @@ class _QRStep extends HookWidget {
           label: '✓  Payment Received',
           onTap: onConfirm,
           color: const Color(0xFF6BBD44),
+          isLoading: isProcessing,
         ),
         const SizedBox(height: 16),
       ],
@@ -1230,11 +1292,13 @@ class _SplitStep extends HookWidget {
     required this.cashInput,
     required this.onBack,
     required this.onConfirm,
+    this.isProcessing = false,
   });
   final double total;
   final ValueNotifier<String> cashInput;
   final VoidCallback onBack;
   final VoidCallback onConfirm;
+  final bool isProcessing;
 
   @override
   Widget build(BuildContext context) {
@@ -1288,14 +1352,14 @@ class _SplitStep extends HookWidget {
                         Icon(
                           Icons.warning_amber_rounded,
                           size: 14,
-                          color: Color(0xFFDC2626),
+                          color: AppColors.danger,
                         ),
                         SizedBox(width: 6),
                         Text(
                           'Exceeds total',
                           style: TextStyle(
                             fontSize: 12,
-                            color: Color(0xFFDC2626),
+                            color: AppColors.danger,
                           ),
                         ),
                       ],
@@ -1340,6 +1404,7 @@ class _SplitStep extends HookWidget {
           label: ok ? 'Process Split Payment' : 'Enter Cash Amount',
           onTap: onConfirm,
           enabled: ok,
+          isLoading: isProcessing,
         ),
         const SizedBox(height: 16),
       ],
@@ -1367,10 +1432,10 @@ class _SplitTile extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
     decoration: BoxDecoration(
-      color: isActive ? Colors.white : const Color(0xFFF9FAFB),
+      color: isActive ? Colors.white : AppColors.background,
       borderRadius: BorderRadius.circular(12),
       border: Border.all(
-        color: isActive ? color : const Color(0xFFE5E7EB),
+        color: isActive ? color : AppColors.divider,
         width: isActive ? 1.5 : 1,
       ),
     ),
@@ -1384,14 +1449,14 @@ class _SplitTile extends StatelessWidget {
             children: [
               Text(
                 label,
-                style: const TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
+                style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
               ),
               if (note != null)
                 Text(
                   note!,
                   style: const TextStyle(
                     fontSize: 11,
-                    color: Color(0xFF9CA3AF),
+                    color: AppColors.textTertiary,
                   ),
                 ),
             ],
@@ -1402,7 +1467,7 @@ class _SplitTile extends StatelessWidget {
           style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.w600,
-            color: isActive ? Colors.black : const Color(0xFF6B7280),
+            color: isActive ? Colors.black : AppColors.textSecondary,
           ),
         ),
       ],
@@ -1473,9 +1538,9 @@ class _SuccessStep extends StatelessWidget {
               width: double.infinity,
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: const Color(0xFFF9FAFB),
+                color: AppColors.background,
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0xFFE5E7EB)),
+                border: Border.all(color: AppColors.divider),
               ),
               child: Column(
                 children: [
@@ -1497,7 +1562,7 @@ class _SuccessStep extends StatelessWidget {
                     _Row('Fonepay', 'NPR ${fonepayPaid!.toStringAsFixed(2)}'),
                   ],
                   if (change != null && change! > 0) ...[
-                    const Divider(height: 20, color: Color(0xFFE5E7EB)),
+                    const Divider(height: 20, color: AppColors.divider),
                     Row(
                       children: [
                         const Text(
@@ -1545,7 +1610,7 @@ class _Row extends StatelessWidget {
     children: [
       Text(
         label,
-        style: const TextStyle(fontSize: 14, color: Color(0xFF6B7280)),
+        style: const TextStyle(fontSize: 14, color: AppColors.textSecondary),
       ),
       const Spacer(),
       Text(

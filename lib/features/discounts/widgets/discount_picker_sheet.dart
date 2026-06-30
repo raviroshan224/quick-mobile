@@ -25,8 +25,8 @@ class DiscountPickerSheet extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final discounts = ref.watch(discountsProvider);
-    final active = discounts.where((d) => d.isActive).toList();
+    final discountsAsync = ref.watch(discountsProvider);
+    final active = discountsAsync.value?.where((d) => d.isActive).toList() ?? const [];
     final applied = ref.watch(checkoutDiscountProvider);
 
     return SafeArea(

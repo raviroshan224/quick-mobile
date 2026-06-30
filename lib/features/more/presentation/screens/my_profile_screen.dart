@@ -2,18 +2,59 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../features/auth/presentation/providers/auth_provider.dart';
-import '../../../../features/auth/data/mock_auth_repository.dart';
-import '../../../../features/staff/data/mock_staff_repository.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../../../../features/staff/domain/staff_models.dart';
+import '../../../../features/staff/presentation/providers/staff_provider.dart';
 import '../../../../core/constants/app_constants.dart';
+import '../../../../features/reports/data/reports_repository.dart';
+import '../../../../features/reports/domain/reports_models.dart';
+import '../../../../core/network/api_client.dart';
 
-// ─── File-level provider ──────────────────────────────────────────────────────
+// ─── File-level providers ─────────────────────────────────────────────────────
 
 final _myStaffProfileProvider = FutureProvider<StaffModel?>((ref) async {
   final user = ref.watch(currentUserProvider);
   if (user == null) return null;
-  final all = await MockStaffRepository().getAll();
+  final all = await ref.watch(staffListProvider.future);
   return all.where((s) => s.userId == user.id).firstOrNull;
+});
+
+final _reportsRepoProvider = Provider<ReportsRepository>(
+  (ref) => ReportsRepository(ref.read(apiClientProvider)),
+);
+
+final _myWeekPerfProvider =
+    FutureProvider.autoDispose<StaffPerformance?>((ref) async {
+  final user = ref.watch(currentUserProvider);
+  if (user == null) return null;
+  final staff = await ref.watch(_myStaffProfileProvider.future);
+  if (staff == null) return null;
+  final now = DateTime.now();
+  final start =
+      DateTime(now.year, now.month, now.day - (now.weekday - 1));
+  final end = DateTime(now.year, now.month, now.day, 23, 59, 59);
+  final list = await ref.read(_reportsRepoProvider).getStaffPerformance(
+        from: start.toIso8601String(),
+        to: end.toIso8601String(),
+      );
+  return list.where((p) => p.staffId == staff.id).firstOrNull;
+});
+
+final _myMonthPerfProvider =
+    FutureProvider.autoDispose<StaffPerformance?>((ref) async {
+  final user = ref.watch(currentUserProvider);
+  if (user == null) return null;
+  final staff = await ref.watch(_myStaffProfileProvider.future);
+  if (staff == null) return null;
+  final now = DateTime.now();
+  final start = DateTime(now.year, now.month, 1);
+  final end = DateTime(now.year, now.month + 1, 1)
+      .subtract(const Duration(milliseconds: 1));
+  final list = await ref.read(_reportsRepoProvider).getStaffPerformance(
+        from: start.toIso8601String(),
+        to: end.toIso8601String(),
+      );
+  return list.where((p) => p.staffId == staff.id).firstOrNull;
 });
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
@@ -27,7 +68,7 @@ class MyProfileScreen extends ConsumerWidget {
     final staffAsync = ref.watch(_myStaffProfileProvider);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF9FAFB),
+      backgroundColor: AppColors.background,
       body: SafeArea(
         child: Column(
           children: [
@@ -88,13 +129,15 @@ class _ProfileBody extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef innerRef) {
     final user = innerRef.watch(currentUserProvider)!;
-    final email =
-        MockAuthRepository.getEmailByUserId(user.id) ?? user.email;
+    final email = user.email;
     final commissionRate = staff?.commissionRate;
-    final mockTotal = 480.0;
-    final commissionEarned = commissionRate != null
-        ? (commissionRate * mockTotal / 100).truncate()
-        : 0;
+    final weekPerf = innerRef.watch(_myWeekPerfProvider).valueOrNull;
+    final monthPerf = innerRef.watch(_myMonthPerfProvider).valueOrNull;
+    final commissionEarned = monthPerf?.commission.truncate() ??
+        (commissionRate != null
+            ? (commissionRate * (monthPerf?.totalRevenue ?? 0) / 100)
+                .truncate()
+            : 0);
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
@@ -104,7 +147,7 @@ class _ProfileBody extends ConsumerWidget {
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
             color: Colors.white,
-            border: Border.all(color: const Color(0xFFE5E7EB)),
+            border: Border.all(color: AppColors.divider),
             borderRadius: BorderRadius.circular(14),
           ),
           child: Column(
@@ -112,7 +155,7 @@ class _ProfileBody extends ConsumerWidget {
               // Avatar
               CircleAvatar(
                 radius: 36,
-                backgroundColor: const Color(0xFF6366F1),
+                backgroundColor: AppColors.primary,
                 child: Text(
                   user.initials,
                   style: const TextStyle(
@@ -142,7 +185,7 @@ class _ProfileBody extends ConsumerWidget {
                 decoration: BoxDecoration(
                   color: user.isOwner
                       ? Colors.black
-                      : const Color(0xFFF3F4F6),
+                      : AppColors.surfaceVariant,
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
@@ -152,7 +195,7 @@ class _ProfileBody extends ConsumerWidget {
                     fontWeight: FontWeight.w600,
                     color: user.isOwner
                         ? Colors.white
-                        : const Color(0xFF6B7280),
+                        : AppColors.textSecondary,
                   ),
                 ),
               ),
@@ -187,14 +230,18 @@ class _ProfileBody extends ConsumerWidget {
           children: [
             Expanded(
               child: _StatCard(
-                value: '12 services',
+                value: weekPerf != null
+                    ? '${weekPerf.serviceCount} services'
+                    : '—',
                 label: 'This Week',
               ),
             ),
             const SizedBox(width: 10),
             Expanded(
               child: _StatCard(
-                value: '48 services',
+                value: monthPerf != null
+                    ? '${monthPerf.serviceCount} services'
+                    : '—',
                 label: 'This Month',
               ),
             ),
@@ -230,19 +277,19 @@ class _ProfileBody extends ConsumerWidget {
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             color: Colors.white,
-            border: Border.all(color: const Color(0xFFE5E7EB)),
+            border: Border.all(color: AppColors.divider),
             borderRadius: BorderRadius.circular(14),
           ),
           child: Row(
             children: [
               const Icon(Icons.email_outlined,
-                  size: 18, color: Color(0xFF6B7280)),
+                  size: 18, color: AppColors.textSecondary),
               const SizedBox(width: 12),
               const Text(
                 'Email',
                 style: TextStyle(
                   fontSize: 13,
-                  color: Color(0xFF6B7280),
+                  color: AppColors.textSecondary,
                 ),
               ),
               const Spacer(),
@@ -269,8 +316,8 @@ class _ProfileBody extends ConsumerWidget {
             icon: const Icon(Icons.logout_rounded, size: 18),
             label: const Text('Sign Out'),
             style: OutlinedButton.styleFrom(
-              foregroundColor: const Color(0xFF6B7280),
-              side: const BorderSide(color: Color(0xFFE5E7EB)),
+              foregroundColor: AppColors.textSecondary,
+              side: const BorderSide(color: AppColors.divider),
               padding: const EdgeInsets.symmetric(vertical: 14),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
@@ -304,7 +351,7 @@ class _SectionHeader extends StatelessWidget {
       style: const TextStyle(
         fontSize: 11,
         fontWeight: FontWeight.w600,
-        color: Color(0xFF9CA3AF),
+        color: AppColors.textTertiary,
         letterSpacing: 0.8,
       ),
     );
@@ -321,14 +368,14 @@ class _InfoRow extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Icon(icon, size: 14, color: const Color(0xFF9CA3AF)),
+        Icon(icon, size: 14, color: AppColors.textTertiary),
         const SizedBox(width: 6),
         Flexible(
           child: Text(
             value,
             style: const TextStyle(
               fontSize: 13,
-              color: Color(0xFF6B7280),
+              color: AppColors.textSecondary,
             ),
             overflow: TextOverflow.ellipsis,
           ),
@@ -349,7 +396,7 @@ class _StatCard extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
       decoration: BoxDecoration(
         color: Colors.white,
-        border: Border.all(color: const Color(0xFFE5E7EB)),
+        border: Border.all(color: AppColors.divider),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -370,7 +417,7 @@ class _StatCard extends StatelessWidget {
             label,
             style: const TextStyle(
               fontSize: 11,
-              color: Color(0xFF9CA3AF),
+              color: AppColors.textTertiary,
             ),
             textAlign: TextAlign.center,
           ),
@@ -389,15 +436,15 @@ class _SpecialtyChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       decoration: BoxDecoration(
-        color: const Color(0xFFF3F4F6),
+        color: AppColors.surfaceVariant,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
+        border: Border.all(color: AppColors.divider),
       ),
       child: Text(
         label,
         style: const TextStyle(
           fontSize: 13,
-          color: Color(0xFF6B7280),
+          color: AppColors.textSecondary,
           fontWeight: FontWeight.w500,
         ),
       ),

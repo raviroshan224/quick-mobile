@@ -1,71 +1,32 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../../../core/constants/app_constants.dart';
+import '../../../../core/theme/app_theme.dart';
+import '../../../../features/image_library/models/image_asset_model.dart';
+import '../../../../features/image_library/presentation/providers/image_library_provider.dart';
 
-// ─── Data model ───────────────────────────────────────────────────────────────
+// type filter → API string
+const _kTypes = <String, String?>{
+  'All': null,
+  'Services': 'SERVICE_ICON',
+  'Staff': 'STAFF_PHOTO',
+  'Products': 'PRODUCT_IMAGE',
+};
 
-enum _ImageCategory { service, staff, product }
-
-class _MockImage {
-  const _MockImage({
-    required this.id,
-    required this.name,
-    required this.category,
-    required this.iconData,
-    required this.color,
-    this.initials,
-  });
-  final String id;
-  final String name;
-  final _ImageCategory category;
-  final IconData iconData;
-  final Color color;
-  final String? initials; // for staff avatars
-}
-
-// ─── Mock data ────────────────────────────────────────────────────────────────
-
-const _kServiceColor = Color(0xFF3B82F6);
-const _kStaffColor = Color(0xFF8B5CF6);
-const _kProductColor = Color(0xFFF59E0B);
-
-const _mockImages = <_MockImage>[
-  // Services
-  _MockImage(id: 's1', name: 'Haircut', category: _ImageCategory.service, iconData: Icons.content_cut, color: _kServiceColor),
-  _MockImage(id: 's2', name: 'Facial', category: _ImageCategory.service, iconData: Icons.spa, color: _kServiceColor),
-  _MockImage(id: 's3', name: 'Manicure', category: _ImageCategory.service, iconData: Icons.touch_app, color: _kServiceColor),
-  _MockImage(id: 's4', name: 'Massage', category: _ImageCategory.service, iconData: Icons.self_improvement, color: _kServiceColor),
-  _MockImage(id: 's5', name: 'Hair Color', category: _ImageCategory.service, iconData: Icons.palette, color: _kServiceColor),
-  _MockImage(id: 's6', name: 'Pedicure', category: _ImageCategory.service, iconData: Icons.directions_walk, color: _kServiceColor),
-  _MockImage(id: 's7', name: 'Makeup', category: _ImageCategory.service, iconData: Icons.auto_fix_high, color: _kServiceColor),
-  _MockImage(id: 's8', name: 'Waxing', category: _ImageCategory.service, iconData: Icons.bolt, color: _kServiceColor),
-  // Staff
-  _MockImage(id: 'st1', name: 'Priya Sharma', category: _ImageCategory.staff, iconData: Icons.person, color: _kStaffColor, initials: 'PS'),
-  _MockImage(id: 'st2', name: 'Anita Rai', category: _ImageCategory.staff, iconData: Icons.person, color: _kStaffColor, initials: 'AR'),
-  _MockImage(id: 'st3', name: 'Sita Thapa', category: _ImageCategory.staff, iconData: Icons.person, color: _kStaffColor, initials: 'ST'),
-  _MockImage(id: 'st4', name: 'Maya Gurung', category: _ImageCategory.staff, iconData: Icons.person, color: _kStaffColor, initials: 'MG'),
-  // Products
-  _MockImage(id: 'p1', name: 'Shampoo', category: _ImageCategory.product, iconData: Icons.water_drop, color: _kProductColor),
-  _MockImage(id: 'p2', name: 'Scissors', category: _ImageCategory.product, iconData: Icons.content_cut, color: _kProductColor),
-  _MockImage(id: 'p3', name: 'Comb', category: _ImageCategory.product, iconData: Icons.brush, color: _kProductColor),
-  _MockImage(id: 'p4', name: 'Face Wash', category: _ImageCategory.product, iconData: Icons.face_retouching_natural, color: _kProductColor),
-  _MockImage(id: 'p5', name: 'Hair Color', category: _ImageCategory.product, iconData: Icons.palette, color: _kProductColor),
-  _MockImage(id: 'p6', name: 'Blade', category: _ImageCategory.product, iconData: Icons.hardware, color: _kProductColor),
-];
-
-// ─── Screen ───────────────────────────────────────────────────────────────────
-
-class ImageLibraryScreen extends StatefulWidget {
+class ImageLibraryScreen extends ConsumerStatefulWidget {
   const ImageLibraryScreen({super.key});
 
   @override
-  State<ImageLibraryScreen> createState() => _ImageLibraryScreenState();
+  ConsumerState<ImageLibraryScreen> createState() => _ImageLibraryScreenState();
 }
 
-class _ImageLibraryScreenState extends State<ImageLibraryScreen> {
-  _ImageCategory? _selectedCategory; // null = All
-  String _searchQuery = '';
+class _ImageLibraryScreenState extends ConsumerState<ImageLibraryScreen> {
+  String _filterLabel = 'All';
   final TextEditingController _searchCtrl = TextEditingController();
+  String _searchQuery = '';
 
   @override
   void dispose() {
@@ -73,11 +34,8 @@ class _ImageLibraryScreenState extends State<ImageLibraryScreen> {
     super.dispose();
   }
 
-  List<_MockImage> get _filtered {
-    var list = _mockImages.toList();
-    if (_selectedCategory != null) {
-      list = list.where((img) => img.category == _selectedCategory).toList();
-    }
+  List<ImageAsset> _filtered(List<ImageAsset> all) {
+    var list = all;
     if (_searchQuery.isNotEmpty) {
       final q = _searchQuery.toLowerCase();
       list = list.where((img) => img.name.toLowerCase().contains(q)).toList();
@@ -85,16 +43,88 @@ class _ImageLibraryScreenState extends State<ImageLibraryScreen> {
     return list;
   }
 
-  void _showItemSheet(_MockImage image) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => _ImageActionSheet(image: image),
+  Future<void> _pickAndUpload(ImageSource source) async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(source: source, imageQuality: 85);
+    if (picked == null || !mounted) return;
+
+    final type = await _showTypePicker();
+    if (type == null || !mounted) return;
+
+    final nameCtrl = TextEditingController(
+      text: picked.name.replaceAll(RegExp(r'\.\w+$'), ''),
     );
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: const Text('Name this image',
+            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+        content: TextField(
+          controller: nameCtrl,
+          autofocus: true,
+          decoration: const InputDecoration(hintText: 'e.g. Haircut Icon'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Upload')),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    try {
+      await ref.read(imageLibraryNotifierProvider.notifier).upload(
+            file: File(picked.path),
+            type: type,
+            name: nameCtrl.text.trim(),
+          );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Image uploaded'),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: Colors.black,
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Upload failed: $e'),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: AppColors.danger,
+        ));
+      }
+    }
   }
+
+  Future<String?> _showTypePicker() => showModalBottomSheet<String>(
+        context: context,
+        backgroundColor: Colors.white,
+        shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+        builder: (ctx) => Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Image type',
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 16),
+              for (final entry in const {
+                'Service Icon': 'SERVICE_ICON',
+                'Staff Photo': 'STAFF_PHOTO',
+                'Product Image': 'PRODUCT_IMAGE',
+              }.entries)
+                ListTile(
+                  title: Text(entry.key),
+                  onTap: () => Navigator.pop(ctx, entry.value),
+                ),
+            ],
+          ),
+        ),
+      );
 
   void _showUploadDialog() {
     showDialog(
@@ -105,7 +135,7 @@ class _ImageLibraryScreenState extends State<ImageLibraryScreen> {
         title: const Text('Upload Image',
             style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
         content: const Text('Choose an image source.',
-            style: TextStyle(fontSize: 14, color: Color(0xFF6B7280))),
+            style: TextStyle(fontSize: 14, color: AppColors.textSecondary)),
         actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         actions: [
           _UploadOption(
@@ -113,12 +143,7 @@ class _ImageLibraryScreenState extends State<ImageLibraryScreen> {
             label: 'Camera',
             onTap: () {
               Navigator.of(ctx).pop();
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                content: Text('Camera — coming soon'),
-                behavior: SnackBarBehavior.floating,
-                backgroundColor: Colors.black,
-                duration: Duration(seconds: 2),
-              ));
+              _pickAndUpload(ImageSource.camera);
             },
           ),
           const SizedBox(height: 8),
@@ -127,12 +152,7 @@ class _ImageLibraryScreenState extends State<ImageLibraryScreen> {
             label: 'Gallery',
             onTap: () {
               Navigator.of(ctx).pop();
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                content: Text('Gallery — coming soon'),
-                behavior: SnackBarBehavior.floating,
-                backgroundColor: Colors.black,
-                duration: Duration(seconds: 2),
-              ));
+              _pickAndUpload(ImageSource.gallery);
             },
           ),
           const SizedBox(height: 8),
@@ -142,7 +162,7 @@ class _ImageLibraryScreenState extends State<ImageLibraryScreen> {
               height: 48,
               alignment: Alignment.center,
               child: const Text('Cancel',
-                  style: TextStyle(fontSize: 15, color: Color(0xFF9CA3AF))),
+                  style: TextStyle(fontSize: 15, color: AppColors.textTertiary)),
             ),
           ),
         ],
@@ -152,15 +172,18 @@ class _ImageLibraryScreenState extends State<ImageLibraryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final filtered = _filtered;
+    final imagesAsync = ref.watch(imageLibraryNotifierProvider);
+    final isLoading = ref.watch(
+      imageLibraryNotifierProvider.select((s) => s.isLoading),
+    );
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF9FAFB),
+      backgroundColor: AppColors.background,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── Header ────────────────────────────────────────────────────────
+            // Header
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
               child: Row(children: [
@@ -171,15 +194,24 @@ class _ImageLibraryScreenState extends State<ImageLibraryScreen> {
                 ),
                 const Spacer(),
                 const Text('Image Library',
-                    style:
-                        TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
                 const Spacer(),
-                const SizedBox(width: 18),
+                if (isLoading)
+                  const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                else
+                  GestureDetector(
+                    onTap: () => ref.read(imageLibraryNotifierProvider.notifier).refresh(),
+                    child: const Icon(Icons.refresh_rounded, size: 20, color: AppColors.textSecondary),
+                  ),
               ]),
             ),
             const SizedBox(height: 16),
 
-            // ── Search bar ────────────────────────────────────────────────────
+            // Search
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: TextField(
@@ -187,28 +219,25 @@ class _ImageLibraryScreenState extends State<ImageLibraryScreen> {
                 onChanged: (v) => setState(() => _searchQuery = v),
                 decoration: InputDecoration(
                   hintText: 'Search images…',
-                  hintStyle: const TextStyle(
-                      color: Color(0xFF9CA3AF), fontSize: 14),
-                  prefixIcon: const Icon(Icons.search,
-                      size: 18, color: Color(0xFF9CA3AF)),
+                  hintStyle: const TextStyle(color: AppColors.textTertiary, fontSize: 14),
+                  prefixIcon: const Icon(Icons.search, size: 18, color: AppColors.textTertiary),
                   suffixIcon: _searchQuery.isNotEmpty
                       ? GestureDetector(
                           onTap: () {
                             setState(() => _searchQuery = '');
                             _searchCtrl.clear();
                           },
-                          child: const Icon(Icons.close,
-                              size: 16, color: Color(0xFF9CA3AF)),
+                          child: const Icon(Icons.close, size: 16, color: AppColors.textTertiary),
                         )
                       : null,
                   filled: true,
                   fillColor: Colors.white,
                   border: OutlineInputBorder(
-                    borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                    borderSide: const BorderSide(color: AppColors.divider),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   enabledBorder: OutlineInputBorder(
-                    borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                    borderSide: const BorderSide(color: AppColors.divider),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   focusedBorder: OutlineInputBorder(
@@ -221,82 +250,116 @@ class _ImageLibraryScreenState extends State<ImageLibraryScreen> {
             ),
             const SizedBox(height: 12),
 
-            // ── Category tabs ─────────────────────────────────────────────────
+            // Category chips
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Row(children: [
-                _CategoryChip(
-                  label: 'All',
-                  selected: _selectedCategory == null,
-                  onTap: () => setState(() => _selectedCategory = null),
-                ),
-                const SizedBox(width: 8),
-                _CategoryChip(
-                  label: 'Services',
-                  selected: _selectedCategory == _ImageCategory.service,
-                  color: _kServiceColor,
-                  onTap: () => setState(
-                      () => _selectedCategory = _ImageCategory.service),
-                ),
-                const SizedBox(width: 8),
-                _CategoryChip(
-                  label: 'Staff',
-                  selected: _selectedCategory == _ImageCategory.staff,
-                  color: _kStaffColor,
-                  onTap: () => setState(
-                      () => _selectedCategory = _ImageCategory.staff),
-                ),
-                const SizedBox(width: 8),
-                _CategoryChip(
-                  label: 'Products',
-                  selected: _selectedCategory == _ImageCategory.product,
-                  color: _kProductColor,
-                  onTap: () => setState(
-                      () => _selectedCategory = _ImageCategory.product),
-                ),
-              ]),
+              child: Row(
+                children: _kTypes.keys.map((label) {
+                  final selected = _filterLabel == label;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: GestureDetector(
+                      onTap: () {
+                        setState(() => _filterLabel = label);
+                        ref
+                            .read(imageLibraryNotifierProvider.notifier)
+                            .filter(_kTypes[label]);
+                      },
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 180),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: selected ? Colors.black : Colors.white,
+                          borderRadius: BorderRadius.circular(100),
+                          border: Border.all(
+                            color: selected ? Colors.black : AppColors.divider,
+                          ),
+                        ),
+                        child: Text(
+                          label,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: selected ? Colors.white : AppColors.textSecondary,
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
             ),
             const SizedBox(height: 16),
 
-            // ── Count label ───────────────────────────────────────────────────
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Text(
-                '${filtered.length} image${filtered.length == 1 ? '' : 's'}',
-                style: const TextStyle(
-                    fontSize: 12,
-                    color: Color(0xFF9CA3AF),
-                    fontWeight: FontWeight.w500),
-              ),
-            ),
-            const SizedBox(height: 10),
-
-            // ── Grid / empty state ────────────────────────────────────────────
+            // Content
             Expanded(
-              child: filtered.isEmpty
-                  ? _EmptyState(
-                      query: _searchQuery,
-                      category: _selectedCategory,
-                    )
-                  : GridView.count(
-                      crossAxisCount: 3,
-                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 120),
-                      crossAxisSpacing: 10,
-                      mainAxisSpacing: 10,
-                      children: filtered
-                          .map((img) => _GridItem(
-                                image: img,
-                                onTap: () => _showItemSheet(img),
-                              ))
-                          .toList(),
-                    ),
+              child: imagesAsync.when(
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (e, _) => Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.error_outline_rounded,
+                          size: 40, color: AppColors.textTertiary),
+                      const SizedBox(height: 12),
+                      Text('$e',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: AppColors.textSecondary)),
+                      const SizedBox(height: 12),
+                      TextButton(
+                        onPressed: () =>
+                            ref.read(imageLibraryNotifierProvider.notifier).refresh(),
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                  ),
+                ),
+                data: (all) {
+                  final filtered = _filtered(all);
+                  if (filtered.isEmpty) {
+                    return _EmptyState(query: _searchQuery);
+                  }
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: Text(
+                          '${filtered.length} image${filtered.length == 1 ? '' : 's'}',
+                          style: const TextStyle(
+                              fontSize: 12,
+                              color: AppColors.textTertiary,
+                              fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Expanded(
+                        child: GridView.builder(
+                          padding: const EdgeInsets.fromLTRB(20, 0, 20, 120),
+                          gridDelegate:
+                              const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 3,
+                            crossAxisSpacing: 10,
+                            mainAxisSpacing: 10,
+                          ),
+                          itemCount: filtered.length,
+                          itemBuilder: (_, i) => _GridItem(
+                            asset: filtered[i],
+                            onDelete: () => ref
+                                .read(imageLibraryNotifierProvider.notifier)
+                                .delete(filtered[i].id),
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
             ),
           ],
         ),
       ),
-
-      // ── Upload button ─────────────────────────────────────────────────────
       bottomNavigationBar: Padding(
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
         child: GestureDetector(
@@ -330,54 +393,50 @@ class _ImageLibraryScreenState extends State<ImageLibraryScreen> {
 // ─── Grid item ────────────────────────────────────────────────────────────────
 
 class _GridItem extends StatelessWidget {
-  const _GridItem({required this.image, required this.onTap});
-  final _MockImage image;
-  final VoidCallback onTap;
+  const _GridItem({required this.asset, required this.onDelete});
+  final ImageAsset asset;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
-    final isStaff = image.category == _ImageCategory.staff;
     return GestureDetector(
-      onTap: onTap,
+      onTap: () => _showSheet(context),
       child: Container(
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFFE5E7EB)),
+          border: Border.all(color: AppColors.divider),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Expanded(
-              child: Container(
-                margin: const EdgeInsets.fromLTRB(10, 10, 10, 0),
-                decoration: BoxDecoration(
-                  color: image.color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Center(
-                  child: isStaff && image.initials != null
-                      ? Text(
-                          image.initials!,
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w700,
-                            color: image.color,
-                          ),
-                        )
-                      : Icon(image.iconData, size: 30, color: image.color),
+              child: ClipRRect(
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(13)),
+                child: Image.network(
+                  asset.url,
+                  fit: BoxFit.cover,
+                  width: double.infinity,
+                  errorBuilder: (_, _e, _st) => Container(
+                    color: AppColors.surfaceVariant,
+                    child: const Icon(Icons.broken_image_outlined,
+                        color: AppColors.textTertiary, size: 28),
+                  ),
+                  loadingBuilder: (_, child, progress) => progress == null
+                      ? child
+                      : const Center(child: CircularProgressIndicator(strokeWidth: 2)),
                 ),
               ),
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(6, 6, 6, 8),
               child: Text(
-                image.name,
+                asset.name,
                 style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                  color: Color(0xFF374151),
-                ),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.textSecondary),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
@@ -388,207 +447,62 @@ class _GridItem extends StatelessWidget {
       ),
     );
   }
-}
 
-// ─── Category chip ────────────────────────────────────────────────────────────
-
-class _CategoryChip extends StatelessWidget {
-  const _CategoryChip({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-    this.color,
-  });
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-  final Color? color;
-
-  @override
-  Widget build(BuildContext context) {
-    final activeColor = color ?? Colors.black;
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: selected
-              ? activeColor.withValues(alpha: color == null ? 1.0 : 0.12)
-              : Colors.white,
-          borderRadius: BorderRadius.circular(100),
-          border: Border.all(
-            color: selected ? activeColor : const Color(0xFFE5E7EB),
-            width: selected ? 1.5 : 1,
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: selected
-                ? (color == null ? Colors.white : activeColor)
-                : const Color(0xFF6B7280),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ─── Image action bottom sheet ────────────────────────────────────────────────
-
-class _ImageActionSheet extends StatelessWidget {
-  const _ImageActionSheet({required this.image});
-  final _MockImage image;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 40),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Drag handle
-          Container(
-            width: 36,
-            height: 4,
-            margin: const EdgeInsets.only(bottom: 20),
-            decoration: BoxDecoration(
-              color: const Color(0xFFE5E7EB),
-              borderRadius: BorderRadius.circular(2),
+  void _showSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (_) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 40),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 36,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 20),
+              decoration: BoxDecoration(
+                  color: AppColors.divider,
+                  borderRadius: BorderRadius.circular(2)),
             ),
-          ),
-          // Preview
-          Container(
-            width: 80,
-            height: 80,
-            decoration: BoxDecoration(
-              color: image.color.withValues(alpha: 0.12),
+            ClipRRect(
               borderRadius: BorderRadius.circular(14),
+              child: Image.network(asset.url,
+                  width: 80, height: 80, fit: BoxFit.cover,
+                  errorBuilder: (_, _e, _st) => Container(
+                      width: 80,
+                      height: 80,
+                      color: AppColors.surfaceVariant,
+                      child: const Icon(Icons.broken_image_outlined,
+                          color: AppColors.textTertiary))),
             ),
-            child: Center(
-              child: image.category == _ImageCategory.staff &&
-                      image.initials != null
-                  ? Text(
-                      image.initials!,
-                      style: TextStyle(
-                          fontSize: 26,
-                          fontWeight: FontWeight.w700,
-                          color: image.color),
-                    )
-                  : Icon(image.iconData, size: 36, color: image.color),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Text(image.name,
-              style: const TextStyle(
-                  fontSize: 16, fontWeight: FontWeight.w700)),
-          Text(
-            _categoryLabel(image.category),
-            style: const TextStyle(fontSize: 13, color: Color(0xFF9CA3AF)),
-          ),
-          const SizedBox(height: 24),
-          // Select button
-          GestureDetector(
-            onTap: () {
-              Navigator.of(context).pop();
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                content: Text('"${image.name}" selected'),
-                behavior: SnackBarBehavior.floating,
-                backgroundColor: Colors.black,
-                duration: const Duration(seconds: 2),
-              ));
-            },
-            child: Container(
-              height: 52,
-              decoration: BoxDecoration(
-                color: Colors.black,
-                borderRadius: BorderRadius.circular(26),
+            const SizedBox(height: 12),
+            Text(asset.name,
+                style:
+                    const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 24),
+            GestureDetector(
+              onTap: () {
+                Navigator.pop(context);
+                onDelete();
+              },
+              child: Container(
+                height: 52,
+                decoration: BoxDecoration(
+                    color: const Color(0xFFFEE2E2),
+                    borderRadius: BorderRadius.circular(26)),
+                alignment: Alignment.center,
+                child: const Text('Delete',
+                    style: TextStyle(
+                        color: AppColors.danger,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600)),
               ),
-              alignment: Alignment.center,
-              child: const Text('Select',
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600)),
             ),
-          ),
-          const SizedBox(height: 10),
-          // Delete button
-          GestureDetector(
-            onTap: () {
-              Navigator.of(context).pop();
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                content: Text('"${image.name}" deleted'),
-                behavior: SnackBarBehavior.floating,
-                backgroundColor: const Color(0xFFEF4444),
-                duration: const Duration(seconds: 2),
-              ));
-            },
-            child: Container(
-              height: 52,
-              decoration: BoxDecoration(
-                color: const Color(0xFFFEE2E2),
-                borderRadius: BorderRadius.circular(26),
-              ),
-              alignment: Alignment.center,
-              child: const Text('Delete',
-                  style: TextStyle(
-                      color: Color(0xFFEF4444),
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600)),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _categoryLabel(_ImageCategory cat) {
-    switch (cat) {
-      case _ImageCategory.service:
-        return 'Service';
-      case _ImageCategory.staff:
-        return 'Staff';
-      case _ImageCategory.product:
-        return 'Product';
-    }
-  }
-}
-
-// ─── Upload option row ────────────────────────────────────────────────────────
-
-class _UploadOption extends StatelessWidget {
-  const _UploadOption({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        height: 52,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        decoration: BoxDecoration(
-          color: const Color(0xFFF9FAFB),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFFE5E7EB)),
+          ],
         ),
-        child: Row(children: [
-          Icon(icon, size: 20, color: Colors.black87),
-          const SizedBox(width: 12),
-          Text(label,
-              style: const TextStyle(
-                  fontSize: 15, fontWeight: FontWeight.w500)),
-        ]),
       ),
     );
   }
@@ -597,9 +511,8 @@ class _UploadOption extends StatelessWidget {
 // ─── Empty state ──────────────────────────────────────────────────────────────
 
 class _EmptyState extends StatelessWidget {
-  const _EmptyState({this.query, this.category});
+  const _EmptyState({this.query});
   final String? query;
-  final _ImageCategory? category;
 
   @override
   Widget build(BuildContext context) {
@@ -614,31 +527,62 @@ class _EmptyState extends StatelessWidget {
               width: 64,
               height: 64,
               decoration: BoxDecoration(
-                color: const Color(0xFFF3F4F6),
-                borderRadius: BorderRadius.circular(16),
-              ),
+                  color: AppColors.surfaceVariant,
+                  borderRadius: BorderRadius.circular(16)),
               child: const Icon(Icons.photo_library_outlined,
-                  size: 30, color: Color(0xFF9CA3AF)),
+                  size: 30, color: AppColors.textTertiary),
             ),
             const SizedBox(height: 16),
             Text(
-              hasQuery ? 'No results for "$query"' : 'No images',
+              hasQuery ? 'No results for "$query"' : 'No images yet',
               style: const TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w600,
-                  color: Color(0xFF374151)),
+                  color: AppColors.textSecondary),
             ),
             const SizedBox(height: 6),
             Text(
               hasQuery
-                  ? 'Try a different keyword or change the category filter.'
+                  ? 'Try a different keyword or clear the filter.'
                   : 'Upload your first image using the button below.',
               textAlign: TextAlign.center,
               style: const TextStyle(
-                  fontSize: 13, color: Color(0xFF9CA3AF), height: 1.5),
+                  fontSize: 13, color: AppColors.textTertiary, height: 1.5),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ─── Upload option row ────────────────────────────────────────────────────────
+
+class _UploadOption extends StatelessWidget {
+  const _UploadOption(
+      {required this.icon, required this.label, required this.onTap});
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: 52,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        decoration: BoxDecoration(
+          color: AppColors.background,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.divider),
+        ),
+        child: Row(children: [
+          Icon(icon, size: 20, color: Colors.black87),
+          const SizedBox(width: 12),
+          Text(label,
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500)),
+        ]),
       ),
     );
   }

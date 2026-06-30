@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../shared/widgets/quick_logo.dart';
 import '../providers/auth_provider.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
@@ -34,7 +35,8 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
   }
 
   Future<void> _navigate() async {
-    await Future.delayed(const Duration(milliseconds: 1800));
+    await Future.delayed(const Duration(milliseconds: 1000));
+    await ref.read(authProvider.notifier).checkAuth();
     if (!mounted) return;
     final auth = ref.read(authProvider);
     if (auth.isAuthenticated) {
@@ -56,21 +58,10 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Container(
-                  width: 80,
-                  height: 80,
-                  decoration: BoxDecoration(
-                    color: AppColors.primary,
-                    borderRadius: AppRadius.lgBR,
-                    boxShadow: [
-                      BoxShadow(color: AppColors.primary.withAlpha(100), blurRadius: 24, offset: const Offset(0, 8)),
-                    ],
-                  ),
-                  child: const Icon(Icons.content_cut_rounded, size: 36, color: Colors.white),
-                ),
+                const QuickLogo(size: 80, onDark: true),
                 const SizedBox(height: 20),
                 Text(
-                  'Salon POS',
+                  'Quick POS',
                   style: AppTextStyles.displayMedium.copyWith(color: Colors.white),
                 ),
                 const SizedBox(height: 6),

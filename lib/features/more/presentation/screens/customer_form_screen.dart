@@ -3,46 +3,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_constants.dart';
-import '../../../../features/customers/data/mock_customers_repository.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../../../../features/customers/domain/customer_models.dart';
+import '../../../../features/customers/presentation/providers/customers_provider.dart';
 import '../../../../shared/widgets/image_picker_sheet.dart';
-
-// ── In-memory customer list provider ─────────────────────────────────────────
-
-class _CustomerListNotifier
-    extends StateNotifier<List<CustomerModel>> {
-  _CustomerListNotifier() : super([]);
-
-  /// Seeded lazily from the mock repo the first time we need data.
-  bool _seeded = false;
-
-  Future<void> ensureSeeded() async {
-    if (_seeded) return;
-    _seeded = true;
-    final all = await MockCustomersRepository().getAll();
-    state = all;
-  }
-
-  void add(CustomerModel c) => state = [...state, c];
-
-  void update(CustomerModel c) {
-    state = [for (final s in state) if (s.id == c.id) c else s];
-  }
-
-  void delete(String id) =>
-      state = state.where((c) => c.id != id).toList();
-}
-
-final customerListProvider = StateNotifierProvider<
-    _CustomerListNotifier, List<CustomerModel>>(
-  (_) => _CustomerListNotifier(),
-);
-
-/// FutureProvider used by the form to load a single customer for editing.
-final _editCustomerProvider =
-    FutureProvider.family<CustomerModel?, String>((ref, id) {
-  return MockCustomersRepository().getById(id);
-});
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 
@@ -119,7 +83,7 @@ class _CustomerFormScreenState
     if (picked != null) setState(() => _pickedImage = picked);
   }
 
-  void _save() {
+  Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _saving = true);
 
@@ -132,47 +96,52 @@ class _CustomerFormScreenState
     final notes =
         _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim();
 
-    if (widget.isEditing) {
-      // We need the original to preserve visit stats.
-      // Pull it from the mock repo via the already-loaded async value.
-      final existing = ref
-          .read(_editCustomerProvider(widget.customerId!))
-          .valueOrNull;
-      if (existing != null) {
-        final updated = existing.copyWith(
+    try {
+      final repo = ref.read(customersRepoProvider);
+      if (widget.isEditing) {
+        await repo.update(
+          widget.customerId!,
           firstName: firstName,
           lastName: lastName,
           phone: phone,
           email: email,
           notes: notes,
         );
-        ref.read(customerListProvider.notifier).update(updated);
+      } else {
+        await repo.create(
+          firstName: firstName,
+          lastName: lastName,
+          phone: phone,
+          email: email,
+          notes: notes,
+        );
       }
-    } else {
-      final newCustomer = CustomerModel(
-        id: 'c-${DateTime.now().millisecondsSinceEpoch}',
-        firstName: firstName,
-        lastName: lastName,
-        phone: phone,
-        email: email,
-        notes: notes,
-      );
-      ref.read(customerListProvider.notifier).add(newCustomer);
+      ref.invalidate(customersProvider);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(widget.isEditing
+                ? 'Customer updated'
+                : '$firstName $lastName added'),
+            backgroundColor: Colors.black,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+        context.go(AppRoutes.moreCustomers);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString()),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
-
-    setState(() => _saving = false);
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(widget.isEditing
-            ? 'Customer updated'
-            : '$firstName $lastName added'),
-        backgroundColor: Colors.black,
-        duration: const Duration(seconds: 2),
-      ),
-    );
-
-    context.go(AppRoutes.moreCustomers);
   }
 
   void _confirmDelete() {
@@ -188,25 +157,36 @@ class _CustomerFormScreenState
         content: Text(
           'Remove $_previewName? This cannot be undone.',
           style: const TextStyle(
-              fontSize: 14, color: Color(0xFF6B7280)),
+              fontSize: 14, color: AppColors.textSecondary),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
             child: const Text('Cancel',
-                style: TextStyle(color: Color(0xFF6B7280))),
+                style: TextStyle(color: AppColors.textSecondary)),
           ),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(ctx);
-              ref
-                  .read(customerListProvider.notifier)
-                  .delete(widget.customerId!);
-              context.go(AppRoutes.moreCustomers);
+              try {
+                await ref.read(customersRepoProvider).delete(widget.customerId!);
+                ref.invalidate(customersProvider);
+                if (mounted) context.go(AppRoutes.moreCustomers);
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(e.toString()),
+                      backgroundColor: Colors.red,
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                }
+              }
             },
             child: const Text('Delete',
                 style: TextStyle(
-                    color: Color(0xFFEF4444),
+                    color: AppColors.danger,
                     fontWeight: FontWeight.w600)),
           ),
         ],
@@ -216,17 +196,13 @@ class _CustomerFormScreenState
 
   @override
   Widget build(BuildContext context) {
-    // In edit mode, load and prefill from the repo.
+    // In edit mode, load and prefill from the API.
     if (widget.isEditing) {
-      final customerAsync =
-          ref.watch(_editCustomerProvider(widget.customerId!));
-      customerAsync.whenData((c) {
-        if (c != null) _prefill(c);
-      });
+      ref.watch(customerDetailProvider(widget.customerId!)).whenData(_prefill);
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF9FAFB),
+      backgroundColor: AppColors.background,
       body: SafeArea(
         child: Column(
           children: [
@@ -269,7 +245,7 @@ class _CustomerFormScreenState
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
                         color: _saving
-                            ? const Color(0xFF9CA3AF)
+                            ? AppColors.textTertiary
                             : Colors.black,
                       ),
                     ),
@@ -423,9 +399,9 @@ class _CustomerFormScreenState
                           onPressed: _confirmDelete,
                           style: OutlinedButton.styleFrom(
                             foregroundColor:
-                                const Color(0xFFEF4444),
+                                AppColors.danger,
                             side: const BorderSide(
-                                color: Color(0xFFEF4444)),
+                                color: AppColors.danger),
                             shape: RoundedRectangleBorder(
                                 borderRadius:
                                     BorderRadius.circular(12)),
@@ -485,7 +461,7 @@ class _PreviewCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
+        border: Border.all(color: AppColors.divider),
       ),
       child: Row(
         children: [
@@ -511,14 +487,14 @@ class _PreviewCard extends StatelessWidget {
                   Text(phone,
                       style: const TextStyle(
                           fontSize: 12,
-                          color: Color(0xFF6B7280))),
+                          color: AppColors.textSecondary)),
                 ],
                 if (email.isNotEmpty) ...[
                   const SizedBox(height: 2),
                   Text(email,
                       style: const TextStyle(
                           fontSize: 12,
-                          color: Color(0xFF6B7280))),
+                          color: AppColors.textSecondary)),
                 ],
               ],
             ),
@@ -544,7 +520,7 @@ class _SectionLabel extends StatelessWidget {
         style: const TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.w600,
-          color: Color(0xFF6B7280),
+          color: AppColors.textSecondary,
           letterSpacing: 0.8,
         ),
       ),
@@ -565,7 +541,7 @@ class _FormCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
+        border: Border.all(color: AppColors.divider),
       ),
       child: Column(children: children),
     );
@@ -581,7 +557,7 @@ class _FieldDivider extends StatelessWidget {
   Widget build(BuildContext context) {
     return const Divider(
         height: 1, indent: 16, endIndent: 0,
-        color: Color(0xFFF3F4F6));
+        color: AppColors.surfaceVariant);
   }
 }
 
@@ -611,7 +587,7 @@ class _FormField extends StatelessWidget {
                 style: const TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w500,
-                  color: Color(0xFF6B7280),
+                  color: AppColors.textSecondary,
                 ),
               ),
               if (required)
@@ -620,7 +596,7 @@ class _FormField extends StatelessWidget {
                   style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: Color(0xFFEF4444)),
+                      color: AppColors.danger),
                 ),
             ],
           ),

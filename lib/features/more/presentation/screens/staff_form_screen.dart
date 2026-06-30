@@ -2,46 +2,31 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../../../features/auth/data/mock_auth_repository.dart';
-import '../../../../features/auth/domain/user_model.dart';
-import '../../../../features/staff/data/mock_staff_repository.dart';
+import '../../../../features/staff/data/staff_repository.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../../../../features/staff/domain/staff_models.dart';
+import '../../../../core/network/api_client.dart';
 import '../../../../shared/widgets/image_picker_sheet.dart';
+import '../../../../features/transactions/presentation/providers/transactions_provider.dart';
 
 // ─── Avatar colors (must stay in sync with staff_screen.dart) ─────────────────
 
 const _avatarColors = [
-  Color(0xFF6366F1),
-  Color(0xFF10B981),
-  Color(0xFFF59E0B),
-  Color(0xFF0EA5E9),
-  Color(0xFFEC4899),
-  Color(0xFF8B5CF6),
-  Color(0xFFEF4444),
-  Color(0xFF14B8A6),
+  Color(0xFF6B7A3D), // olive
+  Color(0xFF4D5A2C), // dark olive
+  Color(0xFF8A9950), // medium olive
+  Color(0xFF111111), // black
+  Color(0xFF3A3A3A), // dark grey
+  Color(0xFF5A5A5A), // grey
+  Color(0xFF9A9A9A), // light grey
+  Color(0xFFB5C090), // pale olive
 ];
 
 // ─── Staff list provider ──────────────────────────────────────────────────────
 
-class _StaffListNotifier extends StateNotifier<List<StaffModel>> {
-  _StaffListNotifier() : super([]);
-
-  void add(StaffModel s) => state = [...state, s];
-
-  void update(StaffModel updated) {
-    state = [
-      for (final s in state)
-        if (s.id == updated.id) updated else s,
-    ];
-  }
-
-  void delete(String id) => state = state.where((s) => s.id != id).toList();
-}
-
-final staffListProvider =
-    StateNotifierProvider<_StaffListNotifier, List<StaffModel>>(
-      (_) => _StaffListNotifier(),
-    );
+final _staffRepoProvider = Provider<StaffRepository>(
+  (ref) => StaffRepository(ref.read(apiClientProvider)),
+);
 
 // ─── Predefined specialties ───────────────────────────────────────────────────
 
@@ -114,7 +99,8 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
 
   Future<void> _loadExisting() async {
     try {
-      final s = await MockStaffRepository().getById(widget.staffId!);
+      final repo = ref.read(_staffRepoProvider);
+      final s = await repo.getById(widget.staffId!);
       if (!mounted) return;
       _original = s;
       _fullNameCtrl.text = '${s.firstName} ${s.lastName}';
@@ -124,8 +110,6 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
               s.commissionRate! % 1 == 0 ? 0 : 1,
             )
           : '';
-      final email = MockAuthRepository.getEmailByUserId(s.userId);
-      if (email != null) _emailCtrl.text = email;
       setState(() {
         _selectedSpecialties = Set<String>.from(s.specialties);
         _isActive = s.isActive;
@@ -205,51 +189,61 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
 
   void _save() {
     if (!_formKey.currentState!.validate()) return;
-
-    final commission = double.tryParse(_commissionCtrl.text.trim());
-    final phone = _mobileCtrl.text.trim().isEmpty
-        ? null
-        : _mobileCtrl.text.trim();
-    final email = _emailCtrl.text.trim().toLowerCase();
-    final password = _passwordCtrl.text;
-
-    if (widget.isEditing && _original != null) {
-      final updated = _original!.copyWith(
-        firstName: _previewFirstName,
-        lastName: _previewLastName,
-        phone: phone,
-        specialties: _selectedSpecialties.toList(),
-        commissionRate: commission,
-        isActive: _isActive,
-      );
-      ref.read(staffListProvider.notifier).update(updated);
-      context.go('/more/staff/${widget.staffId}');
+    if (widget.isEditing) {
+      _saveEdit();
     } else {
-      final userId =
-          'u-${_previewFirstName.toLowerCase()}-${DateTime.now().millisecondsSinceEpoch}';
-      final newStaff = StaffModel(
-        id: 'st-${DateTime.now().millisecondsSinceEpoch}',
-        userId: userId,
-        firstName: _previewFirstName,
-        lastName: _previewLastName,
-        phone: phone,
+      _saveNew();
+    }
+  }
+
+  Future<void> _saveEdit() async {
+    setState(() => _loading = true);
+    try {
+      final repo = ref.read(_staffRepoProvider);
+      await repo.update(
+        widget.staffId!,
+        phone: _mobileCtrl.text.trim().isEmpty ? null : _mobileCtrl.text.trim(),
         specialties: _selectedSpecialties.toList(),
-        commissionRate: commission,
+        commissionRate: double.tryParse(_commissionCtrl.text.trim()),
         isActive: _isActive,
       );
-      ref.read(staffListProvider.notifier).add(newStaff);
-      MockAuthRepository.registerStaff(
+      if (mounted) context.go('/more/staff/${widget.staffId}');
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _saveNew() async {
+    setState(() => _loading = true);
+    try {
+      final repo = ref.read(_staffRepoProvider);
+      final email = _emailCtrl.text.trim().toLowerCase();
+      final password = _passwordCtrl.text;
+      final result = await repo.createWithAccount(
+        firstName: _previewFirstName,
+        lastName: _previewLastName,
         email: email,
         password: password,
-        user: UserModel(
-          id: userId,
-          email: email,
-          firstName: _previewFirstName,
-          lastName: _previewLastName,
-          role: UserRole.staff,
-        ),
+        phone: _mobileCtrl.text.trim().isEmpty ? null : _mobileCtrl.text.trim(),
+        specialties: _selectedSpecialties.toList(),
+        commissionRate: double.tryParse(_commissionCtrl.text.trim()),
+        isActive: _isActive,
       );
-      _showCreatedDialog(email, password);
+      if (mounted) _showCreatedDialog(result.email, result.password);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -284,16 +278,16 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
           children: [
             const Text(
               'Share these login credentials with the staff member:',
-              style: TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
+              style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
             ),
             const SizedBox(height: 16),
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: const Color(0xFFF9FAFB),
+                color: AppColors.background,
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: const Color(0xFFE5E7EB)),
+                border: Border.all(color: AppColors.divider),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -307,7 +301,7 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
             const SizedBox(height: 10),
             const Text(
               'The staff member can log in and change their password from Settings.',
-              style: TextStyle(fontSize: 12, color: Color(0xFF9CA3AF)),
+              style: TextStyle(fontSize: 12, color: AppColors.textTertiary),
             ),
           ],
         ),
@@ -331,73 +325,10 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
   }
 
   void _resetPassword() {
-    final resetCtrl = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Reset Password', style: TextStyle(fontSize: 16)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Set a new password for ${_previewFirstName}:',
-              style: const TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: resetCtrl,
-              obscureText: true,
-              autofocus: true,
-              decoration: InputDecoration(
-                hintText: 'New password (min 4 chars)',
-                filled: true,
-                fillColor: const Color(0xFFF9FAFB),
-                border: OutlineInputBorder(
-                  borderSide: BorderSide.none,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: Color(0xFF6B7280)),
-            ),
-          ),
-          TextButton(
-            onPressed: () {
-              final newPw = resetCtrl.text.trim();
-              if (newPw.length < 4) return;
-              final email = _emailCtrl.text.trim().toLowerCase();
-              MockAuthRepository.resetPassword(
-                email: email,
-                newPassword: newPw,
-              );
-              Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Password reset successfully'),
-                  backgroundColor: Colors.black,
-                  behavior: SnackBarBehavior.floating,
-                  duration: Duration(seconds: 2),
-                ),
-              );
-            },
-            child: const Text(
-              'Reset',
-              style: TextStyle(
-                color: Colors.black,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Use the backend admin panel to reset staff passwords.'),
+        behavior: SnackBarBehavior.floating,
       ),
     );
   }
@@ -409,24 +340,29 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Remove Staff Member'),
-        content: Text(
-          'Remove ${_previewFullName}? '
-          'This cannot be undone.',
-        ),
+        content: Text('Remove $_previewFullName? This cannot be undone.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(ctx);
-              ref.read(staffListProvider.notifier).delete(widget.staffId!);
-              context.go('/more/staff');
+              try {
+                await ref.read(_staffRepoProvider).delete(widget.staffId!);
+                if (mounted) context.go('/more/staff');
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
+                  );
+                }
+              }
             },
             child: const Text(
               'Remove',
-              style: TextStyle(color: Color(0xFFEF4444)),
+              style: TextStyle(color: AppColors.danger),
             ),
           ),
         ],
@@ -440,13 +376,13 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
   Widget build(BuildContext context) {
     if (_loading) {
       return const Scaffold(
-        backgroundColor: Color(0xFFF9FAFB),
+        backgroundColor: AppColors.background,
         body: Center(child: CircularProgressIndicator()),
       );
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF9FAFB),
+      backgroundColor: AppColors.background,
       body: SafeArea(
         child: Column(
           children: [
@@ -526,7 +462,7 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
                             readOnly: widget.isEditing,
                             style: TextStyle(
                               color: widget.isEditing
-                                  ? const Color(0xFF6B7280)
+                                  ? AppColors.textSecondary
                                   : Colors.black,
                             ),
                             decoration: InputDecoration(
@@ -535,22 +471,15 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
                                   ? const Icon(
                                       Icons.lock_outline,
                                       size: 16,
-                                      color: Color(0xFF9CA3AF),
+                                      color: AppColors.textTertiary,
                                     )
                                   : null,
                             ),
                             validator: (v) {
                               if (v == null || v.trim().isEmpty) {
-                                return widget.isEditing
-                                    ? null
-                                    : 'Email is required';
+                                return widget.isEditing ? null : 'Email is required';
                               }
-                              if (!v.contains('@'))
-                                return 'Enter a valid email';
-                              if (!widget.isEditing &&
-                                  MockAuthRepository.emailExists(v.trim())) {
-                                return 'This email is already registered';
-                              }
+                              if (!v.contains('@')) return 'Enter a valid email';
                               return null;
                             },
                           ),
@@ -633,7 +562,7 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
                                 style: TextStyle(
                                   fontSize: 12,
                                   fontWeight: FontWeight.w500,
-                                  color: Color(0xFF6B7280),
+                                  color: AppColors.textSecondary,
                                 ),
                               ),
                               const SizedBox(height: 8),
@@ -657,14 +586,14 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
                                           decoration: BoxDecoration(
                                             color: selected
                                                 ? Colors.black
-                                                : const Color(0xFFF3F4F6),
+                                                : AppColors.surfaceVariant,
                                             borderRadius: BorderRadius.circular(
                                               20,
                                             ),
                                             border: Border.all(
                                               color: selected
                                                   ? Colors.black
-                                                  : const Color(0xFFE5E7EB),
+                                                  : AppColors.divider,
                                             ),
                                           ),
                                           child: Text(
@@ -676,7 +605,7 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
                                                   : FontWeight.w400,
                                               color: selected
                                                   ? Colors.white
-                                                  : const Color(0xFF374151),
+                                                  : AppColors.textSecondary,
                                             ),
                                           ),
                                         ),
@@ -697,7 +626,7 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
                                 style: TextStyle(
                                   fontSize: 12,
                                   fontWeight: FontWeight.w500,
-                                  color: Color(0xFF6B7280),
+                                  color: AppColors.textSecondary,
                                 ),
                               ),
                               const SizedBox(height: 8),
@@ -707,17 +636,18 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
                                     context,
                                     title: 'Upload ID Photo',
                                   );
-                                  if (picked != null)
+                                  if (picked != null) {
                                     setState(() => _govIdImage = picked);
+                                  }
                                 },
                                 child: Container(
                                   width: double.infinity,
                                   height: _govIdImage != null ? 100 : 80,
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFFF9FAFB),
+                                    color: AppColors.background,
                                     borderRadius: BorderRadius.circular(10),
                                     border: Border.all(
-                                      color: const Color(0xFFE5E7EB),
+                                      color: AppColors.divider,
                                       style: BorderStyle.solid,
                                     ),
                                   ),
@@ -777,21 +707,21 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
                                             Icon(
                                               Icons.cloud_upload_outlined,
                                               size: 24,
-                                              color: Color(0xFF9CA3AF),
+                                              color: AppColors.textTertiary,
                                             ),
                                             SizedBox(height: 6),
                                             Text(
                                               'Tap to upload photo',
                                               style: TextStyle(
                                                 fontSize: 13,
-                                                color: Color(0xFF6B7280),
+                                                color: AppColors.textSecondary,
                                               ),
                                             ),
                                             Text(
                                               'Camera or Gallery',
                                               style: TextStyle(
                                                 fontSize: 11,
-                                                color: Color(0xFF9CA3AF),
+                                                color: AppColors.textTertiary,
                                               ),
                                             ),
                                           ],
@@ -847,7 +777,7 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
                         padding: const EdgeInsets.all(14),
                         decoration: BoxDecoration(
                           color: Colors.white,
-                          border: Border.all(color: const Color(0xFFE5E7EB)),
+                          border: Border.all(color: AppColors.divider),
                           borderRadius: BorderRadius.circular(14),
                         ),
                         child: Wrap(
@@ -893,7 +823,7 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
                                 : 'Staff member is hidden from active lists',
                             style: const TextStyle(
                               fontSize: 12,
-                              color: Color(0xFF6B7280),
+                              color: AppColors.textSecondary,
                             ),
                           ),
                           value: _isActive,
@@ -922,7 +852,7 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
                                         ? Icons.visibility_outlined
                                         : Icons.visibility_off_outlined,
                                     size: 18,
-                                    color: const Color(0xFF9CA3AF),
+                                    color: AppColors.textTertiary,
                                   ),
                                   onPressed: () => setState(
                                     () => _showPassword = !_showPassword,
@@ -930,10 +860,11 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
                                 ),
                               ),
                               validator: (v) {
-                                if (v == null || v.isEmpty)
-                                  return 'Password is required';
-                                if (v.length < 4)
-                                  return 'At least 4 characters';
+                                if (v == null || v.isEmpty) return 'Password is required';
+                                if (v.length < 8) return 'At least 8 characters';
+                                if (!RegExp(r'[A-Z]').hasMatch(v)) return 'Include an uppercase letter';
+                                if (!RegExp(r'[a-z]').hasMatch(v)) return 'Include a lowercase letter';
+                                if (!RegExp(r'[0-9]').hasMatch(v)) return 'Include a number';
                                 return null;
                               },
                             ),
@@ -952,7 +883,7 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
                                         ? Icons.visibility_outlined
                                         : Icons.visibility_off_outlined,
                                     size: 18,
-                                    color: const Color(0xFF9CA3AF),
+                                    color: AppColors.textTertiary,
                                   ),
                                   onPressed: () => setState(
                                     () => _showConfirm = !_showConfirm,
@@ -978,8 +909,8 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
                           icon: const Icon(Icons.lock_reset_outlined, size: 17),
                           label: const Text('Reset Password'),
                           style: OutlinedButton.styleFrom(
-                            foregroundColor: const Color(0xFF374151),
-                            side: const BorderSide(color: Color(0xFFD1D5DB)),
+                            foregroundColor: AppColors.textSecondary,
+                            side: const BorderSide(color: AppColors.border),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(10),
                             ),
@@ -993,7 +924,11 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
                     // ── Activity (edit only) ──────────────────────────────
                     if (widget.isEditing) ...[
                       const _SectionHeader(label: 'Activity'),
-                      _ActivitySection(staffId: widget.staffId!),
+                      _ActivitySection(
+                        staffId: widget.staffId!,
+                        commissionRate:
+                            double.tryParse(_commissionCtrl.text) ?? 0,
+                      ),
                     ],
 
                     // ── Danger zone (edit only) ───────────────────────────
@@ -1004,8 +939,8 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
                         child: OutlinedButton(
                           onPressed: _delete,
                           style: OutlinedButton.styleFrom(
-                            foregroundColor: const Color(0xFFEF4444),
-                            side: const BorderSide(color: Color(0xFFEF4444)),
+                            foregroundColor: AppColors.danger,
+                            side: const BorderSide(color: AppColors.danger),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(10),
                             ),
@@ -1034,7 +969,7 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
       ),
       // ── Save button ───────────────────────────────────────────────────────
       bottomNavigationBar: Container(
-        color: const Color(0xFFF9FAFB),
+        color: AppColors.background,
         padding: EdgeInsets.fromLTRB(
           16,
           12,
@@ -1044,6 +979,7 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
         child: _BigBtn(
           label: widget.isEditing ? 'Save Changes' : 'Add Staff Member',
           onTap: _save,
+          isLoading: _loading,
         ),
       ),
     );
@@ -1088,7 +1024,7 @@ class _FormHeader extends StatelessWidget {
               child: const Icon(
                 Icons.delete_outline,
                 size: 22,
-                color: Color(0xFFEF4444),
+                color: AppColors.danger,
               ),
             )
           else
@@ -1127,7 +1063,7 @@ class _PreviewCard extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        border: Border.all(color: const Color(0xFFE5E7EB)),
+        border: Border.all(color: AppColors.divider),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Row(
@@ -1153,7 +1089,7 @@ class _PreviewCard extends StatelessWidget {
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
-                          color: Color(0xFF111827),
+                          color: AppColors.textPrimary,
                         ),
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -1166,7 +1102,7 @@ class _PreviewCard extends StatelessWidget {
                       decoration: BoxDecoration(
                         color: isActive
                             ? const Color(0xFF10B981)
-                            : const Color(0xFFD1D5DB),
+                            : AppColors.border,
                         shape: BoxShape.circle,
                       ),
                     ),
@@ -1178,7 +1114,7 @@ class _PreviewCard extends StatelessWidget {
                     specialties.join(' · '),
                     style: const TextStyle(
                       fontSize: 12,
-                      color: Color(0xFF6B7280),
+                      color: AppColors.textSecondary,
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -1191,7 +1127,7 @@ class _PreviewCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
               decoration: BoxDecoration(
-                color: const Color(0xFFEEF2FF),
+                color: AppColors.primaryLight,
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
@@ -1199,7 +1135,7 @@ class _PreviewCard extends StatelessWidget {
                 style: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
-                  color: Color(0xFF6366F1),
+                  color: AppColors.primary,
                 ),
               ),
             ),
@@ -1230,10 +1166,10 @@ class _SpecialtyToggleChip extends StatelessWidget {
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
         decoration: BoxDecoration(
-          color: selected ? Colors.black : const Color(0xFFF3F4F6),
+          color: selected ? Colors.black : AppColors.surfaceVariant,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: selected ? Colors.black : const Color(0xFFE5E7EB),
+            color: selected ? Colors.black : AppColors.divider,
           ),
         ),
         child: Text(
@@ -1241,7 +1177,7 @@ class _SpecialtyToggleChip extends StatelessWidget {
           style: TextStyle(
             fontSize: 13,
             fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-            color: selected ? Colors.white : const Color(0xFF374151),
+            color: selected ? Colors.white : AppColors.textSecondary,
           ),
         ),
       ),
@@ -1252,32 +1188,43 @@ class _SpecialtyToggleChip extends StatelessWidget {
 // ─── Big black save button ────────────────────────────────────────────────────
 
 class _BigBtn extends StatelessWidget {
-  const _BigBtn({required this.label, required this.onTap});
+  const _BigBtn({required this.label, required this.onTap, this.isLoading = false});
   final String label;
   final VoidCallback onTap;
+  final bool isLoading;
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
       height: 52,
       child: ElevatedButton(
-        onPressed: onTap,
+        onPressed: isLoading ? null : onTap,
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.black,
           foregroundColor: Colors.white,
+          disabledBackgroundColor: AppColors.textSecondary,
           elevation: 0,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(26),
           ),
         ),
-        child: Text(
-          label,
-          style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.1,
-          ),
-        ),
+        child: isLoading
+            ? const SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              )
+            : Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.1,
+                ),
+              ),
       ),
     );
   }
@@ -1299,7 +1246,7 @@ class _SectionHeader extends StatelessWidget {
           fontSize: 11,
           fontWeight: FontWeight.w600,
           letterSpacing: 0.8,
-          color: Color(0xFF6B7280),
+          color: AppColors.textSecondary,
         ),
       ),
     );
@@ -1318,7 +1265,7 @@ class _FormCard extends StatelessWidget {
       margin: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
         color: Colors.white,
-        border: Border.all(color: const Color(0xFFE5E7EB)),
+        border: Border.all(color: AppColors.divider),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Column(children: children),
@@ -1345,7 +1292,7 @@ class _Field extends StatelessWidget {
             style: const TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w500,
-              color: Color(0xFF6B7280),
+              color: AppColors.textSecondary,
             ),
           ),
           const SizedBox(height: 5),
@@ -1367,12 +1314,131 @@ class _FieldDivider extends StatelessWidget {
       height: 1,
       indent: 16,
       endIndent: 16,
-      color: Color(0xFFE5E7EB),
+      color: AppColors.divider,
     );
   }
 }
 
 // ─── Activity section (edit mode) ────────────────────────────────────────────
+
+class _ActivitySection extends ConsumerWidget {
+  const _ActivitySection({
+    required this.staffId,
+    required this.commissionRate,
+  });
+  final String staffId;
+  final double commissionRate;
+
+  String _dateLabel(DateTime dt) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final d = DateTime(dt.year, dt.month, dt.day);
+    final diff = today.difference(d).inDays;
+    if (diff == 0) return 'Today';
+    if (diff == 1) return 'Yesterday';
+    return '${dt.day}/${dt.month}/${dt.year}';
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final txAsync = ref.watch(staffTransactionsProvider(staffId));
+
+    return txAsync.when(
+      loading: () => const Padding(
+        padding: EdgeInsets.all(24),
+        child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+      ),
+      error: (e, _) => const SizedBox.shrink(),
+      data: (transactions) {
+        final totalSales =
+            transactions.fold(0.0, (s, t) => s + t.total);
+        final totalComm = totalSales * commissionRate / 100;
+
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: _StatBox(
+                      label: 'Revenue',
+                      value: 'NPR ${totalSales.toStringAsFixed(0)}',
+                      icon: Icons.trending_up_rounded,
+                      iconColor: const Color(0xFF10B981),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _StatBox(
+                      label: 'Commission',
+                      value: 'NPR ${totalComm.toStringAsFixed(0)}',
+                      icon: Icons.payments_outlined,
+                      iconColor: AppColors.primary,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _StatBox(
+                      label: 'Services',
+                      value: '${transactions.length}',
+                      icon: Icons.spa_outlined,
+                      iconColor: const Color(0xFFF59E0B),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  border: Border.all(color: AppColors.divider),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(16, 14, 16, 8),
+                      child: Text(
+                        'Recent Services',
+                        style: TextStyle(
+                            fontSize: 13, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    const Divider(height: 1, color: AppColors.surfaceVariant),
+                    if (transactions.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.all(16),
+                        child: Text('No activity yet.',
+                            style: TextStyle(
+                                fontSize: 13,
+                                color: AppColors.textSecondary)),
+                      )
+                    else
+                      ...transactions.take(5).map((tx) {
+                        final service = tx.items?.firstOrNull?.displayName ?? 'Service';
+                        final comm = tx.total * commissionRate / 100;
+                        return _ActivityTile(
+                          entry: _ActivityEntry(
+                            date: _dateLabel(tx.createdAt),
+                            service: service,
+                            customer: tx.displayName,
+                            amount: tx.total,
+                            commission: comm,
+                          ),
+                        );
+                      }),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
 
 class _ActivityEntry {
   const _ActivityEntry({
@@ -1387,119 +1453,6 @@ class _ActivityEntry {
   final double amount;
   final double commission;
   final String customer;
-}
-
-// Stable mock data keyed by a hash of the staffId so each staff shows
-// different numbers without needing a real backend.
-List<_ActivityEntry> _mockActivity(String staffId) {
-  final seed = staffId.codeUnits.fold(0, (s, c) => s + c);
-  final services = [
-    'Haircut',
-    'Hair Color',
-    'Facial',
-    'Manicure',
-    'Blow Dry',
-    'Waxing',
-    'Massage',
-  ];
-  final customers = [
-    'Sita Rai',
-    'Anita Gurung',
-    'Bipana Thapa',
-    'Nirmala KC',
-    'Sabita Shrestha',
-  ];
-  final base = 800 + (seed % 600);
-  return List.generate(5, (i) {
-    final svc = services[(seed + i * 3) % services.length];
-    final amt = (base + i * 150).toDouble();
-    final rate = 10.0 + (seed % 3) * 5;
-    return _ActivityEntry(
-      date: i == 0
-          ? 'Today'
-          : i == 1
-          ? 'Yesterday'
-          : '${i + 1} days ago',
-      service: svc,
-      amount: amt,
-      commission: amt * rate / 100,
-      customer: customers[(seed + i) % customers.length],
-    );
-  });
-}
-
-class _ActivitySection extends StatelessWidget {
-  const _ActivitySection({required this.staffId});
-  final String staffId;
-
-  @override
-  Widget build(BuildContext context) {
-    final entries = _mockActivity(staffId);
-    final totalSales = entries.fold(0.0, (s, e) => s + e.amount);
-    final totalComm = entries.fold(0.0, (s, e) => s + e.commission);
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Column(
-        children: [
-          // Stats row
-          Row(
-            children: [
-              Expanded(
-                child: _StatBox(
-                  label: 'This Week',
-                  value: 'NPR ${totalSales.toStringAsFixed(0)}',
-                  icon: Icons.trending_up_rounded,
-                  iconColor: const Color(0xFF10B981),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _StatBox(
-                  label: 'Commission',
-                  value: 'NPR ${totalComm.toStringAsFixed(0)}',
-                  icon: Icons.payments_outlined,
-                  iconColor: const Color(0xFF6366F1),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _StatBox(
-                  label: 'Services',
-                  value: '${entries.length}',
-                  icon: Icons.spa_outlined,
-                  iconColor: const Color(0xFFF59E0B),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          // Recent transactions
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              border: Border.all(color: const Color(0xFFE5E7EB)),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(16, 14, 16, 8),
-                  child: Text(
-                    'Recent Services',
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                  ),
-                ),
-                const Divider(height: 1, color: Color(0xFFF3F4F6)),
-                ...entries.map((e) => _ActivityTile(entry: e)),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 class _StatBox extends StatelessWidget {
@@ -1520,7 +1473,7 @@ class _StatBox extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.white,
-        border: Border.all(color: const Color(0xFFE5E7EB)),
+        border: Border.all(color: AppColors.divider),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -1535,7 +1488,7 @@ class _StatBox extends StatelessWidget {
           const SizedBox(height: 2),
           Text(
             label,
-            style: const TextStyle(fontSize: 11, color: Color(0xFF9CA3AF)),
+            style: const TextStyle(fontSize: 11, color: AppColors.textTertiary),
           ),
         ],
       ),
@@ -1557,13 +1510,13 @@ class _ActivityTile extends StatelessWidget {
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: const Color(0xFFF3F4F6),
+              color: AppColors.surfaceVariant,
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Icon(
               Icons.spa_outlined,
               size: 18,
-              color: Color(0xFF6B7280),
+              color: AppColors.textSecondary,
             ),
           ),
           const SizedBox(width: 12),
@@ -1582,7 +1535,7 @@ class _ActivityTile extends StatelessWidget {
                   entry.customer,
                   style: const TextStyle(
                     fontSize: 12,
-                    color: Color(0xFF9CA3AF),
+                    color: AppColors.textTertiary,
                   ),
                 ),
               ],
@@ -1626,7 +1579,7 @@ class _CredRow extends StatelessWidget {
           width: 68,
           child: Text(
             label,
-            style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
+            style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
           ),
         ),
         Expanded(

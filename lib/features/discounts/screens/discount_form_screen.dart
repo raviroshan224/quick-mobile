@@ -42,10 +42,9 @@ class _DiscountFormScreenState extends ConsumerState<DiscountFormScreen> {
   }
 
   void _load() {
-    final d = ref
-        .read(discountsProvider)
-        .where((d) => d.id == widget.discountId)
-        .firstOrNull;
+    final asyncValue = ref.read(discountsProvider);
+    final all = asyncValue.valueOrNull ?? [];
+    final d = all.where((d) => d.id == widget.discountId).firstOrNull;
     if (d == null) return;
     _original = d;
     _nameCtrl.text = d.name;
@@ -78,7 +77,7 @@ class _DiscountFormScreenState extends ConsumerState<DiscountFormScreen> {
     return true;
   }
 
-  void _save() {
+  Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     if (!_scopeIsValid()) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -93,34 +92,35 @@ class _DiscountFormScreenState extends ConsumerState<DiscountFormScreen> {
     }
     final value = double.tryParse(_valueCtrl.text.trim()) ?? 0;
 
-    if (widget.isEditing && _original != null) {
-      ref.read(discountsProvider.notifier).update(
-            _original!.copyWith(
+    try {
+      if (widget.isEditing && _original != null) {
+        await ref.read(discountsProvider.notifier).updateDiscount(
+              _original!.id,
               name: _nameCtrl.text.trim(),
               type: _type,
               value: value,
               isActive: _isActive,
-              scope: _scope,
-              categoryName: _selectedCategory,
-              serviceId: _selectedServiceId,
-              serviceName: _selectedServiceName,
-            ),
-          );
-    } else {
-      ref.read(discountsProvider.notifier).add(
-            Discount.create(
+            );
+      } else {
+        await ref.read(discountsProvider.notifier).createDiscount(
               name: _nameCtrl.text.trim(),
               type: _type,
               value: value,
               isActive: _isActive,
-              scope: _scope,
-              categoryName: _selectedCategory,
-              serviceId: _selectedServiceId,
-              serviceName: _selectedServiceName,
-            ),
-          );
+            );
+      }
+      if (mounted) context.pop();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString()),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     }
-    context.pop();
   }
 
   void _delete() {
@@ -135,16 +135,28 @@ class _DiscountFormScreenState extends ConsumerState<DiscountFormScreen> {
               onPressed: () => Navigator.pop(ctx),
               child: const Text('Cancel')),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(ctx);
               final applied = ref.read(checkoutDiscountProvider);
               if (applied?.id == widget.discountId) {
                 ref.read(checkoutDiscountProvider.notifier).state = null;
               }
-              ref
-                  .read(discountsProvider.notifier)
-                  .delete(widget.discountId!);
-              context.pop();
+              try {
+                await ref
+                    .read(discountsProvider.notifier)
+                    .deleteDiscount(widget.discountId!);
+                if (mounted) context.pop();
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(e.toString()),
+                      backgroundColor: Colors.red,
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                }
+              }
             },
             child: const Text('Delete',
                 style: TextStyle(color: AppColors.refund)),

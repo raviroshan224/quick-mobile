@@ -1,7 +1,7 @@
 class AppConstants {
   AppConstants._();
 
-  static const String appName = 'Salon POS';
+  static const String appName = 'Quick POS';
   static const String tokenKey = 'auth_token';
   static const String userKey = 'current_user';
 
@@ -17,11 +17,15 @@ class AppRoutes {
   // Auth
   static const String splash = '/splash';
   static const String login = '/login';
+  static const String signup = '/signup';
+  static const String forgotPassword = '/forgot-password';
+  static const String resetPassword = '/reset-password';
 
   // Bottom nav tabs
   static const String dashboard = '/dashboard';
   static const String checkout = '/checkout';
   static const String transactions = '/transactions';
+  static String transactionDetail(String id) => '/transactions/$id';
   static const String notifications = '/notifications';
   static const String more = '/more';
 
@@ -37,6 +41,8 @@ class AppRoutes {
   static const String moreReports = '/more/reports';
   static const String moreSettings = '/more/settings';
   static const String moreSupport = '/more/support';
+  static const String morePrivacyPolicy = '/more/privacy-policy';
+  static const String moreTerms = '/more/terms';
 
   // More sub-screens (continued)
   static const String moreStaff = '/more/staff';

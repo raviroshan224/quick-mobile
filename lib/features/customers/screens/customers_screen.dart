@@ -226,14 +226,14 @@ class CustomerAvatar extends StatelessWidget {
   const CustomerAvatar({super.key, required this.name, this.size = 40});
 
   static const _colors = [
-    Color(0xFF5856D6),
-    Color(0xFF34AADC),
-    Color(0xFF4CD964),
-    Color(0xFFFF9500),
-    Color(0xFFFF3B30),
-    Color(0xFFFF2D55),
-    Color(0xFF007AFF),
-    Color(0xFF5AC8FA),
+    Color(0xFF6B7A3D), // olive
+    Color(0xFF4D5A2C), // dark olive
+    Color(0xFF8A9950), // medium olive
+    Color(0xFF111111), // black
+    Color(0xFF3A3A3A), // dark grey
+    Color(0xFF5A5A5A), // grey
+    Color(0xFF9A9A9A), // light grey
+    Color(0xFFB5C090), // pale olive
   ];
 
   Color get _color =>

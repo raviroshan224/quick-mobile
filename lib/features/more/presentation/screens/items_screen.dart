@@ -2,13 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_constants.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../../../../features/auth/presentation/providers/auth_provider.dart';
-import '../../../../features/inventory/data/mock_inventory_repository.dart';
 import '../../../../features/inventory/domain/inventory_models.dart';
-
-final _itemsProvider = FutureProvider<List<ProductModel>>((ref) {
-  return MockInventoryRepository().getAll();
-});
+import '../../../../features/inventory/presentation/providers/inventory_provider.dart';
 
 class ItemsScreen extends ConsumerStatefulWidget {
   const ItemsScreen({super.key});
@@ -22,15 +19,15 @@ class _ItemsScreenState extends ConsumerState<ItemsScreen> {
   String? _selectedCategory;
 
   static const _categoryColors = {
-    'Shampoo': Color(0xFFDBEAFE),
-    'Conditioner': Color(0xFFE0E7FF),
+    'Shampoo': Color(0xFFE8EDD6),
+    'Conditioner': Color(0xFFE0E4D0),
     'Scissors': Color(0xFFFEF9C3),
     'Combs': Color(0xFFD1FAE5),
     'Blades': Color(0xFFFEE2E2),
-    'Hair Color': Color(0xFFFCE7F3),
-    'Treatment': Color(0xFFEDE9FE),
+    'Hair Color': Color(0xFFEEEEEB),
+    'Treatment': Color(0xFFDCE0C8),
     'Skin Care': Color(0xFFFFEDD5),
-    'Nails': Color(0xFFFDF2F8),
+    'Nails': Color(0xFFF8F8F5),
     'Massage': Color(0xFFD1FAE5),
   };
 
@@ -50,7 +47,7 @@ class _ItemsScreenState extends ConsumerState<ItemsScreen> {
   @override
   Widget build(BuildContext context) {
     final isOwner = ref.watch(isOwnerProvider);
-    final itemsAsync = ref.watch(_itemsProvider);
+    final itemsAsync = ref.watch(productsProvider);
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -107,11 +104,11 @@ class _ItemsScreenState extends ConsumerState<ItemsScreen> {
                   decoration: InputDecoration(
                     hintText: 'Search items',
                     hintStyle: const TextStyle(
-                        color: Color(0xFF9CA3AF), fontSize: 14),
+                        color: AppColors.textTertiary, fontSize: 14),
                     prefixIcon: const Icon(Icons.search,
-                        size: 18, color: Color(0xFF9CA3AF)),
+                        size: 18, color: AppColors.textTertiary),
                     filled: true,
-                    fillColor: const Color(0xFFF3F4F6),
+                    fillColor: AppColors.surfaceVariant,
                     border: OutlineInputBorder(
                       borderSide: BorderSide.none,
                       borderRadius: BorderRadius.circular(10),
@@ -144,7 +141,7 @@ class _ItemsScreenState extends ConsumerState<ItemsScreen> {
                   ],
                 ),
               ),
-              const Divider(height: 1, color: Color(0xFFF3F4F6)),
+              const Divider(height: 1, color: AppColors.surfaceVariant),
               // Count
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
@@ -153,7 +150,7 @@ class _ItemsScreenState extends ConsumerState<ItemsScreen> {
                   child: Text(
                     '${filtered.length} item${filtered.length == 1 ? '' : 's'}',
                     style: const TextStyle(
-                        fontSize: 12, color: Color(0xFF9CA3AF)),
+                        fontSize: 12, color: AppColors.textTertiary),
                   ),
                 ),
               ),
@@ -165,11 +162,11 @@ class _ItemsScreenState extends ConsumerState<ItemsScreen> {
                   separatorBuilder: (_, _) => const Divider(
                       height: 1,
                       indent: 62,
-                      color: Color(0xFFF3F4F6)),
+                      color: AppColors.surfaceVariant),
                   itemBuilder: (_, i) => _ItemTile(
                     product: filtered[i],
                     iconBg: _categoryColors[filtered[i].category] ??
-                        const Color(0xFFF3F4F6),
+                        AppColors.surfaceVariant,
                     icon: _categoryIcons[filtered[i].category] ??
                         Icons.inventory_2_outlined,
                   ),
@@ -202,14 +199,14 @@ class _CategoryChip extends StatelessWidget {
         padding:
             const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         decoration: BoxDecoration(
-          color: selected ? Colors.black : const Color(0xFFF3F4F6),
+          color: selected ? Colors.black : AppColors.surfaceVariant,
           borderRadius: BorderRadius.circular(20),
         ),
         child: Text(label,
             style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
-                color: selected ? Colors.white : const Color(0xFF374151))),
+                color: selected ? Colors.white : AppColors.textSecondary)),
       ),
     );
   }
@@ -244,7 +241,7 @@ class _ItemTile extends StatelessWidget {
         children: [
           Text(product.category ?? '',
               style: const TextStyle(
-                  fontSize: 11, color: Color(0xFF9CA3AF))),
+                  fontSize: 11, color: AppColors.textTertiary)),
           if (product.isLowStock) ...[
             const SizedBox(width: 6),
             Container(
@@ -257,7 +254,7 @@ class _ItemTile extends StatelessWidget {
               child: const Text('Low stock',
                   style: TextStyle(
                       fontSize: 10,
-                      color: Color(0xFFDC2626),
+                      color: AppColors.danger,
                       fontWeight: FontWeight.w500)),
             ),
           ],
@@ -272,7 +269,7 @@ class _ItemTile extends StatelessWidget {
                   fontSize: 14, fontWeight: FontWeight.w500)),
           Text('${product.stock} in stock',
               style: const TextStyle(
-                  fontSize: 11, color: Color(0xFF9CA3AF))),
+                  fontSize: 11, color: AppColors.textTertiary)),
         ],
       ),
     );

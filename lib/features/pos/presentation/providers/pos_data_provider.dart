@@ -1,13 +1,18 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../services/data/mock_services_repository.dart';
+import '../../../../core/network/api_client.dart';
+import '../../../services/data/services_repository.dart';
 import '../../../services/domain/service_models.dart';
-import '../../../staff/data/mock_staff_repository.dart';
+import '../../../staff/data/staff_repository.dart';
 import '../../../staff/domain/staff_models.dart';
 
 // ─── Repos ────────────────────────────────────────────────────────────────────
 
-final _servicesRepoProvider = Provider((_) => MockServicesRepository());
-final _staffRepoProvider = Provider((_) => MockStaffRepository());
+final _servicesRepoProvider = Provider<ServicesRepository>(
+  (ref) => ServicesRepository(ref.read(apiClientProvider)),
+);
+final _staffRepoProvider = Provider<StaffRepository>(
+  (ref) => StaffRepository(ref.read(apiClientProvider)),
+);
 
 // ─── Services & categories ────────────────────────────────────────────────────
 

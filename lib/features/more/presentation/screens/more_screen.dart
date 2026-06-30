@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_constants.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../../../../features/auth/presentation/providers/auth_provider.dart';
 
 class _SectionLabel extends StatelessWidget {
@@ -15,7 +16,7 @@ class _SectionLabel extends StatelessWidget {
           style: const TextStyle(
             fontSize: 11,
             fontWeight: FontWeight.w600,
-            color: Color(0xFF9CA3AF),
+            color: AppColors.textTertiary,
             letterSpacing: 0.8,
           ),
         ),
@@ -31,7 +32,7 @@ class MoreScreen extends ConsumerWidget {
     final isOwner = ref.watch(isOwnerProvider);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF9FAFB),
+      backgroundColor: AppColors.background,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -142,7 +143,7 @@ class MoreScreen extends ConsumerWidget {
                   children: [
                     CircleAvatar(
                       radius: 18,
-                      backgroundColor: const Color(0xFFF3F4F6),
+                      backgroundColor: AppColors.surfaceVariant,
                       child: Text(user.initials,
                           style: const TextStyle(
                               color: Colors.black,
@@ -161,7 +162,7 @@ class MoreScreen extends ConsumerWidget {
                           Text(user.email,
                               style: const TextStyle(
                                   fontSize: 12,
-                                  color: Color(0xFF9CA3AF))),
+                                  color: AppColors.textTertiary)),
                         ],
                       ),
                     ),
@@ -169,7 +170,7 @@ class MoreScreen extends ConsumerWidget {
                       onTap: () =>
                           ref.read(authProvider.notifier).logout(),
                       child: const Icon(Icons.logout_rounded,
-                          size: 20, color: Color(0xFF9CA3AF)),
+                          size: 20, color: AppColors.textTertiary),
                     ),
                   ],
                 ),

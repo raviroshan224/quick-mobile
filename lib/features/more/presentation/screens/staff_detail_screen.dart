@@ -1,21 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../../../features/auth/data/mock_auth_repository.dart';
-import '../../../../features/staff/data/mock_staff_repository.dart';
 import '../../../../features/staff/domain/staff_models.dart';
+import '../../../../core/theme/app_theme.dart';
+import '../../../../features/staff/presentation/providers/staff_provider.dart';
+import '../../../../features/transactions/domain/transaction_models.dart';
+import '../../../../features/transactions/presentation/providers/transactions_provider.dart';
 
 // ─── Avatar colors (same cycle as staff_screen / staff_form) ─────────────────
 
 const _kAvatarColors = [
-  Color(0xFF6366F1),
-  Color(0xFF10B981),
-  Color(0xFFF59E0B),
-  Color(0xFF0EA5E9),
-  Color(0xFFEC4899),
-  Color(0xFF8B5CF6),
-  Color(0xFFEF4444),
-  Color(0xFF14B8A6),
+  Color(0xFF6B7A3D), // olive
+  Color(0xFF4D5A2C), // dark olive
+  Color(0xFF8A9950), // medium olive
+  Color(0xFF111111), // black
+  Color(0xFF3A3A3A), // dark grey
+  Color(0xFF5A5A5A), // grey
+  Color(0xFF9A9A9A), // light grey
+  Color(0xFFB5C090), // pale olive
 ];
 
 Color _avatarColorFor(String staffId) {
@@ -23,51 +25,17 @@ Color _avatarColorFor(String staffId) {
   return _kAvatarColors[seed % _kAvatarColors.length];
 }
 
-// ─── Mock activity data ───────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-class _ActivityEntry {
-  const _ActivityEntry({
-    required this.date,
-    required this.service,
-    required this.amount,
-    required this.commission,
-    required this.customer,
-  });
-  final String date;
-  final String service;
-  final double amount;
-  final double commission;
-  final String customer;
+String _dateLabel(DateTime dt) {
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final d = DateTime(dt.year, dt.month, dt.day);
+  final diff = today.difference(d).inDays;
+  if (diff == 0) return 'Today';
+  if (diff == 1) return 'Yesterday';
+  return '${dt.day}/${dt.month}/${dt.year}';
 }
-
-List<_ActivityEntry> _buildActivity(String staffId) {
-  final seed = staffId.codeUnits.fold(0, (s, c) => s + c);
-  const services = ['Haircut', 'Hair Color', 'Facial', 'Manicure', 'Blow Dry', 'Waxing', 'Massage'];
-  const customers = ['Sita Rai', 'Anita Gurung', 'Bipana Thapa', 'Nirmala KC', 'Sabita Shrestha'];
-  final base = 800.0 + (seed % 600);
-  return List.generate(6, (i) {
-    final amt = base + i * 150;
-    final rate = 10.0 + (seed % 3) * 5;
-    return _ActivityEntry(
-      date: i == 0
-          ? 'Today'
-          : i == 1
-              ? 'Yesterday'
-              : '${i + 1} days ago',
-      service: services[(seed + i * 3) % services.length],
-      amount: amt,
-      commission: amt * rate / 100,
-      customer: customers[(seed + i) % customers.length],
-    );
-  });
-}
-
-// ─── Provider ─────────────────────────────────────────────────────────────────
-
-final _staffDetailProvider =
-    FutureProvider.family<StaffModel?, String>((ref, id) {
-  return MockStaffRepository().getById(id);
-});
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
@@ -77,10 +45,10 @@ class StaffDetailScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final staffAsync = ref.watch(_staffDetailProvider(staffId));
+    final staffAsync = ref.watch(staffDetailProvider(staffId));
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF9FAFB),
+      backgroundColor: AppColors.background,
       body: staffAsync.when(
         loading: () => const SafeArea(
           child: Center(child: CircularProgressIndicator()),
@@ -100,26 +68,7 @@ class StaffDetailScreen extends ConsumerWidget {
             ),
           ),
         ),
-        data: (staff) {
-          if (staff == null) {
-            return SafeArea(
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text('Staff member not found.'),
-                    const SizedBox(height: 12),
-                    TextButton(
-                      onPressed: () => context.go('/more/staff'),
-                      child: const Text('Go back'),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }
-          return _DetailBody(staff: staff);
-        },
+        data: (staff) => _DetailBody(staff: staff),
       ),
     );
   }
@@ -127,16 +76,18 @@ class StaffDetailScreen extends ConsumerWidget {
 
 // ─── Body ─────────────────────────────────────────────────────────────────────
 
-class _DetailBody extends StatelessWidget {
+class _DetailBody extends ConsumerWidget {
   const _DetailBody({required this.staff});
   final StaffModel staff;
 
   @override
-  Widget build(BuildContext context) {
-    final activity = _buildActivity(staff.id);
-    final totalSales = activity.fold(0.0, (s, e) => s + e.amount);
-    final totalComm = activity.fold(0.0, (s, e) => s + e.commission);
-    final email = MockAuthRepository.getEmailByUserId(staff.userId);
+  Widget build(BuildContext context, WidgetRef ref) {
+    final txAsync = ref.watch(staffTransactionsProvider(staff.id));
+    final transactions = txAsync.valueOrNull ?? [];
+    final commissionRate = staff.commissionRate ?? 0;
+    final totalSales = transactions.fold(0.0, (s, t) => s + t.total);
+    final totalComm = totalSales * commissionRate / 100;
+    final email = staff.email;
     final avatarColor = _avatarColorFor(staff.id);
 
     return SafeArea(
@@ -188,7 +139,7 @@ class _DetailBody extends StatelessWidget {
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    border: Border.all(color: const Color(0xFFE5E7EB)),
+                    border: Border.all(color: AppColors.divider),
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: Row(
@@ -226,7 +177,7 @@ class _DetailBody extends StatelessWidget {
                                   decoration: BoxDecoration(
                                     color: staff.isActive
                                         ? const Color(0xFFDCFCE7)
-                                        : const Color(0xFFF3F4F6),
+                                        : AppColors.surfaceVariant,
                                     borderRadius: BorderRadius.circular(20),
                                   ),
                                   child: Text(
@@ -236,7 +187,7 @@ class _DetailBody extends StatelessWidget {
                                       fontWeight: FontWeight.w600,
                                       color: staff.isActive
                                           ? const Color(0xFF16A34A)
-                                          : const Color(0xFF6B7280),
+                                          : AppColors.textSecondary,
                                     ),
                                   ),
                                 ),
@@ -248,7 +199,7 @@ class _DetailBody extends StatelessWidget {
                                 staff.specialties.take(4).join(' · '),
                                 style: const TextStyle(
                                     fontSize: 13,
-                                    color: Color(0xFF6B7280)),
+                                    color: AppColors.textSecondary),
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ],
@@ -263,19 +214,19 @@ class _DetailBody extends StatelessWidget {
                                     icon: Icons.percent_rounded,
                                     label:
                                         '${staff.commissionRate!.toStringAsFixed(0)}% commission',
-                                    color: const Color(0xFF6366F1),
+                                    color: AppColors.primary,
                                   ),
                                 if (staff.phone != null)
                                   _InfoChip(
                                     icon: Icons.phone_outlined,
                                     label: staff.phone!,
-                                    color: const Color(0xFF0EA5E9),
+                                    color: AppColors.primary,
                                   ),
                                 if (email != null)
                                   _InfoChip(
                                     icon: Icons.email_outlined,
                                     label: email,
-                                    color: const Color(0xFF6B7280),
+                                    color: AppColors.textSecondary,
                                   ),
                               ],
                             ),
@@ -304,14 +255,14 @@ class _DetailBody extends StatelessWidget {
                       label: 'Commission',
                       value: 'NPR ${_fmt(totalComm)}',
                       icon: Icons.payments_outlined,
-                      iconColor: const Color(0xFF6366F1),
+                      iconColor: AppColors.primary,
                     ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: _StatCard(
                       label: 'Services',
-                      value: '${activity.length}',
+                      value: '${transactions.length}',
                       icon: Icons.spa_outlined,
                       iconColor: const Color(0xFFF59E0B),
                     ),
@@ -327,19 +278,39 @@ class _DetailBody extends StatelessWidget {
                 Container(
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    border: Border.all(color: const Color(0xFFE5E7EB)),
+                    border: Border.all(color: AppColors.divider),
                     borderRadius: BorderRadius.circular(14),
                   ),
-                  child: Column(
-                    children: [
-                      for (int i = 0; i < activity.length; i++) ...[
-                        if (i > 0)
-                          const Divider(
-                              height: 1, color: Color(0xFFF3F4F6)),
-                        _ActivityTile(entry: activity[i]),
-                      ],
-                    ],
-                  ),
+                  child: txAsync.isLoading
+                      ? const Padding(
+                          padding: EdgeInsets.all(24),
+                          child: Center(
+                              child: CircularProgressIndicator(strokeWidth: 2)),
+                        )
+                      : transactions.isEmpty
+                          ? const Padding(
+                              padding: EdgeInsets.all(16),
+                              child: Text('No recent activity.',
+                                  style: TextStyle(
+                                      fontSize: 13,
+                                      color: AppColors.textSecondary)),
+                            )
+                          : Column(
+                              children: [
+                                for (int i = 0;
+                                    i < transactions.length;
+                                    i++) ...[
+                                  if (i > 0)
+                                    const Divider(
+                                        height: 1,
+                                        color: AppColors.surfaceVariant),
+                                  _ActivityTile(
+                                    transaction: transactions[i],
+                                    commissionRate: commissionRate,
+                                  ),
+                                ],
+                              ],
+                            ),
                 ),
 
                 // ── Specialties ───────────────────────────────────────────
@@ -369,13 +340,13 @@ class _DetailBody extends StatelessWidget {
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
                       color: Colors.white,
-                      border: Border.all(color: const Color(0xFFE5E7EB)),
+                      border: Border.all(color: AppColors.divider),
                       borderRadius: BorderRadius.circular(14),
                     ),
                     child: Row(
                       children: [
                         const Icon(Icons.email_outlined,
-                            size: 18, color: Color(0xFF6B7280)),
+                            size: 18, color: AppColors.textSecondary),
                         const SizedBox(width: 10),
                         Expanded(
                           child: Text(email,
@@ -384,7 +355,7 @@ class _DetailBody extends StatelessWidget {
                                   fontWeight: FontWeight.w500)),
                         ),
                         const Icon(Icons.lock_outline,
-                            size: 16, color: Color(0xFFD1D5DB)),
+                            size: 16, color: AppColors.border),
                       ],
                     ),
                   ),
@@ -458,7 +429,7 @@ class _StatCard extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.white,
-        border: Border.all(color: const Color(0xFFE5E7EB)),
+        border: Border.all(color: AppColors.divider),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -472,7 +443,7 @@ class _StatCard extends StatelessWidget {
           const SizedBox(height: 2),
           Text(label,
               style: const TextStyle(
-                  fontSize: 11, color: Color(0xFF9CA3AF))),
+                  fontSize: 11, color: AppColors.textTertiary)),
         ],
       ),
     );
@@ -480,11 +451,19 @@ class _StatCard extends StatelessWidget {
 }
 
 class _ActivityTile extends StatelessWidget {
-  const _ActivityTile({required this.entry});
-  final _ActivityEntry entry;
+  const _ActivityTile({
+    required this.transaction,
+    required this.commissionRate,
+  });
+  final Transaction transaction;
+  final double commissionRate;
 
   @override
   Widget build(BuildContext context) {
+    final service =
+        transaction.items?.firstOrNull?.displayName ?? 'Service';
+    final commission = transaction.total * commissionRate / 100;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
@@ -493,35 +472,37 @@ class _ActivityTile extends StatelessWidget {
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: const Color(0xFFF3F4F6),
+              color: AppColors.surfaceVariant,
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Icon(Icons.spa_outlined,
-                size: 18, color: Color(0xFF6B7280)),
+                size: 18, color: AppColors.textSecondary),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(entry.service,
+                Text(service,
                     style: const TextStyle(
                         fontSize: 13, fontWeight: FontWeight.w500)),
-                Text('${entry.customer} · ${entry.date}',
+                Text(
+                    '${transaction.displayName} · ${_dateLabel(transaction.createdAt)}',
                     style: const TextStyle(
-                        fontSize: 12, color: Color(0xFF9CA3AF))),
+                        fontSize: 12, color: AppColors.textTertiary)),
               ],
             ),
           ),
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text('NPR ${entry.amount.toStringAsFixed(0)}',
+              Text('NPR ${transaction.total.toStringAsFixed(0)}',
                   style: const TextStyle(
                       fontSize: 13, fontWeight: FontWeight.w600)),
-              Text('+NPR ${entry.commission.toStringAsFixed(0)} comm.',
-                  style: const TextStyle(
-                      fontSize: 11, color: Color(0xFF10B981))),
+              if (commissionRate > 0)
+                Text('+NPR ${commission.toStringAsFixed(0)} comm.',
+                    style: const TextStyle(
+                        fontSize: 11, color: Color(0xFF10B981))),
             ],
           ),
         ],
@@ -539,14 +520,14 @@ class _SpecialtyChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       decoration: BoxDecoration(
-        color: const Color(0xFFF3F4F6),
+        color: AppColors.surfaceVariant,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
+        border: Border.all(color: AppColors.divider),
       ),
       child: Text(label,
           style: const TextStyle(
               fontSize: 13,
-              color: Color(0xFF374151),
+              color: AppColors.textSecondary,
               fontWeight: FontWeight.w500)),
     );
   }

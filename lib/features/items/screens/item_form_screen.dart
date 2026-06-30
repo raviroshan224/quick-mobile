@@ -527,7 +527,7 @@ class _Field extends StatelessWidget {
                       color: AppColors.textSecondary),
                 ),
               ),
-              if (trailing != null) trailing!,
+              ?trailing,
             ],
           ),
           const SizedBox(height: 4),

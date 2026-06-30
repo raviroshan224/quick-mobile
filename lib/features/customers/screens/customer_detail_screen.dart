@@ -444,7 +444,7 @@ class _SectionLabel extends StatelessWidget {
                 color: AppColors.textSecondary),
           ),
           const Spacer(),
-          if (action != null) action!,
+          ?action,
         ],
       ),
     );

@@ -12,16 +12,20 @@ class DiscountsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isOwner = ref.watch(isOwnerProvider);
-    final discounts = ref.watch(discountsProvider);
-    final active = discounts.where((d) => d.isActive).toList();
-    final inactive = discounts.where((d) => !d.isActive).toList();
+    final discountsAsync = ref.watch(discountsProvider);
 
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(title: const Text('Discounts')),
-      body: discounts.isEmpty
-          ? _EmptyState(onAdd: isOwner ? () => context.push('/more/discounts/new') : null)
-          : ListView(
+      body: discountsAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => Center(child: Text('Error: $e')),
+        data: (discounts) {
+          final active = discounts.where((d) => d.isActive).toList();
+          final inactive = discounts.where((d) => !d.isActive).toList();
+          return discounts.isEmpty
+              ? _EmptyState(onAdd: isOwner ? () => context.push('/more/discounts/new') : null)
+              : ListView(
               padding: const EdgeInsets.only(bottom: 100),
               children: [
                 if (active.isNotEmpty) ...[
@@ -57,7 +61,9 @@ class DiscountsScreen extends ConsumerWidget {
                   ),
                 ),
               ],
-            ),
+            );
+        },
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: isOwner ? () => context.push('/more/discounts/new') : null,
         backgroundColor: AppColors.primary,

@@ -1,54 +1,141 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import '../constants/app_constants.dart';
+import '../models/app_exception.dart';
+import '../utils/env_config.dart';
 import 'api_interceptors.dart';
+
+// Callback set by AuthNotifier so the interceptor can signal logout.
+void Function()? _unauthenticatedCallback;
+void registerUnauthenticatedCallback(void Function() cb) {
+  _unauthenticatedCallback = cb;
+}
 
 final _storage = const FlutterSecureStorage();
 
 final dioProvider = Provider<Dio>((ref) {
+  final baseUrl = () {
+    try {
+      return EnvConfig.instance.apiBaseUrl;
+    } catch (_) {
+      return 'http://localhost:3000';
+    }
+  }();
+
   final dio = Dio(
     BaseOptions(
-      baseUrl: AppConstants.defaultBaseUrl,
-      connectTimeout: AppConstants.connectTimeout,
-      receiveTimeout: AppConstants.receiveTimeout,
+      baseUrl: baseUrl,
+      connectTimeout: const Duration(seconds: 10),
+      receiveTimeout: const Duration(seconds: 30),
+      headers: {'Content-Type': 'application/json'},
+    ),
+  );
+
+  // Bare Dio instance for refresh calls (no auth interceptors to avoid cycles).
+  final refreshDio = Dio(
+    BaseOptions(
+      baseUrl: baseUrl,
+      connectTimeout: const Duration(seconds: 10),
+      receiveTimeout: const Duration(seconds: 30),
       headers: {'Content-Type': 'application/json'},
     ),
   );
 
   dio.interceptors.addAll([
     AuthInterceptor(_storage),
-    LogInterceptor(requestBody: true, responseBody: true, error: true),
+    RefreshInterceptor(
+      dio: refreshDio,
+      storage: _storage,
+      onUnauthenticated: () => _unauthenticatedCallback?.call(),
+    ),
+    ErrorInterceptor(),
+    if (kDebugMode)
+      LogInterceptor(
+        requestBody: true,
+        responseBody: true,
+        error: true,
+        logPrint: (o) => debugPrint(o.toString()),
+      ),
   ]);
 
   return dio;
 });
 
+// ─── ApiClient ────────────────────────────────────────────────────────────────
+
 class ApiClient {
   ApiClient(this._dio);
   final Dio _dio;
 
-  Future<T> get<T>(String path, {Map<String, dynamic>? queryParameters}) async {
-    final res = await _dio.get(path, queryParameters: queryParameters);
-    return res.data;
+  // Unwraps the { success, data, timestamp } envelope automatically.
+  dynamic _unwrap(Response<dynamic> res) {
+    final body = res.data;
+    if (body is Map<String, dynamic> && body.containsKey('data')) {
+      return body['data'];
+    }
+    return body;
   }
 
-  Future<T> post<T>(String path, {dynamic data}) async {
-    final res = await _dio.post(path, data: data);
-    return res.data;
+  AppException _toAppException(DioException e) {
+    final inner = e.error;
+    if (inner is AppException) return inner;
+    return AppException(
+      e.message ?? 'Network error',
+      statusCode: e.response?.statusCode,
+    );
   }
 
-  Future<T> patch<T>(String path, {dynamic data}) async {
-    final res = await _dio.patch(path, data: data);
-    return res.data;
+  Future<dynamic> get(
+    String path, {
+    Map<String, dynamic>? queryParameters,
+  }) async {
+    try {
+      final res = await _dio.get(path, queryParameters: queryParameters);
+      return _unwrap(res);
+    } on DioException catch (e) {
+      throw _toAppException(e);
+    }
   }
 
-  Future<T> delete<T>(String path) async {
-    final res = await _dio.delete(path);
-    return res.data;
+  Future<dynamic> post(String path, {dynamic data}) async {
+    try {
+      final res = await _dio.post(path, data: data);
+      return _unwrap(res);
+    } on DioException catch (e) {
+      throw _toAppException(e);
+    }
+  }
+
+  Future<dynamic> patch(String path, {dynamic data}) async {
+    try {
+      final res = await _dio.patch(path, data: data);
+      return _unwrap(res);
+    } on DioException catch (e) {
+      throw _toAppException(e);
+    }
+  }
+
+  Future<dynamic> put(String path, {dynamic data}) async {
+    try {
+      final res = await _dio.put(path, data: data);
+      return _unwrap(res);
+    } on DioException catch (e) {
+      throw _toAppException(e);
+    }
+  }
+
+  Future<dynamic> delete(String path, {dynamic data}) async {
+    try {
+      final res = await _dio.delete(path, data: data);
+      return _unwrap(res);
+    } on DioException catch (e) {
+      throw _toAppException(e);
+    }
   }
 }
 
 final apiClientProvider = Provider<ApiClient>((ref) {
   return ApiClient(ref.read(dioProvider));
 });
+

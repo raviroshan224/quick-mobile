@@ -2,19 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_constants.dart';
-import '../../../../features/cash_drawer/data/mock_cash_drawer_repository.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../../../../features/cash_drawer/domain/cash_drawer_models.dart';
-
-final _drawerProvider = FutureProvider<CashDrawerSession?>((ref) {
-  return MockCashDrawerRepository().getCurrent();
-});
+import '../../../../features/cash_drawer/presentation/providers/cash_drawer_provider.dart';
 
 class DrawersScreen extends ConsumerWidget {
   const DrawersScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final drawerAsync = ref.watch(_drawerProvider);
+    final drawerAsync = ref.watch(cashDrawerNotifierProvider);
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -38,14 +35,74 @@ class DrawersScreen extends ConsumerWidget {
             const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Error: $e')),
         data: (session) => session == null
-            ? _ClosedState()
-            : _OpenState(session: session),
+            ? _ClosedState(ref: ref)
+            : _OpenState(session: session, ref: ref),
       ),
     );
   }
 }
 
+// ─── Closed state ─────────────────────────────────────────────────────────────
+
 class _ClosedState extends StatelessWidget {
+  const _ClosedState({required this.ref});
+  final WidgetRef ref;
+
+  Future<void> _openDrawer(BuildContext context) async {
+    final amountCtrl = TextEditingController();
+    final notesCtrl = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Open Drawer'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: amountCtrl,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: 'Opening Balance (NPR)',
+                border: OutlineInputBorder(),
+              ),
+              autofocus: true,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: notesCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Notes (optional)',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Open')),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    final amount = double.tryParse(amountCtrl.text.trim()) ?? 0;
+    try {
+      await ref
+          .read(cashDrawerNotifierProvider.notifier)
+          .openDrawer(amount, notes: notesCtrl.text.trim().isEmpty ? null : notesCtrl.text.trim());
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Center(
@@ -53,7 +110,7 @@ class _ClosedState extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           const Icon(Icons.point_of_sale_outlined,
-              size: 48, color: Color(0xFF9CA3AF)),
+              size: 48, color: AppColors.textTertiary),
           const SizedBox(height: 16),
           const Text('No open drawer',
               style: TextStyle(
@@ -61,10 +118,10 @@ class _ClosedState extends StatelessWidget {
           const SizedBox(height: 8),
           const Text('Open a cash drawer to start',
               style: TextStyle(
-                  fontSize: 14, color: Color(0xFF6B7280))),
+                  fontSize: 14, color: AppColors.textSecondary)),
           const SizedBox(height: 24),
           ElevatedButton(
-            onPressed: () {},
+            onPressed: () => _openDrawer(context),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.black,
               foregroundColor: Colors.white,
@@ -81,9 +138,74 @@ class _ClosedState extends StatelessWidget {
   }
 }
 
+// ─── Open state ───────────────────────────────────────────────────────────────
+
 class _OpenState extends StatelessWidget {
-  const _OpenState({required this.session});
+  const _OpenState({required this.session, required this.ref});
   final CashDrawerSession session;
+  final WidgetRef ref;
+
+  Future<void> _showMovementDialog(
+      BuildContext context, CashMovementType type) async {
+    final isIn = type == CashMovementType.cashIn;
+    final amountCtrl = TextEditingController();
+    final reasonCtrl = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(isIn ? 'Pay In' : 'Pay Out'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: amountCtrl,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: InputDecoration(
+                labelText: '${isIn ? 'Amount In' : 'Amount Out'} (NPR)',
+                border: const OutlineInputBorder(),
+              ),
+              autofocus: true,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: reasonCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Reason',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(isIn ? 'Pay In' : 'Pay Out')),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    final amount = double.tryParse(amountCtrl.text.trim()) ?? 0;
+    if (amount <= 0) return;
+    try {
+      await ref.read(cashDrawerNotifierProvider.notifier).recordMovement(
+            type: type,
+            amount: amount,
+            reason: reasonCtrl.text.trim().isEmpty
+                ? (isIn ? 'Cash in' : 'Cash out')
+                : reasonCtrl.text.trim(),
+          );
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -102,7 +224,7 @@ class _OpenState extends StatelessWidget {
             children: [
               const Text('Current Balance',
                   style: TextStyle(
-                      color: Color(0xFF9CA3AF), fontSize: 13)),
+                      color: AppColors.textTertiary, fontSize: 13)),
               const SizedBox(height: 8),
               Text(
                 'NPR ${session.currentBalance.toStringAsFixed(2)}',
@@ -134,7 +256,8 @@ class _OpenState extends StatelessWidget {
               child: _ActionBtn(
                 label: 'Pay In',
                 icon: Icons.add,
-                onTap: () {},
+                onTap: () =>
+                    _showMovementDialog(context, CashMovementType.cashIn),
               ),
             ),
             const SizedBox(width: 12),
@@ -142,7 +265,8 @@ class _OpenState extends StatelessWidget {
               child: _ActionBtn(
                 label: 'Pay Out',
                 icon: Icons.remove,
-                onTap: () {},
+                onTap: () =>
+                    _showMovementDialog(context, CashMovementType.cashOut),
               ),
             ),
           ],
@@ -167,12 +291,12 @@ class _Chip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: const Color(0xFF1F2937),
+        color: AppColors.textPrimary,
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(label,
           style: const TextStyle(
-              color: Color(0xFF9CA3AF), fontSize: 12)),
+              color: AppColors.textTertiary, fontSize: 12)),
     );
   }
 }
@@ -193,7 +317,7 @@ class _ActionBtn extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 14),
         decoration: BoxDecoration(
-          color: const Color(0xFFF3F4F6),
+          color: AppColors.surfaceVariant,
           borderRadius: BorderRadius.circular(10),
         ),
         child: Row(
@@ -237,8 +361,8 @@ class _MovementRow extends StatelessWidget {
                   : Icons.arrow_upward_rounded,
               size: 16,
               color: isIn
-                  ? const Color(0xFF16A34A)
-                  : const Color(0xFFDC2626),
+                  ? AppColors.success
+                  : AppColors.danger,
             ),
           ),
           const SizedBox(width: 12),
@@ -250,7 +374,7 @@ class _MovementRow extends StatelessWidget {
                     style: const TextStyle(fontSize: 14)),
                 Text(entry.timeLabel,
                     style: const TextStyle(
-                        fontSize: 12, color: Color(0xFF9CA3AF))),
+                        fontSize: 12, color: AppColors.textTertiary)),
               ],
             ),
           ),
@@ -260,8 +384,8 @@ class _MovementRow extends StatelessWidget {
                 fontSize: 15,
                 fontWeight: FontWeight.w500,
                 color: isIn
-                    ? const Color(0xFF16A34A)
-                    : const Color(0xFFDC2626)),
+                    ? AppColors.success
+                    : AppColors.danger),
           ),
         ],
       ),

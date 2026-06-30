@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_constants.dart';
+import '../../../../core/theme/app_theme.dart';
+import '../../../../core/network/api_client.dart';
 import '../../../../features/auth/presentation/providers/auth_provider.dart';
+import '../../../../features/settings/data/settings_repository.dart';
 
 // ─── Settings state ───────────────────────────────────────────────────────────
 
@@ -56,14 +59,60 @@ class SalonSettings {
   );
 }
 
+final _settingsRepoProvider = Provider<SettingsRepository>(
+  (ref) => SettingsRepository(ref.read(apiClientProvider)),
+);
+
 class _SettingsNotifier extends StateNotifier<SalonSettings> {
-  _SettingsNotifier() : super(const SalonSettings());
-  void update(SalonSettings s) => state = s;
+  _SettingsNotifier(this._repo) : super(const SalonSettings()) {
+    _load();
+  }
+  final SettingsRepository _repo;
+
+  Future<void> _load() async {
+    try {
+      final j = await _repo.get();
+      state = SalonSettings(
+        salonName: j['salonName'] as String? ?? state.salonName,
+        address: j['address'] as String? ?? state.address,
+        phone: j['phone'] as String? ?? state.phone,
+        fonepayId: j['fonepayId'] as String? ?? state.fonepayId,
+        receiptFooter: j['receiptFooter'] as String? ?? state.receiptFooter,
+        autoPrintReceipt: j['autoPrintReceipt'] as bool? ?? state.autoPrintReceipt,
+        requireCustomer: j['requireCustomer'] as bool? ?? state.requireCustomer,
+        lowStockAlerts: j['lowStockAlerts'] as bool? ?? state.lowStockAlerts,
+        dailySummary: j['dailySummary'] as bool? ?? state.dailySummary,
+        currency: j['currency'] as String? ?? state.currency,
+      );
+    } catch (_) {
+      // keep defaults on error
+    }
+  }
+
+  Future<void> update(SalonSettings s) async {
+    state = s;
+    try {
+      await _repo.update({
+        'salonName': s.salonName,
+        'address': s.address,
+        'phone': s.phone,
+        'fonepayId': s.fonepayId,
+        'receiptFooter': s.receiptFooter,
+        'autoPrintReceipt': s.autoPrintReceipt,
+        'requireCustomer': s.requireCustomer,
+        'lowStockAlerts': s.lowStockAlerts,
+        'dailySummary': s.dailySummary,
+        'currency': s.currency,
+      });
+    } catch (_) {
+      // ignore save errors silently; state already updated locally
+    }
+  }
 }
 
 final salonSettingsProvider =
     StateNotifierProvider<_SettingsNotifier, SalonSettings>(
-  (_) => _SettingsNotifier(),
+  (ref) => _SettingsNotifier(ref.read(_settingsRepoProvider)),
 );
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
@@ -94,7 +143,7 @@ class SettingsScreen extends ConsumerWidget {
             keyboardType: keyboard,
             decoration: InputDecoration(
               filled: true,
-              fillColor: const Color(0xFFF9FAFB),
+              fillColor: AppColors.background,
               border: OutlineInputBorder(
                 borderSide: BorderSide.none,
                 borderRadius: BorderRadius.circular(10),
@@ -105,7 +154,7 @@ class SettingsScreen extends ConsumerWidget {
             TextButton(
               onPressed: () => Navigator.pop(ctx),
               child: const Text('Cancel',
-                  style: TextStyle(color: Color(0xFF6B7280))),
+                  style: TextStyle(color: AppColors.textSecondary)),
             ),
             TextButton(
               onPressed: () {
@@ -122,7 +171,7 @@ class SettingsScreen extends ConsumerWidget {
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF9FAFB),
+      backgroundColor: AppColors.background,
       body: SafeArea(
         child: Column(children: [
           // Header
@@ -194,7 +243,7 @@ class SettingsScreen extends ConsumerWidget {
                         ? 'Not configured'
                         : settings.fonepayId,
                     valueColor: settings.fonepayId.isEmpty
-                        ? const Color(0xFFDC2626)
+                        ? AppColors.danger
                         : null,
                     onTap: () => edit(
                       'Fonepay Merchant ID',
@@ -306,12 +355,12 @@ class SettingsScreen extends ConsumerWidget {
         title: const Text('Sign out?',
             style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
         content: const Text('You will be returned to the login screen.',
-            style: TextStyle(fontSize: 14, color: Color(0xFF6B7280))),
+            style: TextStyle(fontSize: 14, color: AppColors.textSecondary)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
             child: const Text('Cancel',
-                style: TextStyle(color: Color(0xFF6B7280))),
+                style: TextStyle(color: AppColors.textSecondary)),
           ),
           TextButton(
             onPressed: () {
@@ -320,7 +369,7 @@ class SettingsScreen extends ConsumerWidget {
             },
             child: const Text('Sign Out',
                 style: TextStyle(
-                    color: Color(0xFFDC2626),
+                    color: AppColors.danger,
                     fontWeight: FontWeight.w600)),
           ),
         ],
@@ -343,7 +392,7 @@ class _ProfileCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
+        border: Border.all(color: AppColors.divider),
       ),
       child: Row(children: [
         CircleAvatar(
@@ -364,15 +413,15 @@ class _ProfileCard extends StatelessWidget {
             const SizedBox(height: 2),
             Text(user.email,
                 style: const TextStyle(
-                    fontSize: 13, color: Color(0xFF6B7280))),
+                    fontSize: 13, color: AppColors.textSecondary)),
           ]),
         ),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
           decoration: BoxDecoration(
             color: user.isOwner
-                ? const Color(0xFFF3E8FF)
-                : const Color(0xFFE0F2FE),
+                ? AppColors.primaryLight
+                : AppColors.primaryLight,
             borderRadius: BorderRadius.circular(20),
           ),
           child: Text(
@@ -381,8 +430,8 @@ class _ProfileCard extends StatelessWidget {
               fontSize: 12,
               fontWeight: FontWeight.w600,
               color: user.isOwner
-                  ? const Color(0xFF7C3AED)
-                  : const Color(0xFF0369A1),
+                  ? AppColors.primaryDark
+                  : AppColors.primaryDark,
             ),
           ),
         ),
@@ -408,14 +457,14 @@ class _Section extends StatelessWidget {
                 style: const TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
-                    color: Color(0xFF6B7280),
+                    color: AppColors.textSecondary,
                     letterSpacing: 0.8)),
           ),
           Container(
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFFE5E7EB)),
+              border: Border.all(color: AppColors.divider),
             ),
             child: Column(
               children: tiles.asMap().entries.map((e) => Column(children: [
@@ -424,7 +473,7 @@ class _Section extends StatelessWidget {
                       const Divider(
                           height: 1,
                           indent: 50,
-                          color: Color(0xFFF3F4F6)),
+                          color: AppColors.surfaceVariant),
                   ])).toList(),
             ),
           ),
@@ -455,7 +504,7 @@ class _EditTile extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           child: Row(children: [
-            Icon(icon, size: 20, color: const Color(0xFF6B7280)),
+            Icon(icon, size: 20, color: AppColors.textSecondary),
             const SizedBox(width: 14),
             Expanded(
                 child: Text(label,
@@ -463,10 +512,10 @@ class _EditTile extends StatelessWidget {
             Text(value,
                 style: TextStyle(
                     fontSize: 14,
-                    color: valueColor ?? const Color(0xFF9CA3AF))),
+                    color: valueColor ?? AppColors.textTertiary)),
             const SizedBox(width: 6),
             const Icon(Icons.chevron_right,
-                size: 16, color: Color(0xFFD1D5DB)),
+                size: 16, color: AppColors.border),
           ]),
         ),
       );
@@ -490,7 +539,7 @@ class _ToggleTile extends StatelessWidget {
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Row(children: [
-          Icon(icon, size: 20, color: const Color(0xFF6B7280)),
+          Icon(icon, size: 20, color: AppColors.textSecondary),
           const SizedBox(width: 14),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -498,7 +547,7 @@ class _ToggleTile extends StatelessWidget {
               const SizedBox(height: 1),
               Text(subtitle,
                   style: const TextStyle(
-                      fontSize: 12, color: Color(0xFF9CA3AF))),
+                      fontSize: 12, color: AppColors.textTertiary)),
             ]),
           ),
           Switch.adaptive(
@@ -525,14 +574,14 @@ class _InfoTile extends StatelessWidget {
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Row(children: [
-          Icon(icon, size: 20, color: const Color(0xFF6B7280)),
+          Icon(icon, size: 20, color: AppColors.textSecondary),
           const SizedBox(width: 14),
           Expanded(
               child: Text(label,
                   style: const TextStyle(fontSize: 15))),
           Text(value,
               style: const TextStyle(
-                  fontSize: 14, color: Color(0xFF9CA3AF))),
+                  fontSize: 14, color: AppColors.textTertiary)),
         ]),
       );
 }
@@ -554,13 +603,13 @@ class _NavTile extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           child: Row(children: [
-            Icon(icon, size: 20, color: const Color(0xFF6B7280)),
+            Icon(icon, size: 20, color: AppColors.textSecondary),
             const SizedBox(width: 14),
             Expanded(
                 child: Text(label,
                     style: const TextStyle(fontSize: 15))),
             const Icon(Icons.chevron_right,
-                size: 16, color: Color(0xFFD1D5DB)),
+                size: 16, color: AppColors.border),
           ]),
         ),
       );
@@ -584,15 +633,15 @@ class _DangerTile extends StatelessWidget {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFFE5E7EB)),
+            border: Border.all(color: AppColors.divider),
           ),
           child: Row(children: [
-            Icon(icon, size: 20, color: const Color(0xFFDC2626)),
+            Icon(icon, size: 20, color: AppColors.danger),
             const SizedBox(width: 14),
             Text(label,
                 style: const TextStyle(
                     fontSize: 15,
-                    color: Color(0xFFDC2626),
+                    color: AppColors.danger,
                     fontWeight: FontWeight.w500)),
           ]),
         ),

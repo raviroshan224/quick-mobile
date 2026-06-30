@@ -4,8 +4,15 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/network/api_client.dart';
+import '../../../transactions/data/transactions_repository.dart';
+import '../../../transactions/presentation/providers/transactions_provider.dart';
 import '../../domain/pos_models.dart';
 import '../providers/cart_provider.dart';
+
+final _transactionsRepoProvider = Provider<TransactionsRepository>(
+  (ref) => TransactionsRepository(ref.read(apiClientProvider)),
+);
 
 class CheckoutSheet extends HookConsumerWidget {
   const CheckoutSheet({super.key});
@@ -138,7 +145,8 @@ class CheckoutSheet extends HookConsumerWidget {
                   onPressed: isProcessing.value
                       ? null
                       : () => _confirm(
-                          context, ref, method.value, isProcessing),
+                          context, ref, method.value, isProcessing,
+                          splitCash, splitFonepay),
                   style: FilledButton.styleFrom(
                     backgroundColor: AppColors.primary,
                     padding: const EdgeInsets.symmetric(
@@ -167,14 +175,48 @@ class CheckoutSheet extends HookConsumerWidget {
     );
   }
 
-  Future<void> _confirm(BuildContext context, WidgetRef ref,
-      PaymentMethod method, ValueNotifier<bool> isProcessing) async {
+  Future<void> _confirm(
+    BuildContext context,
+    WidgetRef ref,
+    PaymentMethod method,
+    ValueNotifier<bool> isProcessing,
+    TextEditingController splitCash,
+    TextEditingController splitFonepay,
+  ) async {
     isProcessing.value = true;
-    await Future.delayed(const Duration(milliseconds: 800));
-    ref.read(cartProvider.notifier).clear();
-    if (context.mounted) {
-      Navigator.pop(context); // close sheet
-      context.go(AppRoutes.posReceipt);
+    try {
+      final cart = ref.read(cartProvider);
+      final repo = ref.read(_transactionsRepoProvider);
+      final result = await repo.checkout(
+        cart: cart,
+        paymentMethod: method,
+        splitCash: method == PaymentMethod.split
+            ? double.tryParse(splitCash.text)
+            : null,
+        splitFonepay: method == PaymentMethod.split
+            ? double.tryParse(splitFonepay.text)
+            : null,
+      );
+      final txId = result['id'] as String?;
+      if (txId != null) {
+        ref.read(lastTransactionIdProvider.notifier).state = txId;
+      }
+      ref.read(cartProvider.notifier).clear();
+      if (context.mounted) {
+        Navigator.pop(context);
+        context.go(AppRoutes.posReceipt);
+      }
+    } catch (e) {
+      isProcessing.value = false;
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString()),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     }
   }
 }

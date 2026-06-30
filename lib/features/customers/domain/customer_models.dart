@@ -30,6 +30,18 @@ class CustomerModel {
     return '$f$l'.toUpperCase();
   }
 
+  factory CustomerModel.fromJson(Map<String, dynamic> j) => CustomerModel(
+        id: j['id'] as String,
+        firstName: j['firstName'] as String? ?? '',
+        lastName: j['lastName'] as String? ?? '',
+        email: j['email'] as String?,
+        phone: j['phone'] as String?,
+        notes: j['notes'] as String?,
+        photoUrl: j['photoUrl'] as String?,
+        visitCount: j['visitCount'] as int? ?? 0,
+        totalSpent: (j['totalSpent'] as num?)?.toDouble() ?? 0.0,
+      );
+
   String get lastVisitLabel {
     if (lastVisitDate == null) return 'Never';
     final diff = DateTime.now().difference(lastVisitDate!);

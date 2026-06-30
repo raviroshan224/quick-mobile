@@ -4,6 +4,7 @@ class StaffModel {
     required this.userId,
     required this.firstName,
     required this.lastName,
+    this.email,
     this.phone,
     this.specialties = const [],
     this.commissionRate,
@@ -13,6 +14,7 @@ class StaffModel {
 
   final String id;
   final String userId;
+  final String? email;
   final String firstName;
   final String lastName;
   final String? phone;
@@ -20,6 +22,22 @@ class StaffModel {
   final double? commissionRate;
   final String? photoUrl;
   final bool isActive;
+
+  factory StaffModel.fromJson(Map<String, dynamic> j) {
+    final user = j['user'] as Map<String, dynamic>?;
+    return StaffModel(
+      id: j['id'] as String,
+      userId: j['userId'] as String,
+      email: user?['email'] as String?,
+      firstName: user?['firstName'] as String? ?? j['firstName'] as String? ?? '',
+      lastName: user?['lastName'] as String? ?? j['lastName'] as String? ?? '',
+      phone: j['phone'] as String?,
+      specialties: (j['specialties'] as List<dynamic>?)?.cast<String>() ?? [],
+      commissionRate: (j['commissionRate'] as num?)?.toDouble(),
+      photoUrl: j['photoUrl'] as String?,
+      isActive: j['isActive'] as bool? ?? true,
+    );
+  }
 
   String get fullName => '$firstName $lastName';
   String get initials {
@@ -32,7 +50,7 @@ class StaffModel {
     String? firstName, String? lastName, String? phone,
     List<String>? specialties, double? commissionRate, String? photoUrl, bool? isActive,
   }) => StaffModel(
-        id: id, userId: userId,
+        id: id, userId: userId, email: email,
         firstName: firstName ?? this.firstName, lastName: lastName ?? this.lastName,
         phone: phone ?? this.phone, specialties: specialties ?? this.specialties,
         commissionRate: commissionRate ?? this.commissionRate,

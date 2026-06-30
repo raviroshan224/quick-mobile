@@ -4,6 +4,12 @@ class ServiceCategory {
   final String name;
   final bool isActive;
 
+  factory ServiceCategory.fromJson(Map<String, dynamic> j) => ServiceCategory(
+        id: j['id'] as String,
+        name: j['name'] as String,
+        isActive: j['isActive'] as bool? ?? true,
+      );
+
   ServiceCategory copyWith({String? name, bool? isActive}) =>
       ServiceCategory(id: id, name: name ?? this.name, isActive: isActive ?? this.isActive);
 }
@@ -28,6 +34,20 @@ class ServiceModel {
   final ServiceCategory? category;
   final String? iconUrl;
   final bool isActive;
+
+  factory ServiceModel.fromJson(Map<String, dynamic> j) {
+    final cat = j['category'] as Map<String, dynamic>?;
+    return ServiceModel(
+      id: j['id'] as String,
+      name: j['name'] as String,
+      price: (j['price'] as num).toDouble(),
+      duration: j['duration'] as int? ?? 30,
+      description: j['description'] as String?,
+      category: cat != null ? ServiceCategory.fromJson(cat) : null,
+      iconUrl: j['iconUrl'] as String?,
+      isActive: j['isActive'] as bool? ?? true,
+    );
+  }
 
   String get durationLabel => duration >= 60 ? '${duration ~/ 60}h ${duration % 60 > 0 ? '${duration % 60}m' : ''}' : '${duration}m';
   String get priceLabel => 'NPR ${price.toStringAsFixed(0)}';

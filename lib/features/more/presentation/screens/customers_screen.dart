@@ -2,17 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_constants.dart';
-import '../../../../features/customers/data/mock_customers_repository.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../../../../features/customers/domain/customer_models.dart';
+import '../../../../features/customers/presentation/providers/customers_provider.dart';
 
 // ── Providers ─────────────────────────────────────────────────────────────────
 
-final _customerSearchQueryProvider = StateProvider<String>((ref) => '');
+final _customerSearchQueryProvider = customerSearchQueryProvider;
 
-final _customersProvider =
-    FutureProvider.family<List<CustomerModel>, String>((ref, query) {
-  return MockCustomersRepository().getAll(query: query.isEmpty ? null : query);
-});
+final _customersProvider = FutureProvider.family<List<CustomerModel>, String>(
+  (ref, query) => ref.watch(customersRepoProvider).getAll(query: query.isEmpty ? null : query),
+);
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 
@@ -38,7 +38,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
     final customersAsync = ref.watch(_customersProvider(query));
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF9FAFB),
+      backgroundColor: AppColors.background,
       body: SafeArea(
         child: Column(
           children: [
@@ -82,13 +82,13 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                 decoration: InputDecoration(
                   hintText: 'Search by name, phone or email…',
                   hintStyle: const TextStyle(
-                      color: Color(0xFF9CA3AF), fontSize: 14),
+                      color: AppColors.textTertiary, fontSize: 14),
                   prefixIcon: const Icon(Icons.search,
-                      size: 18, color: Color(0xFF9CA3AF)),
+                      size: 18, color: AppColors.textTertiary),
                   suffixIcon: _searchCtrl.text.isNotEmpty
                       ? IconButton(
                           icon: const Icon(Icons.close,
-                              size: 16, color: Color(0xFF9CA3AF)),
+                              size: 16, color: AppColors.textTertiary),
                           onPressed: () {
                             _searchCtrl.clear();
                             ref
@@ -102,12 +102,12 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                   fillColor: Colors.white,
                   border: OutlineInputBorder(
                     borderSide:
-                        const BorderSide(color: Color(0xFFE5E7EB)),
+                        const BorderSide(color: AppColors.divider),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderSide:
-                        const BorderSide(color: Color(0xFFE5E7EB)),
+                        const BorderSide(color: AppColors.divider),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   focusedBorder: OutlineInputBorder(
@@ -121,7 +121,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
             ),
 
             const SizedBox(height: 10),
-            const Divider(height: 1, color: Color(0xFFE5E7EB)),
+            const Divider(height: 1, color: AppColors.divider),
 
             // ── Body ──────────────────────────────────────────────────────
             Expanded(
@@ -132,7 +132,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                 error: (e, _) => Center(
                     child: Text('Error: $e',
                         style: const TextStyle(
-                            color: Color(0xFF6B7280)))),
+                            color: AppColors.textSecondary))),
                 data: (customers) {
                   if (customers.isEmpty) {
                     return _EmptyState(
@@ -185,7 +185,7 @@ class _CustomerSectionedList extends StatelessWidget {
           child: Text(
             '$total customer${total == 1 ? '' : 's'}',
             style: const TextStyle(
-                fontSize: 12, color: Color(0xFF6B7280)),
+                fontSize: 12, color: AppColors.textSecondary),
           ),
         ),
         Expanded(
@@ -232,14 +232,14 @@ class _SectionHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: const Color(0xFFF9FAFB),
+      color: AppColors.background,
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
       child: Text(
         letter,
         style: const TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.w600,
-          color: Color(0xFF6B7280),
+          color: AppColors.textSecondary,
           letterSpacing: 0.8,
         ),
       ),
@@ -310,7 +310,7 @@ class _CustomerTile extends StatelessWidget {
                             subtitle,
                             style: const TextStyle(
                                 fontSize: 12,
-                                color: Color(0xFF6B7280)),
+                                color: AppColors.textSecondary),
                           ),
                         ],
                       ],
@@ -325,20 +325,20 @@ class _CustomerTile extends StatelessWidget {
                         style: const TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w500,
-                            color: Color(0xFF374151)),
+                            color: AppColors.textSecondary),
                       ),
                       const SizedBox(height: 2),
                       Text(
                         'NPR ${_formatAmount(customer.totalSpent)}',
                         style: const TextStyle(
                             fontSize: 11,
-                            color: Color(0xFF6B7280)),
+                            color: AppColors.textSecondary),
                       ),
                     ],
                   ),
                   const SizedBox(width: 6),
                   const Icon(Icons.chevron_right,
-                      size: 16, color: Color(0xFF9CA3AF)),
+                      size: 16, color: AppColors.textTertiary),
                 ],
               ),
             ),
@@ -348,7 +348,7 @@ class _CustomerTile extends StatelessWidget {
           const Divider(
             height: 1,
             indent: 70,
-            color: Color(0xFFF3F4F6),
+            color: AppColors.surfaceVariant,
           ),
       ],
     );
@@ -381,11 +381,11 @@ class _EmptyState extends StatelessWidget {
               width: 72,
               height: 72,
               decoration: BoxDecoration(
-                color: const Color(0xFFF3F4F6),
+                color: AppColors.surfaceVariant,
                 borderRadius: BorderRadius.circular(36),
               ),
               child: const Icon(Icons.people_outline_rounded,
-                  size: 34, color: Color(0xFF9CA3AF)),
+                  size: 34, color: AppColors.textTertiary),
             ),
             const SizedBox(height: 18),
             Text(
@@ -400,7 +400,7 @@ class _EmptyState extends StatelessWidget {
                   : 'Add customers to track visits,\nspend and notes.',
               textAlign: TextAlign.center,
               style: const TextStyle(
-                  fontSize: 14, color: Color(0xFF6B7280)),
+                  fontSize: 14, color: AppColors.textSecondary),
             ),
             if (!hasQuery) ...[
               const SizedBox(height: 22),

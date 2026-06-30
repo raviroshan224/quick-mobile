@@ -227,16 +227,16 @@ class _ServiceRow extends StatelessWidget {
 
   Color _categoryColor(String cat) {
     const map = {
-      'Hair': Color(0xFF5856D6),
-      'Color': Color(0xFFFF2D55),
-      'Facial': Color(0xFF34AADC),
-      'Spa': Color(0xFF4CD964),
-      'Nails': Color(0xFFFF9500),
-      'Massage': Color(0xFF007AFF),
-      'Wax': Color(0xFFFF3B30),
-      'Other': Color(0xFF8E8E93),
+      'Hair': AppColors.primary,
+      'Color': AppColors.primaryDark,
+      'Facial': AppColors.primary,
+      'Spa': AppColors.success,
+      'Nails': AppColors.warning,
+      'Massage': AppColors.primary,
+      'Wax': AppColors.danger,
+      'Other': AppColors.textTertiary,
     };
-    return map[cat] ?? const Color(0xFF8E8E93);
+    return map[cat] ?? AppColors.textTertiary;
   }
 
   @override
@@ -296,14 +296,14 @@ class _ServiceRow extends StatelessWidget {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFFF9500).withValues(alpha: 0.12),
+                            color: AppColors.warning.withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: const Text('TOP',
                               style: TextStyle(
                                   fontSize: 9,
                                   fontWeight: FontWeight.w700,
-                                  color: Color(0xFFCC7700),
+                                  color: AppColors.warning,
                                   letterSpacing: 0.5)),
                         ),
                       if (!service.isActive)

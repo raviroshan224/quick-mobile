@@ -2,21 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_constants.dart';
-import '../../../../features/services/data/mock_services_repository.dart';
-import '../../../../features/inventory/data/mock_inventory_repository.dart';
-import '../../../../features/customers/data/mock_customers_repository.dart';
-
-// ─── Async counts ─────────────────────────────────────────────────────────────
-
-final _serviceCountProvider = FutureProvider<int>(
-  (_) async => (await MockServicesRepository().getServices()).length,
-);
-final _itemCountProvider = FutureProvider<int>(
-  (_) async => (await MockInventoryRepository().getAll()).length,
-);
-final _customerCountProvider = FutureProvider<int>(
-  (_) async => (await MockCustomersRepository().getAll()).length,
-);
+import '../../../../core/theme/app_theme.dart';
+import '../../../../features/services/presentation/providers/services_provider.dart';
+import '../../../../features/inventory/presentation/providers/inventory_provider.dart';
+import '../../../../features/customers/presentation/providers/customers_provider.dart';
 
 // Tracks which optional steps the user has manually marked done.
 final _dismissedProvider = StateProvider<Set<int>>((_) => {});
@@ -28,9 +17,9 @@ class SetupGuideScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final serviceCount = ref.watch(_serviceCountProvider).valueOrNull ?? 0;
-    final itemCount = ref.watch(_itemCountProvider).valueOrNull ?? 0;
-    final customerCount = ref.watch(_customerCountProvider).valueOrNull ?? 0;
+    final serviceCount = ref.watch(servicesListProvider).valueOrNull?.length ?? 0;
+    final itemCount = ref.watch(productsProvider).valueOrNull?.length ?? 0;
+    final customerCount = ref.watch(customersProvider).valueOrNull?.length ?? 0;
     final dismissed = ref.watch(_dismissedProvider);
 
     final steps = _buildSteps(
@@ -93,18 +82,18 @@ class SetupGuideScreen extends ConsumerWidget {
                       minHeight: 6,
                       backgroundColor: Colors.white.withValues(alpha: 0.18),
                       valueColor: const AlwaysStoppedAnimation<Color>(
-                          Color(0xFF4ADE80)),
+                          AppColors.success),
                     ),
                   ),
                   const SizedBox(height: 8),
                   doneCount == total
                       ? const Row(children: [
                           Icon(Icons.check_circle_rounded,
-                              size: 14, color: Color(0xFF4ADE80)),
+                              size: 14, color: AppColors.success),
                           SizedBox(width: 6),
                           Text('All done — you\'re ready to go!',
                               style: TextStyle(
-                                  color: Color(0xFF4ADE80),
+                                  color: AppColors.success,
                                   fontSize: 12,
                                   fontWeight: FontWeight.w600)),
                         ])
@@ -149,7 +138,7 @@ class SetupGuideScreen extends ConsumerWidget {
     return [
       _GuideStep(
         icon: Icons.person_rounded,
-        iconColor: const Color(0xFF6366F1),
+        iconColor: AppColors.primary,
         title: 'Create your account',
         description: 'Sign in to start managing your salon.',
         done: true,
@@ -157,7 +146,7 @@ class SetupGuideScreen extends ConsumerWidget {
       ),
       _GuideStep(
         icon: Icons.spa_outlined,
-        iconColor: const Color(0xFF0EA5E9),
+        iconColor: AppColors.primary,
         title: 'Add your services',
         description: serviceCount > 0
             ? '$serviceCount services ready — Hair, Nails, Skin, Makeup & Massage.'
@@ -194,18 +183,18 @@ class SetupGuideScreen extends ConsumerWidget {
       ),
       _GuideStep(
         icon: Icons.local_offer_outlined,
-        iconColor: const Color(0xFFEC4899),
+        iconColor: AppColors.textSecondary,
         title: 'Create a discount',
         description: 'Offer percentage or fixed discounts on services and items.',
         done: dismissed.contains(4),
         autoComplete: false,
         actionLabel: 'Set Up Discounts',
-        onAction: () {},
+        onAction: () => context.go(AppRoutes.moreDiscounts),
         skippable: true,
       ),
       _GuideStep(
         icon: Icons.point_of_sale_outlined,
-        iconColor: const Color(0xFF8B5CF6),
+        iconColor: AppColors.primary,
         title: 'Open your cash drawer',
         description: 'Record your opening float before the first sale of the day.',
         done: dismissed.contains(5),
@@ -267,12 +256,12 @@ class _StepCard extends StatelessWidget {
       duration: const Duration(milliseconds: 300),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: step.done ? const Color(0xFFF9FAFB) : Colors.white,
+        color: step.done ? AppColors.background : Colors.white,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: step.done
-              ? const Color(0xFFE5E7EB)
-              : const Color(0xFFD1D5DB),
+              ? AppColors.divider
+              : AppColors.border,
         ),
       ),
       child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -301,10 +290,10 @@ class _StepCard extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
-                    color: step.done ? const Color(0xFF9CA3AF) : Colors.black,
+                    color: step.done ? AppColors.textTertiary : Colors.black,
                     decoration:
                         step.done ? TextDecoration.lineThrough : null,
-                    decorationColor: const Color(0xFF9CA3AF),
+                    decorationColor: AppColors.textTertiary,
                   ),
                 ),
               ),
@@ -324,7 +313,7 @@ class _StepCard extends StatelessWidget {
             ]),
             const SizedBox(height: 3),
             Text(step.description,
-                style: const TextStyle(fontSize: 13, color: Color(0xFF6B7280))),
+                style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
             if (!step.done) ...[
               const SizedBox(height: 12),
               Row(children: [
@@ -352,9 +341,9 @@ class _StepCard extends StatelessWidget {
                     child: const Text('Mark done',
                         style: TextStyle(
                             fontSize: 13,
-                            color: Color(0xFF9CA3AF),
+                            color: AppColors.textTertiary,
                             decoration: TextDecoration.underline,
-                            decorationColor: Color(0xFF9CA3AF))),
+                            decorationColor: AppColors.textTertiary)),
                   ),
                 ],
               ]),

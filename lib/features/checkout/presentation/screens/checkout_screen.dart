@@ -2,28 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:go_router/go_router.dart';
-import '../../../../core/constants/app_constants.dart';
 import '../../../../features/pos/domain/pos_models.dart';
 import '../../../../features/pos/presentation/providers/cart_provider.dart';
-import '../../../../features/services/data/mock_services_repository.dart';
 import '../../../../features/services/domain/service_models.dart';
+import '../../../../features/services/presentation/providers/services_provider.dart';
+import '../../../../core/theme/app_theme.dart';
 import 'review_sale_sheet.dart';
 import 'calendar_tab.dart';
-import '../../../../features/discounts/widgets/discount_picker_sheet.dart';
-import '../../../../features/discounts/providers/discounts_provider.dart';
 
-// ─── Services data provider ───────────────────────────────────────────────────
-
-final _checkoutServicesProvider = FutureProvider<List<ServiceModel>>((ref) {
-  return MockServicesRepository().getServices();
-});
-
-final _checkoutCategoriesProvider = FutureProvider<List<ServiceCategory>>((
-  ref,
-) {
-  return MockServicesRepository().getCategories();
-});
+// Aliases so _ServicesView doesn't need to know real provider names.
+final _checkoutServicesProvider = activeServicesProvider;
+final _checkoutCategoriesProvider = serviceCategoriesListProvider;
 
 // ─── Root screen ─────────────────────────────────────────────────────────────
 
@@ -70,7 +59,7 @@ class _SegmentedHeader extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: const BoxDecoration(
         border: Border(
-          bottom: BorderSide(color: Color(0xFFE5E7EB), width: 0.5),
+          bottom: BorderSide(color: AppColors.divider, width: 0.5),
         ),
       ),
       child: Row(
@@ -122,14 +111,14 @@ class _SegTab extends StatelessWidget {
         duration: const Duration(milliseconds: 150),
         height: 34,
         decoration: BoxDecoration(
-          color: active ? Colors.black : const Color(0xFFF3F4F6),
+          color: active ? Colors.black : AppColors.surfaceVariant,
           borderRadius: BorderRadius.circular(8),
         ),
         child: Center(
           child: Text(
             label,
             style: TextStyle(
-              color: active ? Colors.white : const Color(0xFF6B7280),
+              color: active ? Colors.white : AppColors.textSecondary,
               fontSize: 13,
               fontWeight: FontWeight.w500,
             ),
@@ -288,12 +277,12 @@ class _NoteButton extends ConsumerWidget {
       child: const Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.add, size: 14, color: Color(0xFF6B7280)),
+          Icon(Icons.add, size: 14, color: AppColors.textSecondary),
           SizedBox(width: 4),
           Text(
             'Note',
             style: TextStyle(
-              color: Color(0xFF6B7280),
+              color: AppColors.textSecondary,
               fontSize: 14,
               fontWeight: FontWeight.w400,
             ),
@@ -335,7 +324,7 @@ class _NoteSheet extends HookConsumerWidget {
             height: 4,
             margin: const EdgeInsets.symmetric(vertical: 12),
             decoration: BoxDecoration(
-              color: const Color(0xFFE5E7EB),
+              color: AppColors.divider,
               borderRadius: BorderRadius.circular(2),
             ),
           ),
@@ -377,7 +366,7 @@ class _NoteSheet extends HookConsumerWidget {
                 const SizedBox(height: 20),
                 const Text(
                   'Note',
-                  style: TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
+                  style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
                 ),
                 const SizedBox(height: 8),
                 TextField(
@@ -386,22 +375,22 @@ class _NoteSheet extends HookConsumerWidget {
                   maxLength: 500,
                   decoration: const InputDecoration(
                     border: OutlineInputBorder(
-                      borderSide: BorderSide(color: Color(0xFFE5E7EB)),
+                      borderSide: BorderSide(color: AppColors.divider),
                     ),
                     enabledBorder: OutlineInputBorder(
-                      borderSide: BorderSide(color: Color(0xFFE5E7EB)),
+                      borderSide: BorderSide(color: AppColors.divider),
                     ),
                     contentPadding: EdgeInsets.all(12),
                     counterStyle: TextStyle(
                       fontSize: 11,
-                      color: Color(0xFF9CA3AF),
+                      color: AppColors.textTertiary,
                     ),
                   ),
                 ),
                 const SizedBox(height: 16),
                 const Text(
                   'Quick add',
-                  style: TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
+                  style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
                 ),
                 const SizedBox(height: 8),
                 Wrap(
@@ -420,7 +409,7 @@ class _NoteSheet extends HookConsumerWidget {
                               vertical: 6,
                             ),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFF3F4F6),
+                              color: AppColors.surfaceVariant,
                               borderRadius: BorderRadius.circular(20),
                             ),
                             child: Text(
@@ -461,7 +450,7 @@ class _ChargeButton extends StatelessWidget {
         width: double.infinity,
         height: 52,
         decoration: BoxDecoration(
-          color: enabled ? Colors.black : const Color(0xFFD1D5DB),
+          color: enabled ? Colors.black : AppColors.border,
           borderRadius: BorderRadius.circular(26),
         ),
         child: Center(
@@ -470,254 +459,10 @@ class _ChargeButton extends StatelessWidget {
                 ? 'Charge NPR ${amount.toStringAsFixed(2)}'
                 : 'Charge NPR 0.00',
             style: TextStyle(
-              color: enabled ? Colors.white : const Color(0xFF9CA3AF),
+              color: enabled ? Colors.white : AppColors.textTertiary,
               fontSize: 16,
               fontWeight: FontWeight.w500,
             ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ─── Library View ─────────────────────────────────────────────────────────────
-
-class _LibraryView extends HookConsumerWidget {
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final searchCtrl = useTextEditingController();
-    final searchQ = useState('');
-    final cart = ref.watch(cartProvider);
-    final appliedDiscount = ref.watch(checkoutDiscountProvider);
-
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-          child: TextField(
-            controller: searchCtrl,
-            onChanged: (v) => searchQ.value = v,
-            decoration: InputDecoration(
-              hintText: 'Search',
-              hintStyle: const TextStyle(
-                color: Color(0xFF9CA3AF),
-                fontSize: 15,
-              ),
-              prefixIcon: const Icon(
-                Icons.search,
-                size: 18,
-                color: Color(0xFF9CA3AF),
-              ),
-              filled: true,
-              fillColor: const Color(0xFFF3F4F6),
-              border: OutlineInputBorder(
-                borderSide: BorderSide.none,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              contentPadding: const EdgeInsets.symmetric(vertical: 10),
-            ),
-          ),
-        ),
-        _LibraryRow(
-          icon: Icons.spa_outlined,
-          label: 'Services',
-          subtitle: 'Haircut, Face Wash, Massage…',
-          onTap: () => context.go(AppRoutes.moreServices),
-        ),
-        _LibraryRow(
-          icon: Icons.inventory_2_outlined,
-          label: 'Items',
-          subtitle: 'Shampoo, Scissors, Blade…',
-          onTap: () => context.go(AppRoutes.moreItems),
-        ),
-        _LibraryRow(
-          icon: Icons.local_offer_outlined,
-          label: 'Discounts',
-          subtitle: appliedDiscount != null
-              ? '${appliedDiscount.label} applied'
-              : 'Add a discount to the sale',
-          subtitleColor: appliedDiscount != null
-              ? const Color(0xFF16A34A)
-              : null,
-          onTap: () => DiscountPickerSheet.show(context),
-        ),
-        const Padding(
-          padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              'Recently Used',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: Color(0xFF6B7280),
-              ),
-            ),
-          ),
-        ),
-        Expanded(child: _RecentServicesList(query: searchQ.value)),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          child: cart.items.isEmpty
-              ? _CreateNewItemButton()
-              : _ReviewSaleButton(cart: cart),
-        ),
-      ],
-    );
-  }
-}
-
-class _LibraryRow extends StatelessWidget {
-  const _LibraryRow({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-    this.subtitle,
-    this.subtitleColor,
-  });
-  final IconData icon;
-  final String label;
-  final String? subtitle;
-  final Color? subtitleColor;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Row(
-          children: [
-            Icon(icon, size: 20, color: Colors.black87),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    label,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w400,
-                    ),
-                  ),
-                  if (subtitle != null)
-                    Text(
-                      subtitle!,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: subtitleColor ?? const Color(0xFF9CA3AF),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            const Icon(Icons.chevron_right, size: 20, color: Color(0xFF9CA3AF)),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// Recently used services (static for now)
-class _RecentServicesList extends ConsumerWidget {
-  const _RecentServicesList({required this.query});
-  final String query;
-
-  static final _recent = [
-    ServiceModel(id: 's-01', name: 'Haircut (Men)', price: 200, duration: 20),
-    ServiceModel(id: 's-18', name: 'Face Wash', price: 200, duration: 15),
-    ServiceModel(id: 's-11', name: 'Beard Trim', price: 100, duration: 10),
-  ];
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final filtered = query.isEmpty
-        ? _recent
-        : _recent
-              .where((s) => s.name.toLowerCase().contains(query.toLowerCase()))
-              .toList();
-
-    return ListView.separated(
-      padding: EdgeInsets.zero,
-      itemCount: filtered.length,
-      separatorBuilder: (_, _) =>
-          const Divider(height: 1, indent: 50, color: Color(0xFFF3F4F6)),
-      itemBuilder: (_, i) => _ServiceTile(service: filtered[i]),
-    );
-  }
-}
-
-class _ServiceTile extends ConsumerWidget {
-  const _ServiceTile({required this.service});
-  final ServiceModel service;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return InkWell(
-      onTap: () {
-        ref.read(cartProvider.notifier).addService(service);
-        HapticFeedback.selectionClick();
-      },
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Row(
-          children: [
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: const Color(0xFFF3F4F6),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: const Icon(
-                Icons.spa_outlined,
-                size: 16,
-                color: Color(0xFF6B7280),
-              ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(service.name, style: const TextStyle(fontSize: 15)),
-                  Text(
-                    service.durationLabel,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Color(0xFF9CA3AF),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Text(
-              'NPR ${service.price.toStringAsFixed(0)}',
-              style: const TextStyle(fontSize: 15, color: Color(0xFF6B7280)),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _CreateNewItemButton extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () {},
-      child: const Center(
-        child: Text(
-          'Create a new item',
-          style: TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w500,
-            color: Colors.black,
           ),
         ),
       ),
@@ -759,7 +504,7 @@ class _ReviewSaleButton extends StatelessWidget {
               ),
               Text(
                 '${cart.itemCount} item${cart.itemCount == 1 ? '' : 's'}',
-                style: const TextStyle(color: Color(0xFF9CA3AF), fontSize: 11),
+                style: const TextStyle(color: AppColors.textTertiary, fontSize: 11),
               ),
             ],
           ),
@@ -773,11 +518,11 @@ class _ReviewSaleButton extends StatelessWidget {
 
 class _ServicesView extends HookConsumerWidget {
   static const _catColors = {
-    'cat-1': Color(0xFFDBEAFE),
-    'cat-2': Color(0xFFFCE7F3),
-    'cat-3': Color(0xFFD1FAE5),
-    'cat-4': Color(0xFFEDE9FE),
-    'cat-5': Color(0xFFFFEDD5),
+    'cat-1': Color(0xFFE8EDD6), // olive-50
+    'cat-2': Color(0xFFEEEEEB), // warm grey
+    'cat-3': Color(0xFFD1FAE5), // green (keep semantic)
+    'cat-4': Color(0xFFDCE0C8), // deeper olive
+    'cat-5': Color(0xFFFFEDD5), // orange (keep warm)
   };
   static const _catIcons = {
     'cat-1': Icons.content_cut_rounded,
@@ -807,16 +552,16 @@ class _ServicesView extends HookConsumerWidget {
             decoration: InputDecoration(
               hintText: 'Search services',
               hintStyle: const TextStyle(
-                color: Color(0xFF9CA3AF),
+                color: AppColors.textTertiary,
                 fontSize: 15,
               ),
               prefixIcon: const Icon(
                 Icons.search,
                 size: 18,
-                color: Color(0xFF9CA3AF),
+                color: AppColors.textTertiary,
               ),
               filled: true,
-              fillColor: const Color(0xFFF3F4F6),
+              fillColor: AppColors.surfaceVariant,
               border: OutlineInputBorder(
                 borderSide: BorderSide.none,
                 borderRadius: BorderRadius.circular(10),
@@ -851,7 +596,7 @@ class _ServicesView extends HookConsumerWidget {
             ),
           ),
         ),
-        const Divider(height: 1, color: Color(0xFFF3F4F6)),
+        const Divider(height: 1, color: AppColors.surfaceVariant),
         // Service list
         Expanded(
           child: servicesAsync.when(
@@ -872,7 +617,7 @@ class _ServicesView extends HookConsumerWidget {
                 return const Center(
                   child: Text(
                     'No services found',
-                    style: TextStyle(color: Color(0xFF9CA3AF), fontSize: 14),
+                    style: TextStyle(color: AppColors.textTertiary, fontSize: 14),
                   ),
                 );
               }
@@ -883,14 +628,14 @@ class _ServicesView extends HookConsumerWidget {
                 separatorBuilder: (_, _) => const Divider(
                   height: 1,
                   indent: 62,
-                  color: Color(0xFFF3F4F6),
+                  color: AppColors.surfaceVariant,
                 ),
                 itemBuilder: (_, i) {
                   final s = filtered[i];
                   final catId = s.category?.id ?? '';
                   return _ServiceListTile(
                     service: s,
-                    iconBg: _catColors[catId] ?? const Color(0xFFF3F4F6),
+                    iconBg: _catColors[catId] ?? AppColors.surfaceVariant,
                     icon: _catIcons[catId] ?? Icons.spa_outlined,
                   );
                 },
@@ -928,7 +673,7 @@ class _CatChip extends StatelessWidget {
         margin: const EdgeInsets.only(right: 6),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         decoration: BoxDecoration(
-          color: selected ? Colors.black : const Color(0xFFF3F4F6),
+          color: selected ? Colors.black : AppColors.surfaceVariant,
           borderRadius: BorderRadius.circular(20),
         ),
         child: Text(
@@ -936,7 +681,7 @@ class _CatChip extends StatelessWidget {
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w500,
-            color: selected ? Colors.white : const Color(0xFF374151),
+            color: selected ? Colors.white : AppColors.textSecondary,
           ),
         ),
       ),
@@ -1002,7 +747,7 @@ class _ServiceListTile extends ConsumerWidget {
                     service.durationLabel,
                     style: const TextStyle(
                       fontSize: 12,
-                      color: Color(0xFF9CA3AF),
+                      color: AppColors.textTertiary,
                     ),
                   ),
                 ],

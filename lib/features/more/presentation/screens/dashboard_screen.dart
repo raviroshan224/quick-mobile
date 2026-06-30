@@ -2,10 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_constants.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../../../../features/auth/presentation/providers/auth_provider.dart';
-import '../../../../features/dashboard/data/mock_dashboard_repository.dart';
 import '../../../../features/dashboard/presentation/providers/dashboard_provider.dart';
-import '../../../../features/inventory/domain/inventory_models.dart';
+import '../../../../features/dashboard/models/dashboard_summary.dart';
+
+String _staffInitials(String name) {
+  final parts = name.trim().split(' ');
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return name.isEmpty ? '?' : name[0].toUpperCase();
+}
 
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
@@ -33,7 +39,7 @@ class DashboardScreen extends ConsumerWidget {
         '${weekdays[now.weekday - 1]}, ${months[now.month - 1]} ${now.day}';
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF9FAFB),
+      backgroundColor: AppColors.background,
       body: SafeArea(
         child: Column(
           children: [
@@ -71,7 +77,7 @@ class DashboardScreen extends ConsumerWidget {
                     textAlign: TextAlign.center,
                     style: const TextStyle(
                       fontSize: 14,
-                      color: Color(0xFF6B7280),
+                      color: AppColors.textSecondary,
                     ),
                   ),
                 ),
@@ -93,7 +99,7 @@ class DashboardScreen extends ConsumerWidget {
                           dateLabel,
                           style: const TextStyle(
                             fontSize: 13,
-                            color: Color(0xFF6B7280),
+                            color: AppColors.textSecondary,
                           ),
                         ),
                       ],
@@ -113,7 +119,7 @@ class DashboardScreen extends ConsumerWidget {
                           const Text(
                             "Today's Sales",
                             style: TextStyle(
-                              color: Color(0xFF9CA3AF),
+                              color: AppColors.textTertiary,
                               fontSize: 13,
                             ),
                           ),
@@ -164,7 +170,7 @@ class DashboardScreen extends ConsumerWidget {
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: const Color(0xFFE5E7EB)),
+                        border: Border.all(color: AppColors.divider),
                       ),
                       child: Column(
                         children: [
@@ -175,7 +181,7 @@ class DashboardScreen extends ConsumerWidget {
                               const Divider(
                                 height: 1,
                                 thickness: 1,
-                                color: Color(0xFFF3F4F6),
+                                color: AppColors.surfaceVariant,
                                 indent: 56,
                               ),
                             _StaffRow(
@@ -202,7 +208,7 @@ class DashboardScreen extends ConsumerWidget {
                         decoration: BoxDecoration(
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: const Color(0xFFE5E7EB)),
+                          border: Border.all(color: AppColors.divider),
                         ),
                         child: Column(
                           children: [
@@ -258,7 +264,7 @@ class DashboardScreen extends ConsumerWidget {
                                 const Divider(
                                   height: 1,
                                   thickness: 1,
-                                  color: Color(0xFFF3F4F6),
+                                  color: AppColors.surfaceVariant,
                                   indent: 16,
                                 ),
                               _LowStockRow(
@@ -284,7 +290,7 @@ class DashboardScreen extends ConsumerWidget {
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: const Color(0xFFE5E7EB)),
+                        border: Border.all(color: AppColors.divider),
                       ),
                       padding: const EdgeInsets.all(16),
                       child: Row(
@@ -295,7 +301,7 @@ class DashboardScreen extends ConsumerWidget {
                             decoration: BoxDecoration(
                               color: summary.cashDrawerOpen
                                   ? const Color(0xFFDCFCE7)
-                                  : const Color(0xFFF3F4F6),
+                                  : AppColors.surfaceVariant,
                               shape: BoxShape.circle,
                             ),
                             child: Icon(
@@ -303,7 +309,7 @@ class DashboardScreen extends ConsumerWidget {
                               size: 20,
                               color: summary.cashDrawerOpen
                                   ? const Color(0xFF16A34A)
-                                  : const Color(0xFF6B7280),
+                                  : AppColors.textSecondary,
                             ),
                           ),
                           const SizedBox(width: 14),
@@ -327,7 +333,7 @@ class DashboardScreen extends ConsumerWidget {
                                     'Balance: NPR ${_formatAmount(summary.cashDrawerBalance!)}',
                                     style: const TextStyle(
                                       fontSize: 13,
-                                      color: Color(0xFF6B7280),
+                                      color: AppColors.textSecondary,
                                     ),
                                   )
                                 else
@@ -335,7 +341,7 @@ class DashboardScreen extends ConsumerWidget {
                                     'No drawer session active',
                                     style: TextStyle(
                                       fontSize: 13,
-                                      color: Color(0xFF6B7280),
+                                      color: AppColors.textSecondary,
                                     ),
                                   ),
                               ],
@@ -348,7 +354,7 @@ class DashboardScreen extends ConsumerWidget {
                               style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w500,
-                                color: Color(0xFF2563EB),
+                                color: AppColors.primary,
                               ),
                             ),
                           ),
@@ -413,13 +419,13 @@ class _HeroChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: const Color(0xFF1F2937),
+        color: AppColors.textPrimary,
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
         label,
         style: const TextStyle(
-          color: Color(0xFFD1D5DB),
+          color: AppColors.border,
           fontSize: 12,
           fontWeight: FontWeight.w500,
         ),
@@ -457,7 +463,7 @@ class _StaffRow extends StatelessWidget {
             decoration: BoxDecoration(
               color: isTop3
                   ? rankColors[rank - 1].withValues(alpha: 0.15)
-                  : const Color(0xFFF3F4F6),
+                  : AppColors.surfaceVariant,
               shape: BoxShape.circle,
             ),
             alignment: Alignment.center,
@@ -471,7 +477,7 @@ class _StaffRow extends StatelessWidget {
                     style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: Color(0xFF6B7280),
+                      color: AppColors.textSecondary,
                     ),
                   ),
           ),
@@ -479,9 +485,9 @@ class _StaffRow extends StatelessWidget {
           // Avatar
           CircleAvatar(
             radius: 18,
-            backgroundColor: const Color(0xFFF3F4F6),
+            backgroundColor: AppColors.surfaceVariant,
             child: Text(
-              entry.staff.initials,
+              _staffInitials(entry.staffName),
               style: const TextStyle(
                 color: Colors.black,
                 fontWeight: FontWeight.w600,
@@ -496,28 +502,20 @@ class _StaffRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  entry.staff.fullName,
+                  entry.staffName,
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
                 Text(
-                  '${entry.serviceCount} service${entry.serviceCount == 1 ? '' : 's'}',
+                  'NPR ${_formatAmount(entry.totalSales)} sales',
                   style: const TextStyle(
                     fontSize: 12,
-                    color: Color(0xFF6B7280),
+                    color: AppColors.textSecondary,
                   ),
                 ),
               ],
-            ),
-          ),
-          // Sales amount
-          Text(
-            'NPR ${_formatAmount(entry.totalSales)}',
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
             ),
           ),
         ],
@@ -541,7 +539,7 @@ class _StaffRow extends StatelessWidget {
 
 class _LowStockRow extends StatelessWidget {
   const _LowStockRow({required this.product});
-  final ProductModel product;
+  final LowStockProduct product;
 
   @override
   Widget build(BuildContext context) {
@@ -564,7 +562,7 @@ class _LowStockRow extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
               color: isCritical
-                  ? const Color(0xFFFEE2E2)
+                  ? AppColors.dangerLight
                   : const Color(0xFFFEF3C7),
               borderRadius: BorderRadius.circular(20),
             ),
@@ -574,7 +572,7 @@ class _LowStockRow extends StatelessWidget {
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
                 color: isCritical
-                    ? const Color(0xFFDC2626)
+                    ? AppColors.danger
                     : const Color(0xFFD97706),
               ),
             ),

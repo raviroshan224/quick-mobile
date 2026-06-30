@@ -15,7 +15,7 @@ class EnvConfig {
 
   static void init(Flavor flavor) {
     _instance = switch (flavor) {
-      Flavor.dev => const EnvConfig._(flavor: Flavor.dev, apiBaseUrl: 'http://localhost:3000'),
+      Flavor.dev => const EnvConfig._(flavor: Flavor.dev, apiBaseUrl: 'http://192.168.1.98:3000'),
       Flavor.staging => const EnvConfig._(flavor: Flavor.staging, apiBaseUrl: 'https://api-staging.yoursalon.com'),
       Flavor.prod => const EnvConfig._(flavor: Flavor.prod, apiBaseUrl: 'https://api.yoursalon.com'),
     };

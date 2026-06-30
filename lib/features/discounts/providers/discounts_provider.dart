@@ -1,78 +1,61 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/network/api_client.dart';
+import '../data/discounts_repository.dart';
 import '../models/discount_model.dart';
 
-class DiscountsNotifier extends StateNotifier<List<Discount>> {
-  DiscountsNotifier() : super(_mockDiscounts);
+final discountsRepoProvider = Provider<DiscountsRepository>(
+  (ref) => DiscountsRepository(ref.read(apiClientProvider)),
+);
 
-  void add(Discount d) => state = [...state, d];
-
-  void update(Discount d) {
-    state = [for (final s in state) if (s.id == d.id) d else s];
+class DiscountsNotifier extends AsyncNotifier<List<Discount>> {
+  @override
+  Future<List<Discount>> build() {
+    return ref.read(discountsRepoProvider).getAll();
   }
 
-  void delete(String id) => state = state.where((d) => d.id != id).toList();
+  Future<void> createDiscount({
+    required String name,
+    required DiscountType type,
+    required double value,
+    bool isActive = true,
+  }) async {
+    await ref.read(discountsRepoProvider).create(
+          name: name,
+          type: type,
+          value: value,
+          isActive: isActive,
+        );
+    ref.invalidateSelf();
+  }
+
+  Future<void> updateDiscount(
+    String id, {
+    String? name,
+    DiscountType? type,
+    double? value,
+    bool? isActive,
+  }) async {
+    await ref.read(discountsRepoProvider).update(
+          id,
+          name: name,
+          type: type,
+          value: value,
+          isActive: isActive,
+        );
+    ref.invalidateSelf();
+  }
+
+  Future<void> deleteDiscount(String id) async {
+    await ref.read(discountsRepoProvider).delete(id);
+    ref.invalidateSelf();
+  }
 }
 
 final discountsProvider =
-    StateNotifierProvider<DiscountsNotifier, List<Discount>>(
-  (_) => DiscountsNotifier(),
+    AsyncNotifierProvider<DiscountsNotifier, List<Discount>>(
+  DiscountsNotifier.new,
 );
 
 /// The discount currently applied to the active checkout.
 /// Reset to null when the cart is cleared.
 final checkoutDiscountProvider = StateProvider<Discount?>((ref) => null);
-
-final _mockDiscounts = [
-  const Discount(
-    id: '1',
-    name: '10% Off',
-    type: DiscountType.percentage,
-    value: 10,
-    isActive: true,
-    scope: DiscountScope.all,
-  ),
-  const Discount(
-    id: '2',
-    name: 'Flat Rs. 100 Off',
-    type: DiscountType.fixed,
-    value: 100,
-    isActive: true,
-    scope: DiscountScope.all,
-  ),
-  const Discount(
-    id: '3',
-    name: 'Happy Hour – Hair 15%',
-    type: DiscountType.percentage,
-    value: 15,
-    isActive: true,
-    scope: DiscountScope.category,
-    categoryName: 'Hair',
-  ),
-  const Discount(
-    id: '4',
-    name: 'Facial Special 20%',
-    type: DiscountType.percentage,
-    value: 20,
-    isActive: true,
-    scope: DiscountScope.category,
-    categoryName: 'Facial',
-  ),
-  const Discount(
-    id: '5',
-    name: 'Free Manicure Add-on',
-    type: DiscountType.fixed,
-    value: 600,
-    isActive: true,
-    scope: DiscountScope.service,
-    serviceId: '5',
-    serviceName: 'Manicure',
-  ),
-  const Discount(
-    id: '6',
-    name: 'Student 20%',
-    type: DiscountType.percentage,
-    value: 20,
-    isActive: false,
-    scope: DiscountScope.all,
-  ),
-];

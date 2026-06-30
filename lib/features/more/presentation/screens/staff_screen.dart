@@ -2,26 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_constants.dart';
-import '../../../../features/staff/data/mock_staff_repository.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../../../../features/staff/domain/staff_models.dart';
-
-// ─── Provider ─────────────────────────────────────────────────────────────────
-
-final _allStaffProvider = FutureProvider<List<StaffModel>>((ref) {
-  return MockStaffRepository().getAll();
-});
+import '../../../../features/staff/presentation/providers/staff_provider.dart';
 
 // ─── Avatar colors (cycle by index) ───────────────────────────────────────────
 
 const _avatarColors = [
-  Color(0xFF6366F1),
-  Color(0xFF10B981),
-  Color(0xFFF59E0B),
-  Color(0xFF0EA5E9),
-  Color(0xFFEC4899),
-  Color(0xFF8B5CF6),
-  Color(0xFFEF4444),
-  Color(0xFF14B8A6),
+  Color(0xFF6B7A3D), // olive
+  Color(0xFF4D5A2C), // dark olive
+  Color(0xFF8A9950), // medium olive
+  Color(0xFF111111), // black
+  Color(0xFF3A3A3A), // dark grey
+  Color(0xFF5A5A5A), // grey
+  Color(0xFF9A9A9A), // light grey
+  Color(0xFFB5C090), // pale olive
 ];
 
 Color _avatarColor(int index) => _avatarColors[index % _avatarColors.length];
@@ -41,10 +36,10 @@ class _StaffScreenState extends ConsumerState<StaffScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final staffAsync = ref.watch(_allStaffProvider);
+    final staffAsync = ref.watch(staffListProvider);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF9FAFB),
+      backgroundColor: AppColors.background,
       body: SafeArea(
         child: Column(
           children: [
@@ -190,18 +185,18 @@ class _SearchBar extends StatelessWidget {
       decoration: InputDecoration(
         hintText: 'Search by name or specialty',
         hintStyle: const TextStyle(
-            color: Color(0xFF9CA3AF), fontSize: 14),
+            color: AppColors.textTertiary, fontSize: 14),
         prefixIcon: const Icon(Icons.search,
-            size: 18, color: Color(0xFF9CA3AF)),
+            size: 18, color: AppColors.textTertiary),
         filled: true,
         fillColor: Colors.white,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+          borderSide: const BorderSide(color: AppColors.divider),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+          borderSide: const BorderSide(color: AppColors.divider),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
@@ -225,7 +220,7 @@ class _TabToggle extends StatelessWidget {
     return Container(
       height: 38,
       decoration: BoxDecoration(
-        color: const Color(0xFFE5E7EB),
+        color: AppColors.divider,
         borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
@@ -286,7 +281,7 @@ class _Tab extends StatelessWidget {
                   isSelected ? FontWeight.w600 : FontWeight.w400,
               color: isSelected
                   ? Colors.black
-                  : const Color(0xFF6B7280),
+                  : AppColors.textSecondary,
             ),
           ),
         ),
@@ -316,7 +311,7 @@ class _StaffTile extends StatelessWidget {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFFE5E7EB)),
+          border: Border.all(color: AppColors.divider),
         ),
         child: Row(
           children: [
@@ -351,7 +346,7 @@ class _StaffTile extends StatelessWidget {
                         style: const TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w600,
-                          color: Color(0xFF111827),
+                          color: AppColors.textPrimary,
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -362,7 +357,7 @@ class _StaffTile extends StatelessWidget {
                         decoration: BoxDecoration(
                           color: staff.isActive
                               ? const Color(0xFF10B981)
-                              : const Color(0xFFD1D5DB),
+                              : AppColors.border,
                           shape: BoxShape.circle,
                         ),
                       ),
@@ -388,7 +383,7 @@ class _StaffTile extends StatelessWidget {
             if (staff.commissionRate != null)
               _CommissionBadge(rate: staff.commissionRate!),
             const Icon(Icons.chevron_right,
-                size: 18, color: Color(0xFFD1D5DB)),
+                size: 18, color: AppColors.border),
           ],
         ),
       ),
@@ -408,7 +403,7 @@ class _SpecialtyChip extends StatelessWidget {
       margin: const EdgeInsets.only(right: 5),
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(
-        color: const Color(0xFFF3F4F6),
+        color: AppColors.surfaceVariant,
         borderRadius: BorderRadius.circular(6),
       ),
       child: Text(
@@ -416,7 +411,7 @@ class _SpecialtyChip extends StatelessWidget {
         style: const TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.w500,
-          color: Color(0xFF374151),
+          color: AppColors.textSecondary,
         ),
       ),
     );
@@ -435,7 +430,7 @@ class _CommissionBadge extends StatelessWidget {
       margin: const EdgeInsets.only(right: 4),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: const Color(0xFFEEF2FF),
+        color: AppColors.primaryLight,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
@@ -443,7 +438,7 @@ class _CommissionBadge extends StatelessWidget {
         style: const TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w600,
-          color: Color(0xFF6366F1),
+          color: AppColors.primary,
         ),
       ),
     );
@@ -468,11 +463,11 @@ class _EmptyState extends StatelessWidget {
               width: 72,
               height: 72,
               decoration: const BoxDecoration(
-                color: Color(0xFFF3F4F6),
+                color: AppColors.surfaceVariant,
                 shape: BoxShape.circle,
               ),
               child: const Icon(Icons.people_outline_rounded,
-                  size: 36, color: Color(0xFF9CA3AF)),
+                  size: 36, color: AppColors.textTertiary),
             ),
             const SizedBox(height: 16),
             Text(
@@ -489,7 +484,7 @@ class _EmptyState extends StatelessWidget {
                   : 'All your staff are currently active.',
               textAlign: TextAlign.center,
               style: const TextStyle(
-                  fontSize: 13, color: Color(0xFF6B7280)),
+                  fontSize: 13, color: AppColors.textSecondary),
             ),
           ],
         ),

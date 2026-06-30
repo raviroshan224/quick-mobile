@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import '../../../../core/theme/app_theme.dart';
 
 // ─── Manual Discount State ────────────────────────────────────────────────────
 
@@ -89,7 +90,9 @@ class ManualDiscountSheet extends HookConsumerWidget {
       Navigator.pop(context);
     }
 
+    final screenHeight = MediaQuery.of(context).size.height;
     return Container(
+      constraints: BoxConstraints(maxHeight: screenHeight * 0.92),
       decoration: const BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
@@ -106,7 +109,7 @@ class ManualDiscountSheet extends HookConsumerWidget {
             height: 4,
             margin: const EdgeInsets.symmetric(vertical: 12),
             decoration: BoxDecoration(
-              color: const Color(0xFFE5E7EB),
+              color: AppColors.divider,
               borderRadius: BorderRadius.circular(2),
             ),
           ),
@@ -131,18 +134,19 @@ class ManualDiscountSheet extends HookConsumerWidget {
           ),
           const SizedBox(height: 16),
           const Divider(height: 1),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
-            child: Column(
+          Flexible(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+              child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Subtotal display
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF9FAFB),
+                    color: AppColors.background,
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFFE5E7EB)),
+                    border: Border.all(color: AppColors.divider),
                   ),
                   child: Row(
                     children: [
@@ -150,7 +154,7 @@ class ManualDiscountSheet extends HookConsumerWidget {
                         'Subtotal',
                         style: TextStyle(
                           fontSize: 14,
-                          color: Color(0xFF6B7280),
+                          color: AppColors.textSecondary,
                         ),
                       ),
                       const Spacer(),
@@ -172,14 +176,14 @@ class ManualDiscountSheet extends HookConsumerWidget {
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
-                    color: Color(0xFF6B7280),
+                    color: AppColors.textSecondary,
                   ),
                 ),
                 const SizedBox(height: 8),
                 Container(
                   height: 44,
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF3F4F6),
+                    color: AppColors.surfaceVariant,
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Row(
@@ -213,7 +217,7 @@ class ManualDiscountSheet extends HookConsumerWidget {
                   style: const TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
-                    color: Color(0xFF6B7280),
+                    color: AppColors.textSecondary,
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -297,8 +301,8 @@ class ManualDiscountSheet extends HookConsumerWidget {
                             Navigator.pop(context);
                           },
                           style: OutlinedButton.styleFrom(
-                            foregroundColor: const Color(0xFFEF4444),
-                            side: const BorderSide(color: Color(0xFFEF4444)),
+                            foregroundColor: AppColors.danger,
+                            side: const BorderSide(color: AppColors.danger),
                             padding: const EdgeInsets.symmetric(vertical: 14),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(10),
@@ -315,7 +319,7 @@ class ManualDiscountSheet extends HookConsumerWidget {
                       child: ElevatedButton(
                         onPressed: applyDiscount,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.black,
+                          backgroundColor: AppColors.primary,
                           foregroundColor: Colors.white,
                           elevation: 0,
                           padding: const EdgeInsets.symmetric(vertical: 14),
@@ -335,6 +339,7 @@ class ManualDiscountSheet extends HookConsumerWidget {
                 ),
               ],
             ),
+          ),
           ),
         ],
       ),
@@ -383,7 +388,7 @@ class _TypeOption extends StatelessWidget {
               Icon(
                 icon,
                 size: 15,
-                color: isSelected ? Colors.black : const Color(0xFF6B7280),
+                color: isSelected ? Colors.black : AppColors.textSecondary,
               ),
               const SizedBox(width: 6),
               Text(
@@ -391,7 +396,7 @@ class _TypeOption extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                  color: isSelected ? Colors.black : const Color(0xFF6B7280),
+                  color: isSelected ? Colors.black : AppColors.textSecondary,
                 ),
               ),
             ],
@@ -425,7 +430,7 @@ class _PreviewRow extends StatelessWidget {
           style: TextStyle(
             fontSize: 13,
             fontWeight: isBold ? FontWeight.w600 : FontWeight.w400,
-            color: const Color(0xFF374151),
+            color: AppColors.textSecondary,
           ),
         ),
         const Spacer(),
@@ -434,7 +439,7 @@ class _PreviewRow extends StatelessWidget {
           style: TextStyle(
             fontSize: 13,
             fontWeight: isBold ? FontWeight.w700 : FontWeight.w500,
-            color: valueColor ?? const Color(0xFF374151),
+            color: valueColor ?? AppColors.textSecondary,
           ),
         ),
       ],

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/constants/app_constants.dart';
+import '../../../../core/theme/app_theme.dart';
 
 class SupportScreen extends StatefulWidget {
   const SupportScreen({super.key});
@@ -117,7 +119,7 @@ class _SupportScreenState extends State<SupportScreen> {
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF9FAFB),
+      backgroundColor: AppColors.background,
       body: SafeArea(
         child: Column(children: [
           // ── Header ────────────────────────────────────────────────────────
@@ -161,7 +163,7 @@ class _SupportScreenState extends State<SupportScreen> {
                       SizedBox(height: 4),
                       Text('Find answers or get in touch with us.',
                           style: TextStyle(
-                              color: Color(0xFF9CA3AF), fontSize: 13)),
+                              color: AppColors.textTertiary, fontSize: 13)),
                     ],
                   ),
                 ),
@@ -174,9 +176,9 @@ class _SupportScreenState extends State<SupportScreen> {
                   decoration: InputDecoration(
                     hintText: 'Search help articles…',
                     hintStyle: const TextStyle(
-                        color: Color(0xFF9CA3AF), fontSize: 14),
+                        color: AppColors.textTertiary, fontSize: 14),
                     prefixIcon: const Icon(Icons.search,
-                        size: 18, color: Color(0xFF9CA3AF)),
+                        size: 18, color: AppColors.textTertiary),
                     suffixIcon: _query.isNotEmpty
                         ? GestureDetector(
                             onTap: () {
@@ -184,7 +186,7 @@ class _SupportScreenState extends State<SupportScreen> {
                               _ctrl.clear();
                             },
                             child: const Icon(Icons.close,
-                                size: 16, color: Color(0xFF9CA3AF)),
+                                size: 16, color: AppColors.textTertiary),
                           )
                         : null,
                     filled: true,
@@ -206,9 +208,10 @@ class _SupportScreenState extends State<SupportScreen> {
                       child: _ContactCard(
                         icon: Icons.chat_bubble_outline_rounded,
                         label: 'WhatsApp',
-                        subtitle: '+977 98XXXXXXXX',
+                        subtitle: '+977 9823418370',
                         color: const Color(0xFF25D366),
-                        onTap: () => _stub(context, 'WhatsApp'),
+                        onTap: () => _launch(
+                            context, 'https://wa.me/9779823418370'),
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -216,9 +219,10 @@ class _SupportScreenState extends State<SupportScreen> {
                       child: _ContactCard(
                         icon: Icons.email_outlined,
                         label: 'Email',
-                        subtitle: 'support@salonpos.app',
-                        color: const Color(0xFF6366F1),
-                        onTap: () => _stub(context, 'Email'),
+                        subtitle: 'info@quick.com.np',
+                        color: AppColors.primary,
+                        onTap: () => _launch(context,
+                            'mailto:info@quick.com.np?subject=Quick%20POS%20Support'),
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -226,9 +230,10 @@ class _SupportScreenState extends State<SupportScreen> {
                       child: _ContactCard(
                         icon: Icons.phone_outlined,
                         label: 'Call',
-                        subtitle: '+977 14XXXXXX',
-                        color: const Color(0xFF0EA5E9),
-                        onTap: () => _stub(context, 'Call'),
+                        subtitle: '+977 9823418370',
+                        color: AppColors.primary,
+                        onTap: () => _launch(
+                            context, 'tel:+9779823418370'),
                       ),
                     ),
                   ]),
@@ -247,7 +252,7 @@ class _SupportScreenState extends State<SupportScreen> {
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: const Color(0xFFE5E7EB)),
+                        border: Border.all(color: AppColors.divider),
                       ),
                       child: Column(
                         children: filtered
@@ -268,19 +273,19 @@ class _SupportScreenState extends State<SupportScreen> {
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: const Color(0xFFE5E7EB)),
+                      border: Border.all(color: AppColors.divider),
                     ),
                     child: Column(children: [
                       const Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Icon(Icons.auto_awesome,
-                              size: 16, color: Color(0xFF9CA3AF)),
+                              size: 16, color: AppColors.textTertiary),
                           SizedBox(width: 6),
-                          Text('Salon POS · Version 1.0.0',
+                          Text('Quick POS · Version 1.0.0',
                               style: TextStyle(
                                   fontSize: 13,
-                                  color: Color(0xFF9CA3AF))),
+                                  color: AppColors.textTertiary)),
                         ],
                       ),
                       const SizedBox(height: 10),
@@ -289,13 +294,15 @@ class _SupportScreenState extends State<SupportScreen> {
                         children: [
                           _FooterLink(
                               label: 'Privacy Policy',
-                              onTap: () => _stub(context, 'Privacy Policy')),
+                              onTap: () =>
+                                  context.go(AppRoutes.morePrivacyPolicy)),
                           const Text(' · ',
                               style: TextStyle(
-                                  color: Color(0xFFD1D5DB))),
+                                  color: AppColors.border)),
                           _FooterLink(
                               label: 'Terms of Use',
-                              onTap: () => _stub(context, 'Terms of Use')),
+                              onTap: () =>
+                                  context.go(AppRoutes.moreTerms)),
                         ],
                       ),
                     ]),
@@ -309,13 +316,18 @@ class _SupportScreenState extends State<SupportScreen> {
     );
   }
 
-  void _stub(BuildContext context, String label) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text('$label — coming soon'),
-      behavior: SnackBarBehavior.floating,
-      backgroundColor: Colors.black,
-      duration: const Duration(seconds: 2),
-    ));
+  Future<void> _launch(BuildContext context, String url) async {
+    final uri = Uri.parse(url);
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Could not open. Please try manually.'),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: Colors.black,
+          duration: Duration(seconds: 2),
+        ));
+      }
+    }
   }
 }
 
@@ -341,7 +353,7 @@ class _SectionLabel extends StatelessWidget {
       style: const TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.w600,
-          color: Color(0xFF6B7280),
+          color: AppColors.textSecondary,
           letterSpacing: 0.8));
 }
 
@@ -355,7 +367,7 @@ class _CategoryHeader extends StatelessWidget {
             style: const TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: Color(0xFF374151))),
+                color: AppColors.textSecondary)),
       );
 }
 
@@ -381,7 +393,7 @@ class _ContactCard extends StatelessWidget {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFFE5E7EB)),
+            border: Border.all(color: AppColors.divider),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -402,7 +414,7 @@ class _ContactCard extends StatelessWidget {
               const SizedBox(height: 2),
               Text(subtitle,
                   style: const TextStyle(
-                      fontSize: 10, color: Color(0xFF9CA3AF)),
+                      fontSize: 10, color: AppColors.textTertiary),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis),
             ],
@@ -428,7 +440,7 @@ class _FAQTile extends StatelessWidget {
               const EdgeInsets.fromLTRB(16, 0, 16, 14),
           expandedAlignment: Alignment.centerLeft,
           iconColor: Colors.black,
-          collapsedIconColor: const Color(0xFF9CA3AF),
+          collapsedIconColor: AppColors.textTertiary,
           title: Text(faq.question,
               style: const TextStyle(
                   fontSize: 14, fontWeight: FontWeight.w500)),
@@ -436,7 +448,7 @@ class _FAQTile extends StatelessWidget {
             Text(faq.answer,
                 style: const TextStyle(
                     fontSize: 13,
-                    color: Color(0xFF6B7280),
+                    color: AppColors.textSecondary,
                     height: 1.6)),
           ],
         ),
@@ -452,18 +464,18 @@ class _EmptySearch extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 40),
         child: Column(children: [
           const Icon(Icons.search_off_rounded,
-              size: 40, color: Color(0xFFD1D5DB)),
+              size: 40, color: AppColors.border),
           const SizedBox(height: 12),
           Text('No results for "$query"',
               style: const TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w500,
-                  color: Color(0xFF6B7280))),
+                  color: AppColors.textSecondary)),
           const SizedBox(height: 6),
           const Text('Try a different keyword or browse the topics above.',
               textAlign: TextAlign.center,
               style: TextStyle(
-                  fontSize: 13, color: Color(0xFF9CA3AF))),
+                  fontSize: 13, color: AppColors.textTertiary)),
         ]),
       );
 }
@@ -479,8 +491,8 @@ class _FooterLink extends StatelessWidget {
         child: Text(label,
             style: const TextStyle(
                 fontSize: 12,
-                color: Color(0xFF6B7280),
+                color: AppColors.textSecondary,
                 decoration: TextDecoration.underline,
-                decorationColor: Color(0xFF6B7280))),
+                decorationColor: AppColors.textSecondary)),
       );
 }

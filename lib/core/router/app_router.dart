@@ -4,8 +4,14 @@ import 'package:go_router/go_router.dart';
 import '../../features/auth/presentation/providers/auth_provider.dart';
 import '../../features/auth/presentation/screens/splash_screen.dart';
 import '../../features/auth/presentation/screens/login_screen.dart';
+import '../../features/auth/presentation/screens/signup_screen.dart';
+import '../../features/auth/presentation/screens/otp_screen.dart';
+import '../../features/auth/presentation/screens/forgot_password_screen.dart';
+import '../../features/auth/presentation/screens/reset_password_screen.dart';
 import '../../features/checkout/presentation/screens/checkout_screen.dart';
+import '../../features/pos/presentation/screens/receipt_screen.dart';
 import '../../features/transactions/presentation/screens/transactions_screen.dart';
+import '../../features/transactions/presentation/screens/transaction_detail_screen.dart';
 import '../../features/notifications/presentation/screens/notifications_screen.dart';
 import '../../features/more/presentation/screens/more_screen.dart';
 import '../../features/more/presentation/screens/setup_guide_screen.dart';
@@ -21,6 +27,8 @@ import '../../features/more/presentation/screens/drawers_screen.dart';
 import '../../features/more/presentation/screens/reports_screen.dart';
 import '../../features/more/presentation/screens/settings_screen.dart';
 import '../../features/more/presentation/screens/support_screen.dart';
+import '../../features/more/presentation/screens/privacy_policy_screen.dart';
+import '../../features/more/presentation/screens/terms_screen.dart';
 import '../../features/more/presentation/screens/dashboard_screen.dart';
 import '../../features/more/presentation/screens/staff_screen.dart';
 import '../../features/more/presentation/screens/staff_detail_screen.dart';
@@ -44,11 +52,30 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       if (loc == AppRoutes.splash) return null;
 
-      final isLoggedIn = auth.isAuthenticated;
-      final goingToLogin = loc == AppRoutes.login;
+      // While checking stored token, stay on splash.
+      if (auth.status == AuthStatus.initial || auth.status == AuthStatus.loading) {
+        return null;
+      }
 
-      if (!isLoggedIn && !goingToLogin) return AppRoutes.login;
-      if (isLoggedIn && goingToLogin) return AppRoutes.dashboard;
+      // Redirect to OTP screen when login sent the OTP but not verified yet.
+      if (auth.status == AuthStatus.pendingOtp && loc != '/verify-otp') {
+        return '/verify-otp';
+      }
+
+      final isLoggedIn = auth.isAuthenticated;
+      // Redirect to reset-password screen when OTP was sent for password reset.
+      if (auth.status == AuthStatus.resetPending && loc != AppRoutes.resetPassword) {
+        return AppRoutes.resetPassword;
+      }
+
+      final onAuthScreen = loc == AppRoutes.login ||
+          loc == AppRoutes.signup ||
+          loc == '/verify-otp' ||
+          loc == AppRoutes.forgotPassword ||
+          loc == AppRoutes.resetPassword;
+
+      if (!isLoggedIn && !onAuthScreen) return AppRoutes.login;
+      if (isLoggedIn && onAuthScreen) return AppRoutes.dashboard;
       return null;
     },
     refreshListenable: _RouterRefresh(authNotifier),
@@ -61,6 +88,22 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.login,
         builder: (_, _) => const LoginScreen(),
       ),
+      GoRoute(
+        path: AppRoutes.signup,
+        builder: (_, _) => const SignupScreen(),
+      ),
+      GoRoute(
+        path: '/verify-otp',
+        builder: (_, _) => const OtpScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.forgotPassword,
+        builder: (_, _) => const ForgotPasswordScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.resetPassword,
+        builder: (_, _) => const ResetPasswordScreen(),
+      ),
       ShellRoute(
         builder: (context, state, child) => MainShell(child: child),
         routes: [
@@ -71,8 +114,16 @@ final routerProvider = Provider<GoRouter>((ref) {
               path: AppRoutes.checkout,
               builder: (_, _) => const CheckoutScreen()),
           GoRoute(
+              path: AppRoutes.posReceipt,
+              builder: (_, _) => const ReceiptScreen()),
+          GoRoute(
               path: AppRoutes.transactions,
               builder: (_, _) => const TransactionsScreen()),
+          GoRoute(
+              path: '/transactions/:id',
+              builder: (_, state) => TransactionDetailScreen(
+                    transactionId: state.pathParameters['id']!,
+                  )),
           GoRoute(
               path: AppRoutes.notifications,
               builder: (_, _) => const NotificationsScreen()),
@@ -124,6 +175,12 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
               path: AppRoutes.moreSupport,
               builder: (_, _) => const SupportScreen()),
+          GoRoute(
+              path: AppRoutes.morePrivacyPolicy,
+              builder: (_, _) => const PrivacyPolicyScreen()),
+          GoRoute(
+              path: AppRoutes.moreTerms,
+              builder: (_, _) => const TermsScreen()),
           GoRoute(
               path: '/more/my-profile',
               builder: (_, _) => const MyProfileScreen()),
