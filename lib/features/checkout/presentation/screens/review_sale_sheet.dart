@@ -66,6 +66,7 @@ class ReviewSaleSheet extends HookConsumerWidget {
         paymentMethod: method.value,
         splitCash: splitCash,
         splitFonepay: splitFonepay,
+        keypadAmount: checkoutCart.items.isEmpty ? keypadAmount : null,
       ).then((_) {
         ref.read(cartProvider.notifier).clear();
         ref.read(manualDiscountProvider.notifier).state = null;

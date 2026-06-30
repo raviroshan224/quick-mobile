@@ -7,19 +7,16 @@ class ServicesRepository {
   final ApiClient _api;
 
   Future<List<ServiceCategory>> getCategories() async {
-    final data = await _api.get(
-      '/services',
-      queryParameters: {'limit': 100},
-    ) as Map<String, dynamic>;
-    final services = PaginatedResponse.fromJson(data, ServiceModel.fromJson).data;
-    final seen = <String>{};
-    final cats = <ServiceCategory>[];
-    for (final s in services) {
-      if (s.category != null && seen.add(s.category!.id)) {
-        cats.add(s.category!);
-      }
-    }
-    return cats;
+    final data = await _api.get('/services/categories') as List<dynamic>;
+    return data
+        .map((j) => ServiceCategory.fromJson(j as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<ServiceCategory> createCategory(String name) async {
+    final data = await _api.post('/services/categories', data: {'name': name})
+        as Map<String, dynamic>;
+    return ServiceCategory.fromJson(data);
   }
 
   Future<List<ServiceModel>> getServices({String? categoryId, bool? isActive = true}) async {

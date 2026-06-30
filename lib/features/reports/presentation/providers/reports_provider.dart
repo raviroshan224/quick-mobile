@@ -84,8 +84,11 @@ class ReportsNotifier extends StateNotifier<ReportsState> {
 
   final ReportsRepository _repo;
 
-  String get _from => state.dateRange.start.toUtc().toIso8601String();
-  String get _to => state.dateRange.end.toUtc().toIso8601String();
+  String get _from => _dateOnly(state.dateRange.start);
+  String get _to => _dateOnly(state.dateRange.end);
+
+  static String _dateOnly(DateTime dt) =>
+      '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
 
   Future<void> setTab(ReportsTab tab) async {
     if (state.activeTab == tab) return;

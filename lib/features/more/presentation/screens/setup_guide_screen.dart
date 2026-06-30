@@ -2,13 +2,39 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_constants.dart';
+import '../../../../core/network/api_client.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../features/services/presentation/providers/services_provider.dart';
 import '../../../../features/inventory/presentation/providers/inventory_provider.dart';
 import '../../../../features/customers/presentation/providers/customers_provider.dart';
+import '../../../../features/discounts/providers/discounts_provider.dart';
 
 // Tracks which optional steps the user has manually marked done.
 final _dismissedProvider = StateProvider<Set<int>>((_) => {});
+
+// True if any cash drawer has ever been opened (including closed ones).
+final _hasDrawerHistoryProvider = FutureProvider<bool>((ref) async {
+  try {
+    final api = ref.read(apiClientProvider);
+    final data = await api.get('/cash-drawer') as List<dynamic>;
+    return data.isNotEmpty;
+  } catch (_) {
+    return false;
+  }
+});
+
+// True if at least one transaction exists.
+final _hasAnySaleProvider = FutureProvider<bool>((ref) async {
+  try {
+    final api = ref.read(apiClientProvider);
+    final data = await api.get('/transactions',
+        queryParameters: {'limit': 1}) as Map<String, dynamic>;
+    final meta = data['meta'] as Map<String, dynamic>?;
+    return (meta?['total'] as int? ?? 0) > 0;
+  } catch (_) {
+    return false;
+  }
+});
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
@@ -20,10 +46,15 @@ class SetupGuideScreen extends ConsumerWidget {
     final serviceCount = ref.watch(servicesListProvider).valueOrNull?.length ?? 0;
     final itemCount = ref.watch(productsProvider).valueOrNull?.length ?? 0;
     final customerCount = ref.watch(customersProvider).valueOrNull?.length ?? 0;
+    final discountCount = ref.watch(discountsProvider).valueOrNull?.length ?? 0;
+    final hasDrawer = ref.watch(_hasDrawerHistoryProvider).valueOrNull ?? false;
+    final hasAnySale = ref.watch(_hasAnySaleProvider).valueOrNull ?? false;
     final dismissed = ref.watch(_dismissedProvider);
 
     final steps = _buildSteps(
-        context, ref, dismissed, serviceCount, itemCount, customerCount);
+        context, ref, dismissed,
+        serviceCount, itemCount, customerCount,
+        discountCount, hasDrawer, hasAnySale);
     final doneCount = steps.where((s) => s.done).length;
     final total = steps.length;
     final progress = doneCount / total;
@@ -134,6 +165,9 @@ class SetupGuideScreen extends ConsumerWidget {
     int serviceCount,
     int itemCount,
     int customerCount,
+    int discountCount,
+    bool hasDrawer,
+    bool hasAnySale,
   ) {
     return [
       _GuideStep(
@@ -185,9 +219,11 @@ class SetupGuideScreen extends ConsumerWidget {
         icon: Icons.local_offer_outlined,
         iconColor: AppColors.textSecondary,
         title: 'Create a discount',
-        description: 'Offer percentage or fixed discounts on services and items.',
-        done: dismissed.contains(4),
-        autoComplete: false,
+        description: discountCount > 0
+            ? '$discountCount discount${discountCount == 1 ? '' : 's'} set up.'
+            : 'Offer percentage or fixed discounts on services and items.',
+        done: discountCount > 0 || dismissed.contains(4),
+        autoComplete: discountCount > 0,
         actionLabel: 'Set Up Discounts',
         onAction: () => context.go(AppRoutes.moreDiscounts),
         skippable: true,
@@ -196,9 +232,11 @@ class SetupGuideScreen extends ConsumerWidget {
         icon: Icons.point_of_sale_outlined,
         iconColor: AppColors.primary,
         title: 'Open your cash drawer',
-        description: 'Record your opening float before the first sale of the day.',
-        done: dismissed.contains(5),
-        autoComplete: false,
+        description: hasDrawer
+            ? 'Cash drawer configured and ready.'
+            : 'Record your opening float before the first sale of the day.',
+        done: hasDrawer || dismissed.contains(5),
+        autoComplete: hasDrawer,
         actionLabel: 'Open Drawer',
         onAction: () => context.go(AppRoutes.moreDrawers),
         skippable: true,
@@ -207,9 +245,11 @@ class SetupGuideScreen extends ConsumerWidget {
         icon: Icons.shopping_cart_checkout_rounded,
         iconColor: Colors.black,
         title: 'Make your first sale',
-        description: 'Charge a customer and confirm your first payment.',
-        done: dismissed.contains(6),
-        autoComplete: false,
+        description: hasAnySale
+            ? 'First sale recorded — you\'re up and running!'
+            : 'Charge a customer and confirm your first payment.',
+        done: hasAnySale || dismissed.contains(6),
+        autoComplete: hasAnySale,
         actionLabel: 'Go to Checkout',
         onAction: () => context.go(AppRoutes.checkout),
         skippable: true,

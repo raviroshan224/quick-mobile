@@ -8,6 +8,8 @@ import '../../../../features/staff/domain/staff_models.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../shared/widgets/image_picker_sheet.dart';
 import '../../../../features/transactions/presentation/providers/transactions_provider.dart';
+import '../../../../features/auth/data/auth_repository.dart';
+import '../../../../core/storage/secure_storage_service.dart';
 
 // ─── Avatar colors (must stay in sync with staff_screen.dart) ─────────────────
 
@@ -206,6 +208,18 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
         specialties: _selectedSpecialties.toList(),
         commissionRate: double.tryParse(_commissionCtrl.text.trim()),
         isActive: _isActive,
+        emergencyContact: _emergencyContactCtrl.text.trim().isEmpty
+            ? null
+            : _emergencyContactCtrl.text.trim(),
+        emergencyContactName: _emergencyNameCtrl.text.trim().isEmpty
+            ? null
+            : _emergencyNameCtrl.text.trim(),
+        emergencyRelationship: _relationshipCtrl.text.trim().isEmpty
+            ? null
+            : _relationshipCtrl.text.trim(),
+        address: _addressCtrl.text.trim().isEmpty
+            ? null
+            : _addressCtrl.text.trim(),
       );
       if (mounted) context.go('/more/staff/${widget.staffId}');
     } catch (e) {
@@ -223,17 +237,34 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
     setState(() => _loading = true);
     try {
       final repo = ref.read(_staffRepoProvider);
-      final email = _emailCtrl.text.trim().toLowerCase();
+      final rawEmail = _emailCtrl.text.trim().toLowerCase();
+      final phone = _mobileCtrl.text.trim();
+      final email = rawEmail.isNotEmpty
+          ? rawEmail
+          : '${_previewFirstName.toLowerCase()}${_previewLastName.toLowerCase()}$phone@quickpos.staff';
       final password = _passwordCtrl.text;
       final result = await repo.createWithAccount(
         firstName: _previewFirstName,
         lastName: _previewLastName,
         email: email,
         password: password,
-        phone: _mobileCtrl.text.trim().isEmpty ? null : _mobileCtrl.text.trim(),
+        phone: phone.isEmpty ? null : phone,
         specialties: _selectedSpecialties.toList(),
         commissionRate: double.tryParse(_commissionCtrl.text.trim()),
         isActive: _isActive,
+        emergencyContact: _emergencyContactCtrl.text.trim().isEmpty
+            ? null
+            : _emergencyContactCtrl.text.trim(),
+        emergencyContactName: _emergencyNameCtrl.text.trim().isEmpty
+            ? null
+            : _emergencyNameCtrl.text.trim(),
+        emergencyRelationship: _relationshipCtrl.text.trim().isEmpty
+            ? null
+            : _relationshipCtrl.text.trim(),
+        address: _addressCtrl.text.trim().isEmpty
+            ? null
+            : _addressCtrl.text.trim(),
+        govIdType: _govIdType,
       );
       if (mounted) _showCreatedDialog(result.email, result.password);
     } catch (e) {
@@ -324,12 +355,112 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
     );
   }
 
-  void _resetPassword() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Use the backend admin panel to reset staff passwords.'),
-        behavior: SnackBarBehavior.floating,
-      ),
+  void _setPin() {
+    final pinCtrl = TextEditingController();
+    final confirmCtrl = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+    bool saving = false;
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) => AlertDialog(
+            title: const Text('Set Staff PIN'),
+            content: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Enter a 4-digit PIN for this staff member to use at the profile picker.',
+                    style: TextStyle(fontSize: 13, color: Colors.black54),
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: pinCtrl,
+                    keyboardType: TextInputType.number,
+                    maxLength: 4,
+                    obscureText: true,
+                    decoration: const InputDecoration(
+                      labelText: 'PIN',
+                      counterText: '',
+                    ),
+                    validator: (v) {
+                      if (v == null || v.length != 4) return 'PIN must be 4 digits';
+                      if (!RegExp(r'^\d{4}$').hasMatch(v)) return 'Digits only';
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: confirmCtrl,
+                    keyboardType: TextInputType.number,
+                    maxLength: 4,
+                    obscureText: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Confirm PIN',
+                      counterText: '',
+                    ),
+                    validator: (v) {
+                      if (v != pinCtrl.text) return 'PINs do not match';
+                      return null;
+                    },
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: saving ? null : () => Navigator.pop(ctx),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: saving
+                    ? null
+                    : () async {
+                        if (!formKey.currentState!.validate()) return;
+                        setDialogState(() => saving = true);
+                        try {
+                          final repo = AuthRepository(
+                            ref.read(apiClientProvider),
+                            ref.read(secureStorageProvider),
+                          );
+                          await repo.setStaffPin(widget.staffId!, pinCtrl.text);
+                          if (ctx.mounted) Navigator.pop(ctx);
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('PIN set successfully.'),
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          setDialogState(() => saving = false);
+                          if (ctx.mounted) {
+                            ScaffoldMessenger.of(ctx).showSnackBar(
+                              SnackBar(
+                                content: Text(e.toString()),
+                                backgroundColor: AppColors.danger,
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                          }
+                        }
+                      },
+                child: saving
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Save'),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -466,7 +597,7 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
                                   : Colors.black,
                             ),
                             decoration: InputDecoration(
-                              hintText: 'e.g. priya@salon.com',
+                              hintText: 'e.g. priya@salon.com (optional)',
                               suffixIcon: widget.isEditing
                                   ? const Icon(
                                       Icons.lock_outline,
@@ -476,10 +607,9 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
                                   : null,
                             ),
                             validator: (v) {
-                              if (v == null || v.trim().isEmpty) {
-                                return widget.isEditing ? null : 'Email is required';
+                              if (v != null && v.trim().isNotEmpty && !v.contains('@')) {
+                                return 'Enter a valid email';
                               }
-                              if (!v.contains('@')) return 'Enter a valid email';
                               return null;
                             },
                           ),
@@ -501,7 +631,7 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
                               LengthLimitingTextInputFormatter(15),
                             ],
                             decoration: const InputDecoration(
-                              hintText: 'e.g. 9801234567',
+                              hintText: 'e.g. 9801234567 (optional)',
                             ),
                           ),
                         ),
@@ -512,7 +642,7 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
                             controller: _emergencyNameCtrl,
                             textCapitalization: TextCapitalization.words,
                             decoration: const InputDecoration(
-                              hintText: 'e.g. Ram Thapa',
+                              hintText: 'e.g. Ram Thapa (optional)',
                             ),
                           ),
                         ),
@@ -845,7 +975,7 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
                               controller: _passwordCtrl,
                               obscureText: !_showPassword,
                               decoration: InputDecoration(
-                                hintText: 'Min 4 characters',
+                                hintText: 'Min 8 chars, upper, lower & number',
                                 suffixIcon: IconButton(
                                   icon: Icon(
                                     _showPassword
@@ -905,9 +1035,9 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
                       Padding(
                         padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
                         child: OutlinedButton.icon(
-                          onPressed: _resetPassword,
-                          icon: const Icon(Icons.lock_reset_outlined, size: 17),
-                          label: const Text('Reset Password'),
+                          onPressed: _setPin,
+                          icon: const Icon(Icons.pin_outlined, size: 17),
+                          label: const Text('Set PIN'),
                           style: OutlinedButton.styleFrom(
                             foregroundColor: AppColors.textSecondary,
                             side: const BorderSide(color: AppColors.border),

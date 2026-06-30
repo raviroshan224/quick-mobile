@@ -22,8 +22,8 @@ class CashDrawerRepository {
     return _sessionFromJson(data);
   }
 
-  Future<CashDrawerSession> close(double closeBalance, {String? notes}) async {
-    final data = await _api.post('/cash-drawer/close', data: {
+  Future<CashDrawerSession> close(String drawerId, double closeBalance, {String? notes}) async {
+    final data = await _api.post('/cash-drawer/$drawerId/close', data: {
       'closeBalance': closeBalance,
       'notes': ?notes,
     }) as Map<String, dynamic>;
@@ -31,11 +31,12 @@ class CashDrawerRepository {
   }
 
   Future<void> recordMovement({
+    required String drawerId,
     required CashMovementType type,
     required double amount,
     required String reason,
   }) async {
-    await _api.post('/cash-drawer/movement', data: {
+    await _api.post('/cash-drawer/$drawerId/movement', data: {
       'type': type == CashMovementType.cashIn ? 'IN' : 'OUT',
       'amount': amount,
       'reason': reason,
@@ -44,7 +45,9 @@ class CashDrawerRepository {
 
   static CashDrawerSession _sessionFromJson(Map<String, dynamic> j) {
     final raw = j['cashDrawer'] as Map<String, dynamic>? ?? j;
-    final movements = (raw['cashMovements'] as List<dynamic>? ?? [])
+    final movements = (raw['movements'] as List<dynamic>?
+            ?? raw['cashMovements'] as List<dynamic>?
+            ?? [])
         .map((m) => _movementFromJson(m as Map<String, dynamic>))
         .toList();
     return CashDrawerSession(

@@ -49,6 +49,7 @@ class MoreScreen extends ConsumerWidget {
               child: ListView(
                 padding: const EdgeInsets.only(bottom: 24),
                 children: [
+                  // ── Staff-only section ────────────────────────────────
                   if (!isOwner) ...[
                     _SectionLabel(text: 'ACCOUNT'),
                     _MoreTile(
@@ -57,81 +58,108 @@ class MoreScreen extends ConsumerWidget {
                       onTap: () => context.go('/more/my-profile'),
                     ),
                     const SizedBox(height: 8),
+                    _SectionLabel(text: 'CUSTOMERS'),
+                    _MoreTile(
+                      icon: Icons.person_outline_rounded,
+                      label: 'Customers',
+                      onTap: () => context.go(AppRoutes.moreCustomers),
+                    ),
+                    const SizedBox(height: 8),
+                    _SectionLabel(text: 'FINANCE'),
+                    _MoreTile(
+                      icon: Icons.point_of_sale_outlined,
+                      label: 'Cash Drawer',
+                      onTap: () => context.go(AppRoutes.moreDrawers),
+                    ),
+                    _MoreTile(
+                      icon: Icons.assignment_return_outlined,
+                      label: 'Refunds',
+                      onTap: () => context.go(AppRoutes.moreRefunds),
+                    ),
+                    const SizedBox(height: 8),
+                    _SectionLabel(text: 'HELP'),
+                    _MoreTile(
+                      icon: Icons.help_outline_rounded,
+                      label: 'Support',
+                      onTap: () => context.go(AppRoutes.moreSupport),
+                    ),
+                    const SizedBox(height: 8),
                   ],
-                  _SectionLabel(text: 'MANAGE'),
-                  _MoreTile(
-                    icon: Icons.menu_book_outlined,
-                    label: 'Setup Guide',
-                    onTap: () => context.go(AppRoutes.moreSetupGuide),
-                  ),
-                  _MoreTile(
-                    icon: Icons.spa_outlined,
-                    label: 'Services',
-                    onTap: () => context.go(AppRoutes.moreServices),
-                  ),
-                  _MoreTile(
-                    icon: Icons.tag,
-                    label: 'Inventory',
-                    onTap: () => context.go(AppRoutes.moreItems),
-                  ),
-                  _MoreTile(
-                    icon: Icons.local_offer_outlined,
-                    label: 'Discounts',
-                    onTap: () => context.go(AppRoutes.moreDiscounts),
-                  ),
-                  _MoreTile(
-                    icon: Icons.person_outline_rounded,
-                    label: 'Customers',
-                    onTap: () => context.go(AppRoutes.moreCustomers),
-                  ),
-                  if (isOwner)
+
+                  // ── Owner-only sections ───────────────────────────────
+                  if (isOwner) ...[
+                    _SectionLabel(text: 'MANAGE'),
+                    _MoreTile(
+                      icon: Icons.menu_book_outlined,
+                      label: 'Setup Guide',
+                      onTap: () => context.go(AppRoutes.moreSetupGuide),
+                    ),
+                    _MoreTile(
+                      icon: Icons.spa_outlined,
+                      label: 'Services',
+                      onTap: () => context.go(AppRoutes.moreServices),
+                    ),
+                    _MoreTile(
+                      icon: Icons.tag,
+                      label: 'Inventory',
+                      onTap: () => context.go(AppRoutes.moreItems),
+                    ),
+                    _MoreTile(
+                      icon: Icons.local_offer_outlined,
+                      label: 'Discounts',
+                      onTap: () => context.go(AppRoutes.moreDiscounts),
+                    ),
+                    _MoreTile(
+                      icon: Icons.person_outline_rounded,
+                      label: 'Customers',
+                      onTap: () => context.go(AppRoutes.moreCustomers),
+                    ),
                     _MoreTile(
                       icon: Icons.people_outline_rounded,
                       label: 'Staff',
                       onTap: () => context.go(AppRoutes.moreStaff),
                     ),
-                  const SizedBox(height: 8),
-                  _SectionLabel(text: 'FINANCE'),
-                  _MoreTile(
-                    icon: Icons.point_of_sale_outlined,
-                    label: 'Cash Drawer',
-                    onTap: () => context.go(AppRoutes.moreDrawers),
-                  ),
-                  _MoreTile(
-                    icon: Icons.assignment_return_outlined,
-                    label: 'Refunds',
-                    onTap: () => context.go(AppRoutes.moreRefunds),
-                  ),
-                  if (isOwner)
+                    const SizedBox(height: 8),
+                    _SectionLabel(text: 'FINANCE'),
+                    _MoreTile(
+                      icon: Icons.point_of_sale_outlined,
+                      label: 'Cash Drawer',
+                      onTap: () => context.go(AppRoutes.moreDrawers),
+                    ),
+                    _MoreTile(
+                      icon: Icons.assignment_return_outlined,
+                      label: 'Refunds',
+                      onTap: () => context.go(AppRoutes.moreRefunds),
+                    ),
                     _MoreTile(
                       icon: Icons.bar_chart_rounded,
                       label: 'Reports',
                       onTap: () => context.go(AppRoutes.moreReports),
                     ),
-                  const SizedBox(height: 8),
-                  _SectionLabel(text: 'TOOLS'),
-                  _MoreTile(
-                    icon: Icons.photo_library_outlined,
-                    label: 'Image Library',
-                    onTap: () => context.go(AppRoutes.moreImageLibrary),
-                  ),
-                  _MoreTile(
-                    icon: Icons.inventory_2_outlined,
-                    label: 'Stock Movement',
-                    onTap: () => context.go(AppRoutes.moreStockMovement),
-                  ),
-                  if (isOwner)
+                    const SizedBox(height: 8),
+                    _SectionLabel(text: 'TOOLS'),
+                    _MoreTile(
+                      icon: Icons.photo_library_outlined,
+                      label: 'Image Library',
+                      onTap: () => context.go(AppRoutes.moreImageLibrary),
+                    ),
+                    _MoreTile(
+                      icon: Icons.inventory_2_outlined,
+                      label: 'Stock Movement',
+                      onTap: () => context.go(AppRoutes.moreStockMovement),
+                    ),
                     _MoreTile(
                       icon: Icons.settings_outlined,
                       label: 'Settings',
                       onTap: () => context.go(AppRoutes.moreSettings),
                     ),
-                  _MoreTile(
-                    icon: Icons.help_outline_rounded,
-                    label: 'Support',
-                    onTap: () => context.go(AppRoutes.moreSupport),
-                  ),
-                  const SizedBox(height: 8),
+                    _MoreTile(
+                      icon: Icons.help_outline_rounded,
+                      label: 'Support',
+                      onTap: () => context.go(AppRoutes.moreSupport),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
                 ],
               ),
             ),

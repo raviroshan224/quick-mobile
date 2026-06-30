@@ -6,9 +6,19 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../features/staff/domain/staff_models.dart';
 import '../../../../features/staff/presentation/providers/staff_provider.dart';
 import '../../../../core/constants/app_constants.dart';
-import '../../../../features/reports/data/reports_repository.dart';
-import '../../../../features/reports/domain/reports_models.dart';
+import '../../../../features/transactions/data/transactions_repository.dart';
+import '../../../../features/transactions/domain/transaction_models.dart';
 import '../../../../core/network/api_client.dart';
+
+// UTC ISO string with ms precision — Dart's toIso8601String() produces 6-decimal
+// microseconds that JS's Date constructor rejects.
+String _utcMs(DateTime local) {
+  final u = local.toUtc();
+  String p2(int n) => n.toString().padLeft(2, '0');
+  String p3(int n) => n.toString().padLeft(3, '0');
+  return '${u.year}-${p2(u.month)}-${p2(u.day)}'
+      'T${p2(u.hour)}:${p2(u.minute)}:${p2(u.second)}.${p3(u.millisecond)}Z';
+}
 
 // ─── File-level providers ─────────────────────────────────────────────────────
 
@@ -19,42 +29,67 @@ final _myStaffProfileProvider = FutureProvider<StaffModel?>((ref) async {
   return all.where((s) => s.userId == user.id).firstOrNull;
 });
 
-final _reportsRepoProvider = Provider<ReportsRepository>(
-  (ref) => ReportsRepository(ref.read(apiClientProvider)),
+final _txRepoProvider = Provider<TransactionsRepository>(
+  (ref) => TransactionsRepository(ref.read(apiClientProvider)),
 );
 
-final _myWeekPerfProvider =
-    FutureProvider.autoDispose<StaffPerformance?>((ref) async {
+// Transactions processed by this user (as cashier), newest first.
+final _myRecentTxProvider =
+    FutureProvider.autoDispose<List<Transaction>>((ref) async {
   final user = ref.watch(currentUserProvider);
-  if (user == null) return null;
-  final staff = await ref.watch(_myStaffProfileProvider.future);
-  if (staff == null) return null;
-  final now = DateTime.now();
-  final start =
-      DateTime(now.year, now.month, now.day - (now.weekday - 1));
-  final end = DateTime(now.year, now.month, now.day, 23, 59, 59);
-  final list = await ref.read(_reportsRepoProvider).getStaffPerformance(
-        from: start.toIso8601String(),
-        to: end.toIso8601String(),
-      );
-  return list.where((p) => p.staffId == staff.id).firstOrNull;
+  if (user == null) return [];
+  final result = await ref
+      .read(_txRepoProvider)
+      .getAll(limit: 15, userId: user.id);
+  return result.items;
 });
 
-final _myMonthPerfProvider =
-    FutureProvider.autoDispose<StaffPerformance?>((ref) async {
+typedef _TxStats = ({int count, double revenue});
+
+// Transactions processed this week (by cashier userId).
+final _myWeekStatsProvider =
+    FutureProvider.autoDispose<_TxStats>((ref) async {
   final user = ref.watch(currentUserProvider);
-  if (user == null) return null;
-  final staff = await ref.watch(_myStaffProfileProvider.future);
-  if (staff == null) return null;
+  if (user == null) return (count: 0, revenue: 0.0);
+  final now = DateTime.now();
+  final start = DateTime(now.year, now.month, now.day - (now.weekday - 1));
+  final result = await ref.read(_txRepoProvider).getAll(
+        limit: 100,
+        userId: user.id,
+        from: _utcMs(start),
+        to: _utcMs(DateTime(now.year, now.month, now.day, 23, 59, 59, 999)),
+      );
+  final revenue = result.items.fold(0.0, (s, t) {
+    if (t.status == TransactionStatus.completed ||
+        t.status == TransactionStatus.partiallyRefunded) {
+      return s + t.total;
+    }
+    return s;
+  });
+  return (count: result.items.length, revenue: revenue);
+});
+
+// Transactions processed this month (by cashier userId).
+final _myMonthStatsProvider =
+    FutureProvider.autoDispose<_TxStats>((ref) async {
+  final user = ref.watch(currentUserProvider);
+  if (user == null) return (count: 0, revenue: 0.0);
   final now = DateTime.now();
   final start = DateTime(now.year, now.month, 1);
-  final end = DateTime(now.year, now.month + 1, 1)
-      .subtract(const Duration(milliseconds: 1));
-  final list = await ref.read(_reportsRepoProvider).getStaffPerformance(
-        from: start.toIso8601String(),
-        to: end.toIso8601String(),
+  final result = await ref.read(_txRepoProvider).getAll(
+        limit: 100,
+        userId: user.id,
+        from: _utcMs(start),
+        to: _utcMs(DateTime(now.year, now.month, now.day, 23, 59, 59, 999)),
       );
-  return list.where((p) => p.staffId == staff.id).firstOrNull;
+  final revenue = result.items.fold(0.0, (s, t) {
+    if (t.status == TransactionStatus.completed ||
+        t.status == TransactionStatus.partiallyRefunded) {
+      return s + t.total;
+    }
+    return s;
+  });
+  return (count: result.items.length, revenue: revenue);
 });
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
@@ -131,13 +166,12 @@ class _ProfileBody extends ConsumerWidget {
     final user = innerRef.watch(currentUserProvider)!;
     final email = user.email;
     final commissionRate = staff?.commissionRate;
-    final weekPerf = innerRef.watch(_myWeekPerfProvider).valueOrNull;
-    final monthPerf = innerRef.watch(_myMonthPerfProvider).valueOrNull;
-    final commissionEarned = monthPerf?.commission.truncate() ??
-        (commissionRate != null
-            ? (commissionRate * (monthPerf?.totalRevenue ?? 0) / 100)
-                .truncate()
-            : 0);
+    final weekStats = innerRef.watch(_myWeekStatsProvider).valueOrNull;
+    final monthStats = innerRef.watch(_myMonthStatsProvider).valueOrNull;
+    final recentTx = innerRef.watch(_myRecentTxProvider).valueOrNull ?? [];
+    final commissionEarned = (commissionRate != null && monthStats != null)
+        ? (commissionRate * monthStats.revenue / 100).truncate()
+        : 0;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
@@ -230,8 +264,8 @@ class _ProfileBody extends ConsumerWidget {
           children: [
             Expanded(
               child: _StatCard(
-                value: weekPerf != null
-                    ? '${weekPerf.serviceCount} services'
+                value: weekStats != null
+                    ? '${weekStats.count} txns'
                     : '—',
                 label: 'This Week',
               ),
@@ -239,8 +273,8 @@ class _ProfileBody extends ConsumerWidget {
             const SizedBox(width: 10),
             Expanded(
               child: _StatCard(
-                value: monthPerf != null
-                    ? '${monthPerf.serviceCount} services'
+                value: monthStats != null
+                    ? '${monthStats.count} txns'
                     : '—',
                 label: 'This Month',
               ),
@@ -254,6 +288,49 @@ class _ProfileBody extends ConsumerWidget {
             ),
           ],
         ),
+        const SizedBox(height: 20),
+
+        // ── Recent Transactions ───────────────────────────────────────
+        const _SectionHeader(text: 'RECENT TRANSACTIONS'),
+        const SizedBox(height: 8),
+        if (recentTx.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              border: Border.all(color: AppColors.divider),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: const Center(
+              child: Text(
+                'No transactions yet',
+                style: TextStyle(fontSize: 13, color: AppColors.textTertiary),
+              ),
+            ),
+          )
+        else
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              border: Border.all(color: AppColors.divider),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Column(
+              children: recentTx.asMap().entries.map((entry) {
+                final i = entry.key;
+                final tx = entry.value;
+                final isLast = i == recentTx.length - 1;
+                return Column(
+                  children: [
+                    _TxRow(tx: tx, onTap: () => context.push('/transactions/${tx.id}')),
+                    if (!isLast)
+                      const Divider(height: 1, indent: 16, endIndent: 16,
+                          color: AppColors.divider),
+                  ],
+                );
+              }).toList(),
+            ),
+          ),
         const SizedBox(height: 20),
 
         // ── Specialties section (staff with specialties only) ──────────
@@ -313,8 +390,11 @@ class _ProfileBody extends ConsumerWidget {
         SizedBox(
           width: double.infinity,
           child: OutlinedButton.icon(
-            icon: const Icon(Icons.logout_rounded, size: 18),
-            label: const Text('Sign Out'),
+            icon: Icon(
+              user.isOwner ? Icons.logout_rounded : Icons.swap_horiz_rounded,
+              size: 18,
+            ),
+            label: Text(user.isOwner ? 'Sign Out' : 'Switch Profile'),
             style: OutlinedButton.styleFrom(
               foregroundColor: AppColors.textSecondary,
               side: const BorderSide(color: AppColors.divider),
@@ -328,8 +408,14 @@ class _ProfileBody extends ConsumerWidget {
               ),
             ),
             onPressed: () async {
-              await innerRef.read(authProvider.notifier).logout();
-              if (context.mounted) context.go(AppRoutes.login);
+              final notifier = innerRef.read(authProvider.notifier);
+              if (user.isOwner) {
+                await notifier.logout();
+                if (context.mounted) context.go(AppRoutes.login);
+              } else {
+                // Staff: go back to profile picker (keeps owner session alive).
+                await notifier.switchProfile();
+              }
             },
           ),
         ),
@@ -422,6 +508,98 @@ class _StatCard extends StatelessWidget {
             textAlign: TextAlign.center,
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _TxRow extends StatelessWidget {
+  const _TxRow({required this.tx, required this.onTap});
+  final Transaction tx;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final isRefunded = tx.status == TransactionStatus.refunded ||
+        tx.status == TransactionStatus.partiallyRefunded;
+    final isVoided = tx.status == TransactionStatus.voided;
+
+    final statusColor = isRefunded
+        ? AppColors.danger
+        : isVoided
+            ? AppColors.textTertiary
+            : AppColors.success;
+
+    final hour = tx.createdAt.toLocal().hour;
+    final minute = tx.createdAt.toLocal().minute.toString().padLeft(2, '0');
+    final amPm = hour >= 12 ? 'PM' : 'AM';
+    final hour12 = hour % 12 == 0 ? 12 : hour % 12;
+    final timeStr = '$hour12:$minute $amPm';
+
+    final now = DateTime.now();
+    final txDate = tx.createdAt.toLocal();
+    final isToday = txDate.year == now.year &&
+        txDate.month == now.month &&
+        txDate.day == now.day;
+    final isYesterday = txDate.year == now.year &&
+        txDate.month == now.month &&
+        txDate.day == now.day - 1;
+    final dayLabel =
+        isToday ? 'Today' : isYesterday ? 'Yesterday' : '${txDate.day}/${txDate.month}';
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            Container(
+              width: 8,
+              height: 8,
+              margin: const EdgeInsets.only(right: 12),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: statusColor,
+              ),
+            ),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '#${tx.receiptNumber ?? tx.id.substring(0, 8).toUpperCase()}',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '$dayLabel · $timeStr',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.textTertiary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Text(
+              'NPR ${tx.total.toStringAsFixed(2)}',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: isVoided ? AppColors.textTertiary : Colors.black,
+                decoration: isVoided ? TextDecoration.lineThrough : null,
+              ),
+            ),
+            const SizedBox(width: 4),
+            const Icon(Icons.chevron_right_rounded,
+                size: 18, color: AppColors.textTertiary),
+          ],
+        ),
       ),
     );
   }

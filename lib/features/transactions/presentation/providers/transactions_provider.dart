@@ -1,11 +1,26 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/network/api_client.dart';
+import '../../../../features/auth/presentation/providers/auth_provider.dart';
 import '../../data/transactions_repository.dart';
 import '../../domain/transaction_models.dart';
 
 final _transactionsRepoProvider = Provider<TransactionsRepository>(
   (ref) => TransactionsRepository(ref.read(apiClientProvider)),
 );
+
+// Format DateTime as YYYY-MM-DD for backend date-only filters.
+String _dateOnly(DateTime dt) =>
+    '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+
+// UTC ISO string with ms precision (3 decimal places). Dart's toIso8601String()
+// produces 6-decimal microseconds that JS's Date constructor rejects.
+String _utcMs(DateTime local) {
+  final u = local.toUtc();
+  String p2(int n) => n.toString().padLeft(2, '0');
+  String p3(int n) => n.toString().padLeft(3, '0');
+  return '${u.year}-${p2(u.month)}-${p2(u.day)}'
+      'T${p2(u.hour)}:${p2(u.minute)}:${p2(u.second)}.${p3(u.millisecond)}Z';
+}
 
 // ─── Paginated list ───────────────────────────────────────────────────────────
 
@@ -20,6 +35,7 @@ class TransactionListState {
     this.paymentFilter,
     this.dateFrom,
     this.dateTo,
+    this.staffUserId,
   });
 
   final List<Transaction> items;
@@ -31,6 +47,8 @@ class TransactionListState {
   final String? paymentFilter;
   final DateTime? dateFrom;
   final DateTime? dateTo;
+  // Non-null when a staff member is logged in — restricts list to their own.
+  final String? staffUserId;
 
   TransactionListState copyWith({
     List<Transaction>? items,
@@ -50,11 +68,13 @@ class TransactionListState {
         paymentFilter: paymentFilter,
         dateFrom: dateFrom,
         dateTo: dateTo,
+        staffUserId: staffUserId,
       );
 }
 
 class TransactionListNotifier extends StateNotifier<TransactionListState> {
-  TransactionListNotifier(this._repo) : super(const TransactionListState()) {
+  TransactionListNotifier(this._repo, {String? staffUserId})
+      : super(TransactionListState(staffUserId: staffUserId)) {
     _fetchPage1();
   }
 
@@ -69,8 +89,9 @@ class TransactionListNotifier extends StateNotifier<TransactionListState> {
         page: 1,
         status: state.statusFilter,
         paymentMethod: state.paymentFilter,
-        from: state.dateFrom?.toIso8601String(),
-        to: _endOfDay(state.dateTo),
+        from: state.dateFrom == null ? null : _dateOnly(state.dateFrom!),
+        to: state.dateTo == null ? null : _dateOnly(state.dateTo!),
+        userId: state.staffUserId,
       );
       if (!mounted) return;
       state = state.copyWith(
@@ -92,8 +113,9 @@ class TransactionListNotifier extends StateNotifier<TransactionListState> {
         page: _page + 1,
         status: state.statusFilter,
         paymentMethod: state.paymentFilter,
-        from: state.dateFrom?.toIso8601String(),
-        to: _endOfDay(state.dateTo),
+        from: state.dateFrom == null ? null : _dateOnly(state.dateFrom!),
+        to: state.dateTo == null ? null : _dateOnly(state.dateTo!),
+        userId: state.staffUserId,
       );
       if (!mounted) return;
       _page++;
@@ -114,6 +136,7 @@ class TransactionListNotifier extends StateNotifier<TransactionListState> {
       paymentFilter: state.paymentFilter,
       dateFrom: state.dateFrom,
       dateTo: state.dateTo,
+      staffUserId: state.staffUserId,
     );
     await _fetchPage1();
   }
@@ -124,6 +147,7 @@ class TransactionListNotifier extends StateNotifier<TransactionListState> {
       paymentFilter: method,
       dateFrom: state.dateFrom,
       dateTo: state.dateTo,
+      staffUserId: state.staffUserId,
     );
     await _fetchPage1();
   }
@@ -134,22 +158,23 @@ class TransactionListNotifier extends StateNotifier<TransactionListState> {
       paymentFilter: state.paymentFilter,
       dateFrom: from,
       dateTo: to,
+      staffUserId: state.staffUserId,
     );
     await _fetchPage1();
   }
 
   Future<void> refresh() => _fetchPage1();
-
-  String? _endOfDay(DateTime? dt) {
-    if (dt == null) return null;
-    return DateTime(dt.year, dt.month, dt.day, 23, 59, 59).toIso8601String();
-  }
 }
 
 final transactionListProvider =
-    StateNotifierProvider<TransactionListNotifier, TransactionListState>(
-  (ref) => TransactionListNotifier(ref.read(_transactionsRepoProvider)),
-);
+    StateNotifierProvider<TransactionListNotifier, TransactionListState>((ref) {
+  final user = ref.watch(currentUserProvider);
+  final staffUserId = (user != null && !user.isOwner) ? user.id : null;
+  return TransactionListNotifier(
+    ref.read(_transactionsRepoProvider),
+    staffUserId: staffUserId,
+  );
+});
 
 // ─── Detail ───────────────────────────────────────────────────────────────────
 
@@ -284,13 +309,16 @@ final staffTransactionsProvider =
 final todayRevenueProvider =
     FutureProvider.autoDispose<({double revenue, int sales, int refunds})>(
         (ref) async {
+  final user = ref.watch(currentUserProvider);
+  final staffUserId = (user != null && !user.isOwner) ? user.id : null;
   final now = DateTime.now();
-  final from = DateTime(now.year, now.month, now.day).toIso8601String();
-  final to =
-      DateTime(now.year, now.month, now.day, 23, 59, 59).toIso8601String();
+  // Send UTC ISO timestamps so the backend gets the correct local-day boundaries
+  // regardless of server timezone (e.g. NPT midnight = June 30 18:15 UTC).
+  final fromUtc = _utcMs(DateTime(now.year, now.month, now.day));
+  final toUtc = _utcMs(DateTime(now.year, now.month, now.day, 23, 59, 59, 999));
   final result = await ref
       .read(_transactionsRepoProvider)
-      .getAll(limit: 100, from: from, to: to);
+      .getAll(limit: 100, from: fromUtc, to: toUtc, userId: staffUserId);
   var revenue = 0.0;
   var sales = 0;
   var refunds = 0;

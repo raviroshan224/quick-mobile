@@ -39,6 +39,17 @@ class RefreshInterceptor extends Interceptor {
 
   bool _isRefreshing = false;
 
+  // Clears current session keys but preserves owner_* keys so the profile
+  // picker can restore the owner session without a full re-login.
+  Future<void> _clearSession(FlutterSecureStorage s) async {
+    await Future.wait([
+      s.delete(key: _kAccessToken),
+      s.delete(key: _kRefreshToken),
+      s.delete(key: 'user_id'),
+      s.delete(key: 'user_role'),
+    ]);
+  }
+
   @override
   Future<void> onError(
     DioException err,
@@ -57,7 +68,7 @@ class RefreshInterceptor extends Interceptor {
         final refreshToken = await storage.read(key: _kRefreshToken);
         if (refreshToken == null) {
           _isRefreshing = false;
-          await storage.deleteAll();
+          await _clearSession(storage);
           onUnauthenticated();
           handler.reject(err);
           return;
@@ -86,7 +97,7 @@ class RefreshInterceptor extends Interceptor {
         handler.resolve(retryResponse);
       } catch (_) {
         _isRefreshing = false;
-        await storage.deleteAll();
+        await _clearSession(storage);
         onUnauthenticated();
         handler.reject(err);
       }

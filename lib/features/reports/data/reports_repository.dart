@@ -6,7 +6,7 @@ class ReportsRepository {
   final ApiClient _api;
 
   Future<SalesSummary> getSalesSummary({String? from, String? to}) async {
-    final j = await _api.get('/reports/sales-summary', queryParameters: {
+    final j = await _api.get('/reports/sales', queryParameters: {
       'from': from,
       'to': to,
     }..removeWhere((_, v) => v == null)) as Map<String, dynamic>;
@@ -22,7 +22,7 @@ class ReportsRepository {
   }
 
   Future<List<ServicePopularity>> getServicePopularity({String? from, String? to}) async {
-    final list = await _api.get('/reports/service-popularity', queryParameters: {
+    final list = await _api.get('/reports/services', queryParameters: {
       'from': from,
       'to': to,
     }..removeWhere((_, v) => v == null)) as List<dynamic>;

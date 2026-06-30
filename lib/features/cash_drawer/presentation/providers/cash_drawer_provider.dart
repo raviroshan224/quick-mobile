@@ -30,7 +30,9 @@ class CashDrawerNotifier
   }
 
   Future<void> closeDrawer(double closeBalance, {String? notes}) async {
-    await _repo.close(closeBalance, notes: notes);
+    final drawerId = state.value?.id;
+    if (drawerId == null) throw Exception('No open drawer to close');
+    await _repo.close(drawerId, closeBalance, notes: notes);
     await _load();
   }
 
@@ -39,7 +41,9 @@ class CashDrawerNotifier
     required double amount,
     required String reason,
   }) async {
-    await _repo.recordMovement(type: type, amount: amount, reason: reason);
+    final drawerId = state.value?.id;
+    if (drawerId == null) throw Exception('No open drawer');
+    await _repo.recordMovement(drawerId: drawerId, type: type, amount: amount, reason: reason);
     await _load();
   }
 

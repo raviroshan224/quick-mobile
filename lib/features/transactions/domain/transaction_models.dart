@@ -36,8 +36,8 @@ class TransactionItem {
     return TransactionItem(
       id: j['id'] as String,
       quantity: j['quantity'] as int? ?? 1,
-      unitPrice: (j['unitPrice'] as num).toDouble(),
-      total: (j['total'] as num).toDouble(),
+      unitPrice: (j['unitPrice'] as num? ?? j['price'] as num? ?? 0).toDouble(),
+      total: (j['totalPrice'] as num? ?? j['total'] as num? ?? 0).toDouble(),
       serviceName: service?['name'] as String?,
       productName: product?['name'] as String?,
       staffName: staffName.isEmpty ? null : staffName,
@@ -119,9 +119,9 @@ class RefundRecord {
       id: j['id'] as String,
       transactionId:
           j['transactionId'] as String? ?? transaction?['id'] as String? ?? '',
-      amount: (j['amount'] as num).toDouble(),
+      amount: (j['amount'] as num? ?? 0).toDouble(),
       reason: j['reason'] as String? ?? '',
-      createdAt: DateTime.parse(j['createdAt'] as String),
+      createdAt: DateTime.parse(j['createdAt'] as String).toLocal(),
       receiptNumber: transaction?['receiptNumber'] as String?,
       customerName: fullName.isNotEmpty
           ? fullName
@@ -202,9 +202,9 @@ class Transaction {
       status: _parseStatus(statusStr),
       paymentMethod: _parseMethod(methodStr),
       subtotal: (j['subtotal'] as num?)?.toDouble(),
-      total: (j['total'] as num).toDouble(),
+      total: (j['total'] as num? ?? 0).toDouble(),
       isGuest: j['isGuest'] as bool? ?? false,
-      createdAt: DateTime.parse(j['createdAt'] as String),
+      createdAt: DateTime.parse(j['createdAt'] as String).toLocal(),
       customerName: fullName.isEmpty ? null : fullName,
       guestName: j['guestName'] as String?,
       items: itemsJson

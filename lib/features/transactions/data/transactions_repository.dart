@@ -13,16 +13,23 @@ class TransactionsRepository {
     double? splitCash,
     double? splitFonepay,
     String? discountId,
+    double? keypadAmount,
   }) async {
-    final items = cart.items
-        .map((i) => {
-              if (i.service != null) 'serviceId': i.service!.id,
-              if (i.product != null) 'productId': i.product!.id,
-              if (i.assignedStaff != null) 'staffId': i.assignedStaff!.id,
-              'quantity': i.quantity,
-              'unitPrice': i.unitPrice,
-            })
-        .toList();
+    final List<Map<String, dynamic>> items;
+    if (cart.items.isEmpty && keypadAmount != null && keypadAmount > 0) {
+      // Keypad-only checkout: no service selected, just a custom amount.
+      items = [{'quantity': 1, 'unitPrice': keypadAmount}];
+    } else {
+      items = cart.items
+          .map((i) => {
+                if (i.service != null) 'serviceId': i.service!.id,
+                if (i.product != null) 'productId': i.product!.id,
+                if (i.assignedStaff != null) 'staffId': i.assignedStaff!.id,
+                'quantity': i.quantity,
+                'unitPrice': i.unitPrice,
+              })
+          .toList();
+    }
 
     final body = <String, dynamic>{
       'items': items,
@@ -57,6 +64,7 @@ class TransactionsRepository {
     String? to,
     String? customerId,
     String? staffId,
+    String? userId,
   }) async {
     final data = await _api.get('/transactions', queryParameters: {
       'page': page,
@@ -67,6 +75,7 @@ class TransactionsRepository {
       'dateTo': ?to,
       'customerId': ?customerId,
       'staffId': ?staffId,
+      'userId': ?userId,
     }) as Map<String, dynamic>;
     final response = PaginatedResponse.fromJson(data, Transaction.fromJson);
     return (

@@ -68,7 +68,7 @@ class _ItemsScreenState extends ConsumerState<ItemsScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.add, color: Colors.black),
-            onPressed: isOwner ? () {} : null,
+            onPressed: isOwner ? () => context.go('/more/items/new') : null,
           ),
         ],
       ),
@@ -169,6 +169,9 @@ class _ItemsScreenState extends ConsumerState<ItemsScreen> {
                         AppColors.surfaceVariant,
                     icon: _categoryIcons[filtered[i].category] ??
                         Icons.inventory_2_outlined,
+                    onTap: isOwner
+                        ? () => context.go('/more/items/${filtered[i].id}/edit')
+                        : null,
                   ),
                 ),
               ),
@@ -216,14 +219,17 @@ class _ItemTile extends StatelessWidget {
   const _ItemTile(
       {required this.product,
       required this.iconBg,
-      required this.icon});
+      required this.icon,
+      this.onTap});
   final ProductModel product;
   final Color iconBg;
   final IconData icon;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     return ListTile(
+      onTap: onTap,
       contentPadding:
           const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       leading: Container(

@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../features/auth/presentation/providers/auth_provider.dart';
+import '../../features/auth/domain/user_model.dart';
 import '../../features/auth/presentation/screens/splash_screen.dart';
 import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/auth/presentation/screens/signup_screen.dart';
 import '../../features/auth/presentation/screens/otp_screen.dart';
 import '../../features/auth/presentation/screens/forgot_password_screen.dart';
 import '../../features/auth/presentation/screens/reset_password_screen.dart';
+import '../../features/auth/presentation/screens/profile_picker_screen.dart';
 import '../../features/checkout/presentation/screens/checkout_screen.dart';
 import '../../features/pos/presentation/screens/receipt_screen.dart';
 import '../../features/transactions/presentation/screens/transactions_screen.dart';
@@ -18,6 +20,7 @@ import '../../features/more/presentation/screens/setup_guide_screen.dart';
 import '../../features/discounts/screens/discounts_screen.dart';
 import '../../features/discounts/screens/discount_form_screen.dart';
 import '../../features/more/presentation/screens/items_screen.dart';
+import '../../features/more/presentation/screens/item_form_screen.dart';
 import '../../features/more/presentation/screens/services_screen.dart';
 import '../../features/more/presentation/screens/service_form_screen.dart';
 import '../../features/more/presentation/screens/customers_screen.dart';
@@ -57,6 +60,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         return null;
       }
 
+      // Profile picker — owner session is valid but no profile selected yet.
+      if (auth.status == AuthStatus.pickingProfile && loc != AppRoutes.profiles) {
+        return AppRoutes.profiles;
+      }
+
       // Redirect to OTP screen when login sent the OTP but not verified yet.
       if (auth.status == AuthStatus.pendingOtp && loc != '/verify-otp') {
         return '/verify-otp';
@@ -72,10 +80,32 @@ final routerProvider = Provider<GoRouter>((ref) {
           loc == AppRoutes.signup ||
           loc == '/verify-otp' ||
           loc == AppRoutes.forgotPassword ||
-          loc == AppRoutes.resetPassword;
+          loc == AppRoutes.resetPassword ||
+          loc == AppRoutes.profiles;
 
-      if (!isLoggedIn && !onAuthScreen) return AppRoutes.login;
+      if (!isLoggedIn && auth.status != AuthStatus.pickingProfile && !onAuthScreen) {
+        return AppRoutes.login;
+      }
       if (isLoggedIn && onAuthScreen) return AppRoutes.dashboard;
+
+      // Staff cannot access owner-only routes — redirect to More.
+      if (isLoggedIn && auth.user?.role == UserRole.staff) {
+        const ownerOnly = [
+          '/more/setup-guide',
+          '/more/services',
+          '/more/items',
+          '/more/discounts',
+          '/more/staff',
+          '/more/reports',
+          '/more/settings',
+          '/more/image-library',
+          '/more/stock-movement',
+        ];
+        if (ownerOnly.any((p) => loc == p || loc.startsWith('$p/'))) {
+          return AppRoutes.more;
+        }
+      }
+
       return null;
     },
     refreshListenable: _RouterRefresh(authNotifier),
@@ -83,6 +113,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.splash,
         builder: (_, _) => const SplashScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.profiles,
+        builder: (_, _) => const ProfilePickerScreen(),
       ),
       GoRoute(
         path: AppRoutes.login,
@@ -136,6 +170,14 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
               path: AppRoutes.moreItems,
               builder: (_, _) => const ItemsScreen()),
+          GoRoute(
+              path: '/more/items/new',
+              builder: (_, _) => const ItemFormScreen()),
+          GoRoute(
+              path: '/more/items/:id/edit',
+              builder: (_, state) => ItemFormScreen(
+                    productId: state.pathParameters['id'],
+                  )),
           GoRoute(
               path: AppRoutes.moreServices,
               builder: (_, _) => const ServicesScreen()),

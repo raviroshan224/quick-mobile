@@ -121,6 +121,55 @@ class _ServiceFormScreenState extends ConsumerState<ServiceFormScreen> {
     super.dispose();
   }
 
+  // ── Create Category ────────────────────────────────────────────────────────
+
+  Future<void> _createCategory(BuildContext context) async {
+    final ctrl = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('New Category'),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          textCapitalization: TextCapitalization.words,
+          decoration: const InputDecoration(
+            hintText: 'e.g. Hair Care, Skin, Nails',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Create')),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    final name = ctrl.text.trim();
+    if (name.isEmpty) return;
+    try {
+      final repo = ref.read(_servicesRepoProvider);
+      final cat = await repo.createCategory(name);
+      if (!mounted) return;
+      setState(() {
+        if (!_categories.any((c) => c.id == cat.id)) {
+          _categories = [..._categories, cat];
+        }
+        _selectedCategory = cat;
+      });
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
   // ── Pick Image ─────────────────────────────────────────────────────────────
 
   Future<void> _pickImage() async {
@@ -412,24 +461,47 @@ class _ServiceFormScreenState extends ConsumerState<ServiceFormScreen> {
                       _Divider(),
                       _Field(
                         label: 'Category',
-                        child: _categories.isEmpty
+                        child: _loading
                             ? const Text('Loading…',
                                 style: TextStyle(color: AppColors.textTertiary))
-                            : DropdownButtonFormField<ServiceCategory>(
-                                initialValue: _selectedCategory,
-                                isExpanded: true,
-                                decoration: const InputDecoration(
-                                    border: InputBorder.none,
-                                    contentPadding: EdgeInsets.zero),
-                                hint: const Text('Select category'),
-                                items: _categories
-                                    .map((c) => DropdownMenuItem(
-                                          value: c,
-                                          child: Text(c.name),
-                                        ))
-                                    .toList(),
-                                onChanged: (v) =>
-                                    setState(() => _selectedCategory = v),
+                            : Row(
+                                children: [
+                                  Expanded(
+                                    child: _categories.isEmpty
+                                        ? GestureDetector(
+                                            onTap: () => _createCategory(context),
+                                            child: const Text(
+                                              'Tap + to add a category',
+                                              style: TextStyle(color: AppColors.textTertiary),
+                                            ),
+                                          )
+                                        : DropdownButtonFormField<ServiceCategory>(
+                                            initialValue: _selectedCategory,
+                                            isExpanded: true,
+                                            decoration: const InputDecoration(
+                                                border: InputBorder.none,
+                                                contentPadding: EdgeInsets.zero,
+                                                isDense: true),
+                                            hint: const Text('Select category'),
+                                            items: _categories
+                                                .map((c) => DropdownMenuItem(
+                                                      value: c,
+                                                      child: Text(c.name),
+                                                    ))
+                                                .toList(),
+                                            onChanged: (v) =>
+                                                setState(() => _selectedCategory = v),
+                                          ),
+                                  ),
+                                  GestureDetector(
+                                    onTap: () => _createCategory(context),
+                                    child: const Padding(
+                                      padding: EdgeInsets.only(left: 8),
+                                      child: Icon(Icons.add_circle_outline,
+                                          size: 20, color: AppColors.textSecondary),
+                                    ),
+                                  ),
+                                ],
                               ),
                       ),
                       _Divider(),

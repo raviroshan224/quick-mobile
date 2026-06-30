@@ -16,7 +16,14 @@ class DiscountsScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(title: const Text('Discounts')),
+      appBar: AppBar(
+        title: const Text('Discounts',
+            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: Colors.black)),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        centerTitle: true,
+        iconTheme: const IconThemeData(color: Colors.black),
+      ),
       body: discountsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Error: $e')),
@@ -66,9 +73,9 @@ class DiscountsScreen extends ConsumerWidget {
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: isOwner ? () => context.push('/more/discounts/new') : null,
-        backgroundColor: AppColors.primary,
+        backgroundColor: Colors.black,
         foregroundColor: Colors.white,
-        elevation: 2,
+        elevation: 0,
         icon: const Icon(Icons.add),
         label: const Text('New Discount',
             style: TextStyle(fontWeight: FontWeight.w600)),
@@ -148,7 +155,7 @@ class _DiscountRow extends StatelessWidget {
                 fontSize: 15,
                 fontWeight: FontWeight.w600,
                 color: discount.isActive
-                    ? AppColors.success
+                    ? AppColors.textPrimary
                     : AppColors.textTertiary,
               ),
             ),
@@ -169,12 +176,12 @@ class _DiscountAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isPercentage = discount.type == DiscountType.percentage;
-    final color = discount.isActive ? AppColors.success : AppColors.textTertiary;
+    final color = discount.isActive ? AppColors.textPrimary : AppColors.textTertiary;
     return Container(
       width: 40,
       height: 40,
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
+        color: AppColors.surfaceVariant,
         borderRadius: BorderRadius.circular(10),
       ),
       child: Center(
@@ -226,7 +233,7 @@ class _EmptyState extends StatelessWidget {
             ElevatedButton.icon(
               onPressed: onAdd,
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
+                backgroundColor: Colors.black,
                 foregroundColor: Colors.white,
                 elevation: 0,
                 shape: RoundedRectangleBorder(

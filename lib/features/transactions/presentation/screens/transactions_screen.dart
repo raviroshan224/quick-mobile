@@ -9,6 +9,7 @@ import '../../domain/transaction_models.dart';
 import '../providers/transactions_provider.dart';
 import '../../../../core/theme/app_theme.dart';
 
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 final _nprFmt = NumberFormat('#,##0.00', 'en_IN');
@@ -62,6 +63,7 @@ class TransactionsScreen extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final txState = ref.watch(transactionListProvider);
     final notifier = ref.read(transactionListProvider.notifier);
+    final refundState = ref.watch(refundHistoryProvider);
 
     final scrollCtrl = useScrollController();
 
@@ -78,10 +80,27 @@ class TransactionsScreen extends HookConsumerWidget {
       return () => scrollCtrl.removeListener(listener);
     }, [scrollCtrl]);
 
-    // Group transactions by day
-    final grouped = <String, List<Transaction>>{};
+    // Merge transactions and refund records, sorted newest-first.
+    // Refunds are only mixed in when "All" filter is active so they
+    // don't pollute status-filtered views.
+    final allItems = <(String, Object)>[];
     for (final t in txState.items) {
-      grouped.putIfAbsent(_dayKey(t.createdAt), () => []).add(t);
+      allItems.add((_dayKey(t.createdAt), t));
+    }
+    if (txState.statusFilter == null && txState.paymentFilter == null &&
+        txState.dateFrom == null) {
+      for (final r in refundState.items) {
+        allItems.add((_dayKey(r.createdAt), r));
+      }
+    }
+    allItems.sort((a, b) {
+      DateTime dateOf(Object o) =>
+          o is Transaction ? o.createdAt : (o as RefundRecord).createdAt;
+      return dateOf(b.$2).compareTo(dateOf(a.$2));
+    });
+    final grouped = <String, List<Object>>{};
+    for (final (key, item) in allItems) {
+      grouped.putIfAbsent(key, () => []).add(item);
     }
 
     return Scaffold(
@@ -220,7 +239,7 @@ class TransactionsScreen extends HookConsumerWidget {
                           message: txState.error!,
                           onRetry: notifier.refresh,
                         )
-                      : txState.items.isEmpty
+                      : grouped.isEmpty
                           ? const _EmptyState()
                           : ListView.builder(
                               controller: scrollCtrl,
@@ -244,7 +263,7 @@ class TransactionsScreen extends HookConsumerWidget {
   }
 
   int _listItemCount(
-    Map<String, List<Transaction>> grouped,
+    Map<String, List<Object>> grouped,
     TransactionListState state,
   ) {
     var count = 0;
@@ -258,22 +277,34 @@ class TransactionsScreen extends HookConsumerWidget {
   Widget _buildListItem(
     BuildContext context,
     int index,
-    Map<String, List<Transaction>> grouped,
+    Map<String, List<Object>> grouped,
     TransactionListState state,
   ) {
     var i = 0;
     for (final entry in grouped.entries) {
       if (index == i) return _DayHeader(label: entry.key);
       i++;
-      for (final tx in entry.value) {
+      for (final item in entry.value) {
         if (index == i) {
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: _TransactionRow(
-              transaction: tx,
-              onTap: () => context.push(AppRoutes.transactionDetail(tx.id)),
-            ),
-          );
+          if (item is Transaction) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: _TransactionRow(
+                transaction: item,
+                onTap: () =>
+                    context.push(AppRoutes.transactionDetail(item.id)),
+              ),
+            );
+          } else if (item is RefundRecord) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: _RefundRow(
+                refund: item,
+                onTap: () => context
+                    .push(AppRoutes.transactionDetail(item.transactionId)),
+              ),
+            );
+          }
         }
         i++;
       }
@@ -639,6 +670,105 @@ class _TransactionRow extends StatelessWidget {
                       const SizedBox(width: 8),
                       _PaymentBadge(method: transaction.paymentMethod),
                     ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Icon(
+              Icons.chevron_right_rounded,
+              size: 18,
+              color: AppColors.textTertiary,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Refund row ───────────────────────────────────────────────────────────────
+
+class _RefundRow extends StatelessWidget {
+  const _RefundRow({required this.refund, required this.onTap});
+  final RefundRecord refund;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final customer = refund.customerName?.isNotEmpty == true
+        ? refund.customerName!
+        : 'Walk-in';
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppColors.dangerLight,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.danger.withValues(alpha: 0.25)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 10,
+              height: 10,
+              decoration: const BoxDecoration(
+                color: AppColors.danger,
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Text(
+                        'Refund',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.danger,
+                        ),
+                      ),
+                      if (refund.receiptNumber != null) ...[
+                        const SizedBox(width: 6),
+                        Text(
+                          refund.receiptNumber!,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textTertiary,
+                          ),
+                        ),
+                      ],
+                      const Spacer(),
+                      Text(
+                        '– ${_formatNpr(refund.amount)}',
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.danger,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    customer,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    _formatDate(refund.createdAt),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textTertiary,
+                    ),
                   ),
                 ],
               ),

@@ -242,6 +242,11 @@ class AppTheme {
       colorScheme: scheme,
       scaffoldBackgroundColor: AppColors.background,
       fontFamily: 'SF Pro Display',
+      textSelectionTheme: const TextSelectionThemeData(
+        cursorColor: Colors.black,
+        selectionColor: Color(0x336B7A3D),
+        selectionHandleColor: Colors.black,
+      ),
 
       appBarTheme: const AppBarTheme(
         backgroundColor: AppColors.surface,
@@ -290,7 +295,7 @@ class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: AppRadius.mdBR,
-          borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+          borderSide: const BorderSide(color: Colors.black, width: 1.5),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: AppRadius.mdBR,
@@ -299,7 +304,7 @@ class AppTheme {
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         hintStyle: const TextStyle(color: AppColors.textHint, fontSize: 14),
         labelStyle: const TextStyle(color: AppColors.textSecondary, fontSize: 14),
-        floatingLabelStyle: const TextStyle(color: AppColors.primary, fontSize: 12),
+        floatingLabelStyle: const TextStyle(color: Colors.black, fontSize: 12),
         isDense: true,
       ),
 

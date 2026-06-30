@@ -14,13 +14,26 @@ class SalesSummary {
   final Map<String, double> byPaymentMethod; // keys: CASH, FONEPAY, SPLIT
 
   factory SalesSummary.fromJson(Map<String, dynamic> j) {
-    final raw = j['byPaymentMethod'] as Map<String, dynamic>? ?? {};
+    // byPaymentMethod arrives as a List from groupBy: [{paymentMethod:'CASH', _sum:{total:100}}, ...]
+    final rawList = j['byPaymentMethod'];
+    final Map<String, double> byMethod = {};
+    if (rawList is List) {
+      for (final item in rawList) {
+        if (item is Map<String, dynamic>) {
+          final method = item['paymentMethod'] as String? ?? 'UNKNOWN';
+          final sum = item['_sum'] as Map<String, dynamic>?;
+          byMethod[method] = (sum?['total'] as num? ?? 0).toDouble();
+        }
+      }
+    } else if (rawList is Map<String, dynamic>) {
+      rawList.forEach((k, v) => byMethod[k] = (v as num? ?? 0).toDouble());
+    }
     return SalesSummary(
       totalRevenue: (j['totalRevenue'] as num? ?? 0).toDouble(),
-      transactionCount: j['transactionCount'] as int? ?? 0,
-      avgTicket: (j['avgTicket'] as num? ?? 0).toDouble(),
+      transactionCount: (j['totalTransactions'] as num? ?? j['transactionCount'] as num? ?? 0).toInt(),
+      avgTicket: (j['averageTransaction'] as num? ?? j['avgTicket'] as num? ?? 0).toDouble(),
       refundTotal: (j['refundTotal'] as num? ?? 0).toDouble(),
-      byPaymentMethod: raw.map((k, v) => MapEntry(k, (v as num).toDouble())),
+      byPaymentMethod: byMethod,
     );
   }
 }
@@ -44,15 +57,22 @@ class StaffPerformance {
   final int shiftsCount;
   final double totalHours;
 
-  factory StaffPerformance.fromJson(Map<String, dynamic> j) => StaffPerformance(
-        staffId: j['staffId'] as String? ?? '',
-        staffName: j['staffName'] as String? ?? '',
-        serviceCount: j['serviceCount'] as int? ?? 0,
-        totalRevenue: (j['totalRevenue'] as num? ?? 0).toDouble(),
-        commission: (j['commission'] as num? ?? 0).toDouble(),
-        shiftsCount: j['shiftsCount'] as int? ?? 0,
-        totalHours: (j['totalHours'] as num? ?? 0).toDouble(),
-      );
+  factory StaffPerformance.fromJson(Map<String, dynamic> j) {
+    final staff = j['staff'] as Map<String, dynamic>?;
+    final user = staff?['user'] as Map<String, dynamic>?;
+    final firstName = user?['firstName'] as String? ?? '';
+    final lastName = user?['lastName'] as String? ?? '';
+    final fullName = '$firstName $lastName'.trim();
+    return StaffPerformance(
+      staffId: staff?['id'] as String? ?? j['staffId'] as String? ?? '',
+      staffName: fullName.isNotEmpty ? fullName : j['staffName'] as String? ?? '',
+      serviceCount: j['serviceCount'] as int? ?? 0,
+      totalRevenue: (j['totalSales'] as num? ?? j['totalRevenue'] as num? ?? 0).toDouble(),
+      commission: (j['totalCommission'] as num? ?? j['commission'] as num? ?? 0).toDouble(),
+      shiftsCount: j['shiftsCount'] as int? ?? 0,
+      totalHours: (j['totalHoursWorked'] as num? ?? j['totalHours'] as num? ?? 0).toDouble(),
+    );
+  }
 }
 
 class ServicePopularity {
@@ -68,12 +88,15 @@ class ServicePopularity {
   final int bookingCount;
   final double revenue;
 
-  factory ServicePopularity.fromJson(Map<String, dynamic> j) => ServicePopularity(
-        serviceId: j['serviceId'] as String? ?? '',
-        serviceName: j['serviceName'] as String? ?? '',
-        bookingCount: j['bookingCount'] as int? ?? 0,
-        revenue: (j['revenue'] as num? ?? 0).toDouble(),
-      );
+  factory ServicePopularity.fromJson(Map<String, dynamic> j) {
+    final service = j['service'] as Map<String, dynamic>?;
+    return ServicePopularity(
+      serviceId: service?['id'] as String? ?? j['serviceId'] as String? ?? '',
+      serviceName: service?['name'] as String? ?? j['serviceName'] as String? ?? '',
+      bookingCount: j['count'] as int? ?? j['bookingCount'] as int? ?? 0,
+      revenue: (j['totalRevenue'] as num? ?? j['revenue'] as num? ?? 0).toDouble(),
+    );
+  }
 }
 
 class InventoryProduct {

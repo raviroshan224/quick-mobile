@@ -31,6 +31,11 @@ class StaffRepository {
     List<String> specialties = const [],
     double? commissionRate,
     bool isActive = true,
+    String? emergencyContact,
+    String? emergencyContactName,
+    String? emergencyRelationship,
+    String? address,
+    String? govIdType,
   }) async {
     // Step 1: create user account.
     final userResult = await _api.post('/auth/register', data: {
@@ -50,7 +55,11 @@ class StaffRepository {
       if (phone != null && phone.isNotEmpty) 'phone': phone,
       'specialties': specialties,
       'commissionRate': ?commissionRate,
-      'isActive': isActive,
+      'emergencyContact': ?emergencyContact,
+      'emergencyContactName': ?emergencyContactName,
+      'emergencyRelationship': ?emergencyRelationship,
+      'address': ?address,
+      'govIdType': ?govIdType,
     }) as Map<String, dynamic>;
 
     return (
@@ -66,12 +75,20 @@ class StaffRepository {
     List<String>? specialties,
     double? commissionRate,
     bool? isActive,
+    String? emergencyContact,
+    String? emergencyContactName,
+    String? emergencyRelationship,
+    String? address,
   }) async {
     final data = await _api.patch('/staff/$id', data: {
       'phone': ?phone,
       'specialties': ?specialties,
       'commissionRate': ?commissionRate,
       'isActive': ?isActive,
+      'emergencyContact': ?emergencyContact,
+      'emergencyContactName': ?emergencyContactName,
+      'emergencyRelationship': ?emergencyRelationship,
+      'address': ?address,
     }) as Map<String, dynamic>;
     return StaffModel.fromJson(data);
   }

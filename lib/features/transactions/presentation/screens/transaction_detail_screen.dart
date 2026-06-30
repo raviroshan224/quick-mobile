@@ -389,15 +389,28 @@ class _RefundSheet extends HookConsumerWidget {
     final refundQtys =
         useState<List<int>>(List.filled(items.length, 0));
     final fullRefund = useState(false);
+    final customMode = useState(false);
+    final customAmountCtrl = useTextEditingController();
+    final customAmountError = useState<String?>(null);
     final reasonCtrl = useTextEditingController();
     final reasonError = useState<String?>(null);
     final processing = useState(false);
 
     void toggleFull(bool val) {
       fullRefund.value = val;
+      if (val) customMode.value = false;
       refundQtys.value = val
           ? items.map((i) => i.maxRefundable).toList()
           : List.filled(items.length, 0);
+    }
+
+    void toggleCustom(bool val) {
+      customMode.value = val;
+      if (val) {
+        fullRefund.value = false;
+        refundQtys.value = List.filled(items.length, 0);
+      }
+      customAmountError.value = null;
     }
 
     void setQty(int idx, int qty) {
@@ -411,6 +424,9 @@ class _RefundSheet extends HookConsumerWidget {
     }
 
     double refundTotal() {
+      if (customMode.value) {
+        return double.tryParse(customAmountCtrl.text.trim()) ?? 0.0;
+      }
       if (fullRefund.value && items.isEmpty) return transaction.total;
       return refundQtys.value.asMap().entries.fold(
           0.0, (s, e) => s + e.value * items[e.key].unitPrice);
@@ -423,6 +439,53 @@ class _RefundSheet extends HookConsumerWidget {
         reasonError.value = 'Reason must be at least 5 characters';
         return;
       }
+
+      if (customMode.value) {
+        final amt = double.tryParse(customAmountCtrl.text.trim()) ?? 0.0;
+        if (amt <= 0) {
+          customAmountError.value = 'Enter a valid amount';
+          return;
+        }
+        if (amt > transaction.total) {
+          customAmountError.value =
+              'Cannot exceed ${_formatNpr(transaction.total)}';
+          return;
+        }
+        processing.value = true;
+        try {
+          await ref
+              .read(_detailRepoProvider)
+              .refund(transaction.id, amount: amt, reason: reason);
+          if (!context.mounted) return;
+          ref.invalidate(transactionDetailProvider(transaction.id));
+          ref.invalidate(transactionListProvider);
+          ref.invalidate(refundHistoryProvider);
+          ref.invalidate(todayRevenueProvider);
+          Navigator.of(context).pop();
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Refund of ${_formatNpr(amt)} processed'),
+            backgroundColor: Colors.black,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10)),
+            margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          ));
+        } catch (e) {
+          if (!context.mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Refund failed: $e'),
+            backgroundColor: AppColors.danger,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10)),
+            margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          ));
+        } finally {
+          if (context.mounted) processing.value = false;
+        }
+        return;
+      }
+
       final hasSelection = fullRefund.value ||
           refundQtys.value.any((q) => q > 0);
       if (!hasSelection) {
@@ -453,6 +516,7 @@ class _RefundSheet extends HookConsumerWidget {
         ref.invalidate(transactionDetailProvider(transaction.id));
         ref.invalidate(transactionListProvider);
         ref.invalidate(refundHistoryProvider);
+        ref.invalidate(todayRevenueProvider);
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(
@@ -524,18 +588,36 @@ class _RefundSheet extends HookConsumerWidget {
                 ),
                 const SizedBox(height: 16),
 
-                // Full refund toggle
+                // Mode toggles
+                if (!customMode.value)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Row(
+                      children: [
+                        const Text('Full Refund',
+                            style: TextStyle(
+                                fontSize: 14, fontWeight: FontWeight.w600)),
+                        const Spacer(),
+                        Switch(
+                          value: fullRefund.value,
+                          onChanged: toggleFull,
+                          activeThumbColor: Colors.white,
+                          activeTrackColor: Colors.black,
+                        ),
+                      ],
+                    ),
+                  ),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: Row(
                     children: [
-                      const Text('Full Refund',
+                      const Text('Custom Amount',
                           style: TextStyle(
                               fontSize: 14, fontWeight: FontWeight.w600)),
                       const Spacer(),
                       Switch(
-                        value: fullRefund.value,
-                        onChanged: toggleFull,
+                        value: customMode.value,
+                        onChanged: toggleCustom,
                         activeThumbColor: Colors.white,
                         activeTrackColor: Colors.black,
                       ),
@@ -543,8 +625,96 @@ class _RefundSheet extends HookConsumerWidget {
                   ),
                 ),
 
-                // Items
-                if (items.isNotEmpty) ...[
+                // Custom amount field
+                if (customMode.value) ...[
+                  const Divider(height: 1, color: AppColors.divider),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Text('AMOUNT',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.textSecondary,
+                                  letterSpacing: 0.8,
+                                )),
+                            const Spacer(),
+                            Text(
+                              'Max ${_formatNpr(transaction.total)}',
+                              style: const TextStyle(
+                                  fontSize: 11,
+                                  color: AppColors.textTertiary),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          decoration: BoxDecoration(
+                            color: AppColors.background,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: customAmountError.value != null
+                                  ? AppColors.danger
+                                  : AppColors.divider,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              const Padding(
+                                padding: EdgeInsets.only(left: 14),
+                                child: Text('NPR',
+                                    style: TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppColors.textSecondary)),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: TextField(
+                                  controller: customAmountCtrl,
+                                  keyboardType:
+                                      const TextInputType.numberWithOptions(
+                                          decimal: true),
+                                  style: const TextStyle(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.w700),
+                                  onChanged: (_) =>
+                                      customAmountError.value = null,
+                                  decoration: InputDecoration(
+                                    hintText: '0.00',
+                                    hintStyle: TextStyle(
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.w700,
+                                        color: Colors.black
+                                            .withValues(alpha: 0.18)),
+                                    border: InputBorder.none,
+                                    contentPadding:
+                                        const EdgeInsets.symmetric(
+                                            vertical: 14),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (customAmountError.value != null) ...[
+                          const SizedBox(height: 6),
+                          Text(customAmountError.value!,
+                              style: const TextStyle(
+                                  fontSize: 12,
+                                  color: AppColors.danger)),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+
+                // Items (hidden in custom mode)
+                if (!customMode.value && items.isNotEmpty) ...[
                   const Divider(height: 1, color: AppColors.divider),
                   ...items.asMap().entries.map((e) {
                     final item = e.value;
