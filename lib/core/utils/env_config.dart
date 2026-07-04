@@ -1,3 +1,5 @@
+import '../constants/app_constants.dart';
+
 enum Flavor { dev, staging, prod }
 
 class EnvConfig {
@@ -15,9 +17,18 @@ class EnvConfig {
 
   static void init(Flavor flavor) {
     _instance = switch (flavor) {
-      Flavor.dev => const EnvConfig._(flavor: Flavor.dev, apiBaseUrl: 'http://192.168.1.65:3000'),
-      Flavor.staging => const EnvConfig._(flavor: Flavor.staging, apiBaseUrl: 'https://api-staging.yoursalon.com'),
-      Flavor.prod => const EnvConfig._(flavor: Flavor.prod, apiBaseUrl: 'https://api.yoursalon.com'),
+      Flavor.dev => const EnvConfig._(
+        flavor: Flavor.dev,
+        apiBaseUrl: AppConstants.devBaseUrl,
+      ),
+      Flavor.staging => const EnvConfig._(
+        flavor: Flavor.staging,
+        apiBaseUrl: AppConstants.prodBaseUrl,
+      ),
+      Flavor.prod => const EnvConfig._(
+        flavor: Flavor.prod,
+        apiBaseUrl: AppConstants.prodBaseUrl,
+      ),
     };
   }
 

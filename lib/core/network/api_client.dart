@@ -2,9 +2,11 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../constants/app_constants.dart';
 import '../models/app_exception.dart';
 import '../utils/env_config.dart';
 import 'api_interceptors.dart';
+import 'dns_fallback_config.dart';
 
 // Callback set by AuthNotifier so the interceptor can signal logout.
 void Function()? _unauthenticatedCallback;
@@ -19,7 +21,7 @@ final dioProvider = Provider<Dio>((ref) {
     try {
       return EnvConfig.instance.apiBaseUrl;
     } catch (_) {
-      return 'http://localhost:3000';
+      return AppConstants.defaultBaseUrl;
     }
   }();
 
@@ -31,6 +33,7 @@ final dioProvider = Provider<Dio>((ref) {
       headers: {'Content-Type': 'application/json'},
     ),
   );
+  configureDnsFallback(dio);
 
   // Bare Dio instance for refresh calls (no auth interceptors to avoid cycles).
   final refreshDio = Dio(
@@ -41,8 +44,11 @@ final dioProvider = Provider<Dio>((ref) {
       headers: {'Content-Type': 'application/json'},
     ),
   );
+  configureDnsFallback(refreshDio);
 
   dio.interceptors.addAll([
+    RetryInterceptor(dio),
+    ConnectivityInterceptor(ref),
     AuthInterceptor(_storage),
     RefreshInterceptor(
       dio: refreshDio,
@@ -138,4 +144,3 @@ class ApiClient {
 final apiClientProvider = Provider<ApiClient>((ref) {
   return ApiClient(ref.read(dioProvider));
 });
-

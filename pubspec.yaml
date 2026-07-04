@@ -53,6 +53,7 @@ dependencies:
   flutter_svg: ^2.0.10+1
   shimmer: ^3.0.0
   gap: ^3.0.1
+  connectivity_plus: ^7.2.0
 
 dev_dependencies:
   flutter_test:

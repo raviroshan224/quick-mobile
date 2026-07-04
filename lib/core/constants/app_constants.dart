@@ -5,7 +5,9 @@ class AppConstants {
   static const String tokenKey = 'auth_token';
   static const String userKey = 'current_user';
 
-  static const String defaultBaseUrl = 'http://localhost:3000';
+  static const String prodBaseUrl = 'https://api.quick.com.np';
+  static const String devBaseUrl = prodBaseUrl;
+  static const String defaultBaseUrl = devBaseUrl;
   static const Duration connectTimeout = Duration(seconds: 10);
   static const Duration receiveTimeout = Duration(seconds: 30);
   static const int defaultPageSize = 20;

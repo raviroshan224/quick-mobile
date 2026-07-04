@@ -1,6 +1,8 @@
 import 'package:dio/dio.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../models/app_exception.dart';
+import 'network_status.dart';
 
 const _kAccessToken = 'auth_token';
 const _kRefreshToken = 'refresh_token';
@@ -95,15 +97,101 @@ class RefreshInterceptor extends Interceptor {
         opts.headers['Authorization'] = 'Bearer $newAccess';
         final retryResponse = await dio.fetch(opts);
         handler.resolve(retryResponse);
-      } catch (_) {
+      } catch (e) {
         _isRefreshing = false;
-        await _clearSession(storage);
-        onUnauthenticated();
+        // A connection-level failure (DNS/timeout/no signal) during refresh
+        // doesn't mean the refresh token is invalid — don't force a logout
+        // for what's likely a transient network blip. Only clear the
+        // session when the server actually rejected the refresh token.
+        final isNetworkIssue = e is DioException && e.response == null;
+        if (!isNetworkIssue) {
+          await _clearSession(storage);
+          onUnauthenticated();
+        }
         handler.reject(err);
       }
       return;
     }
 
+    handler.next(err);
+  }
+}
+
+// ─── Retry Interceptor ────────────────────────────────────────────────────────
+
+// Retries requests that failed before ever reaching the server (DNS
+// failures, dropped connections, connect timeouts) — safe to retry
+// regardless of HTTP method since the server never saw the request. Send/
+// receive timeouts are more ambiguous (the server may have already gotten
+// the request), so those are only retried for GET.
+class RetryInterceptor extends Interceptor {
+  RetryInterceptor(this._dio, {this.maxRetries = 3});
+
+  final Dio _dio;
+  final int maxRetries;
+
+  static const _retryCountKey = 'retry_count';
+
+  bool _alwaysRetryable(DioExceptionType type) =>
+      type == DioExceptionType.connectionError ||
+      type == DioExceptionType.connectionTimeout;
+
+  bool _idempotentOnlyRetryable(DioExceptionType type) =>
+      type == DioExceptionType.sendTimeout ||
+      type == DioExceptionType.receiveTimeout;
+
+  @override
+  Future<void> onError(
+    DioException err,
+    ErrorInterceptorHandler handler,
+  ) async {
+    final options = err.requestOptions;
+    final isGet = options.method.toUpperCase() == 'GET';
+    final retryable =
+        _alwaysRetryable(err.type) ||
+        (isGet && _idempotentOnlyRetryable(err.type));
+
+    final attempt = (options.extra[_retryCountKey] as int?) ?? 0;
+    if (!retryable || attempt >= maxRetries) {
+      handler.next(err);
+      return;
+    }
+
+    options.extra[_retryCountKey] = attempt + 1;
+    final backoff = Duration(milliseconds: 400 * (1 << attempt));
+    await Future.delayed(backoff);
+
+    try {
+      final response = await _dio.fetch(options);
+      handler.resolve(response);
+    } on DioException catch (e) {
+      handler.next(e);
+    }
+  }
+}
+
+// ─── Connectivity Interceptor ─────────────────────────────────────────────────
+
+// Flips a global "backend unreachable" flag so the UI can show a persistent
+// offline banner — set on connection-level failures (after retries are
+// exhausted), cleared as soon as any request succeeds.
+class ConnectivityInterceptor extends Interceptor {
+  ConnectivityInterceptor(this._ref);
+
+  final Ref _ref;
+
+  @override
+  void onResponse(Response response, ResponseInterceptorHandler handler) {
+    _ref.read(isBackendUnreachableProvider.notifier).markOnline();
+    handler.next(response);
+  }
+
+  @override
+  void onError(DioException err, ErrorInterceptorHandler handler) {
+    if (err.type == DioExceptionType.connectionError ||
+        err.type == DioExceptionType.connectionTimeout) {
+      _ref.read(isBackendUnreachableProvider.notifier).markOffline();
+    }
     handler.next(err);
   }
 }
@@ -135,6 +223,31 @@ class ErrorInterceptor extends Interceptor {
       }
     }
 
-    handler.next(err);
+    handler.reject(
+      DioException(
+        requestOptions: err.requestOptions,
+        response: response,
+        error: AppException(_friendlyMessage(err)),
+        type: err.type,
+      ),
+    );
+  }
+
+  String _friendlyMessage(DioException err) {
+    switch (err.type) {
+      case DioExceptionType.connectionError:
+        return 'No internet connection. Please check your network and try again.';
+      case DioExceptionType.connectionTimeout:
+      case DioExceptionType.sendTimeout:
+      case DioExceptionType.receiveTimeout:
+        return 'The connection timed out. Please check your network and try again.';
+      case DioExceptionType.badCertificate:
+        return 'Could not establish a secure connection. Please try again later.';
+      case DioExceptionType.cancel:
+        return 'Request cancelled.';
+      case DioExceptionType.badResponse:
+      case DioExceptionType.unknown:
+        return err.message ?? 'Something went wrong. Please try again.';
+    }
   }
 }

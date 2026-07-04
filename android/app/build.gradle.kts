@@ -37,6 +37,21 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+
+    flavorDimensions += "app"
+    productFlavors {
+        create("dev") {
+            dimension = "app"
+            applicationIdSuffix = ".dev"
+        }
+        create("staging") {
+            dimension = "app"
+            applicationIdSuffix = ".staging"
+        }
+        create("prod") {
+            dimension = "app"
+        }
+    }
 }
 
 flutter {

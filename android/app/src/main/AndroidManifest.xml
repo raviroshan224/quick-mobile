@@ -3,7 +3,7 @@
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
     <application
-        android:label="salon_pos"
+        android:label="Quick"
         android:name="${applicationName}"
         android:icon="@mipmap/launcher_icon">
         <activity

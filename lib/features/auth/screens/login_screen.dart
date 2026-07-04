@@ -51,7 +51,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text('Salon POS', style: Theme.of(context).textTheme.headlineMedium),
+                    Text('Quick', style: Theme.of(context).textTheme.headlineMedium),
                     const SizedBox(height: 8),
                     Text('Sign in to continue', style: Theme.of(context).textTheme.bodyMedium),
                     const SizedBox(height: 32),
