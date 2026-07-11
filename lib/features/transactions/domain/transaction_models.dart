@@ -172,6 +172,8 @@ class Transaction {
     this.refundAmount,
     this.notes,
     this.staffName,
+    this.processedByName,
+    this.processedByIsOwner = false,
   });
 
   final String id;
@@ -190,7 +192,14 @@ class Transaction {
   final double? refundAmount;
   final String? notes;
   // Staff member who processed the sale (Transaction.staff on the backend).
+  // Null when the OWNER checked out personally (owners have no Staff row) —
+  // [processedByName] always has a value in that case instead.
   final String? staffName;
+  // The account that processed the sale (Transaction.user on the backend) —
+  // always present, unlike [staffName]. Used as a fallback so every
+  // transaction can show who handled it, owner or staff.
+  final String? processedByName;
+  final bool processedByIsOwner;
 
   String get displayName {
     if (!isGuest && customerName != null && customerName!.trim().isNotEmpty) {
@@ -198,6 +207,14 @@ class Transaction {
     }
     if (guestName != null && guestName!.trim().isNotEmpty) return guestName!.trim();
     return 'Walk-in';
+  }
+
+  // Who actually processed the sale — the staff snapshot if one exists,
+  // otherwise the processing account (which covers owner-self-checkouts).
+  String? get processedByDisplayName {
+    if (staffName != null) return staffName;
+    if (processedByName == null) return null;
+    return processedByIsOwner ? '$processedByName (Owner)' : processedByName;
   }
 
   String get displayId {
@@ -226,6 +243,14 @@ class Transaction {
     final staffLast = staffUser?['lastName'] as String? ?? '';
     final staffFullName = '$staffFirst $staffLast'.trim();
 
+    // The account that actually processed the sale — always present, unlike
+    // `staff` which is null for owner-self-checkouts (owners have no Staff
+    // row). Used as a fallback so every transaction shows who handled it.
+    final processedBy = j['user'] as Map<String, dynamic>?;
+    final processedByFirst = processedBy?['firstName'] as String? ?? '';
+    final processedByLast = processedBy?['lastName'] as String? ?? '';
+    final processedByFullName = '$processedByFirst $processedByLast'.trim();
+
     return Transaction(
       id: j['id'] as String,
       receiptNumber: j['receiptNumber'] as String?,
@@ -238,6 +263,9 @@ class Transaction {
       customerName: fullName.isEmpty ? null : fullName,
       guestName: j['guestName'] as String?,
       staffName: staffFullName.isEmpty ? null : staffFullName,
+      processedByName:
+          processedByFullName.isEmpty ? null : processedByFullName,
+      processedByIsOwner: processedBy?['role'] == 'OWNER',
       items: itemsJson
           ?.map((e) => TransactionItem.fromJson(e as Map<String, dynamic>))
           .toList(),

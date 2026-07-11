@@ -170,11 +170,11 @@ class _DetailBody extends HookConsumerWidget {
                       _InfoRow(
                           label: 'Customer',
                           value: transaction.displayName),
-                      if (transaction.staffName != null) ...[
+                      if (transaction.processedByDisplayName != null) ...[
                         const SizedBox(height: 8),
                         _InfoRow(
-                            label: 'Staff',
-                            value: transaction.staffName!),
+                            label: 'Processed by',
+                            value: transaction.processedByDisplayName!),
                       ],
                       const SizedBox(height: 8),
                       _InfoRow(

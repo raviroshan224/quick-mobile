@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../features/staff/domain/staff_models.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../features/staff/presentation/providers/staff_provider.dart';
+import '../../../../core/constants/app_constants.dart';
 import '../../../../features/transactions/domain/transaction_models.dart';
 import '../../../../features/transactions/presentation/providers/transactions_provider.dart';
 
@@ -242,7 +243,7 @@ class _DetailBody extends ConsumerWidget {
                 Row(children: [
                   Expanded(
                     child: _StatCard(
-                      label: 'This Week',
+                      label: 'Recent Sales',
                       value:
                           'NPR ${_fmt(totalSales)}',
                       icon: Icons.trending_up_rounded,
@@ -271,9 +272,23 @@ class _DetailBody extends ConsumerWidget {
                 const SizedBox(height: 20),
 
                 // ── Recent Activity ───────────────────────────────────────
-                const Text('Recent Activity',
-                    style: TextStyle(
-                        fontSize: 15, fontWeight: FontWeight.w600)),
+                Row(
+                  children: [
+                    const Text('Recent Activity',
+                        style: TextStyle(
+                            fontSize: 15, fontWeight: FontWeight.w600)),
+                    const Spacer(),
+                    GestureDetector(
+                      onTap: () =>
+                          context.push(AppRoutes.staffHistory(staff.id)),
+                      child: const Text('View All',
+                          style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.primaryDark)),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 10),
                 Container(
                   decoration: BoxDecoration(

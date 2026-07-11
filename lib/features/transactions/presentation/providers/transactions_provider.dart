@@ -36,6 +36,7 @@ class TransactionListState {
     this.dateFrom,
     this.dateTo,
     this.staffUserId,
+    this.staffId,
   });
 
   final List<Transaction> items;
@@ -49,6 +50,8 @@ class TransactionListState {
   final DateTime? dateTo;
   // Non-null when a staff member is logged in — restricts list to their own.
   final String? staffUserId;
+  // Non-null when an owner is viewing one staff member's full history.
+  final String? staffId;
 
   TransactionListState copyWith({
     List<Transaction>? items,
@@ -69,12 +72,13 @@ class TransactionListState {
         dateFrom: dateFrom,
         dateTo: dateTo,
         staffUserId: staffUserId,
+        staffId: staffId,
       );
 }
 
 class TransactionListNotifier extends StateNotifier<TransactionListState> {
-  TransactionListNotifier(this._repo, {String? staffUserId})
-      : super(TransactionListState(staffUserId: staffUserId)) {
+  TransactionListNotifier(this._repo, {String? staffUserId, String? staffId})
+      : super(TransactionListState(staffUserId: staffUserId, staffId: staffId)) {
     _fetchPage1();
   }
 
@@ -92,6 +96,7 @@ class TransactionListNotifier extends StateNotifier<TransactionListState> {
         from: state.dateFrom == null ? null : _dateOnly(state.dateFrom!),
         to: state.dateTo == null ? null : _dateOnly(state.dateTo!),
         userId: state.staffUserId,
+        staffId: state.staffId,
       );
       if (!mounted) return;
       state = state.copyWith(
@@ -116,6 +121,7 @@ class TransactionListNotifier extends StateNotifier<TransactionListState> {
         from: state.dateFrom == null ? null : _dateOnly(state.dateFrom!),
         to: state.dateTo == null ? null : _dateOnly(state.dateTo!),
         userId: state.staffUserId,
+        staffId: state.staffId,
       );
       if (!mounted) return;
       _page++;
@@ -137,6 +143,7 @@ class TransactionListNotifier extends StateNotifier<TransactionListState> {
       dateFrom: state.dateFrom,
       dateTo: state.dateTo,
       staffUserId: state.staffUserId,
+      staffId: state.staffId,
     );
     await _fetchPage1();
   }
@@ -148,6 +155,7 @@ class TransactionListNotifier extends StateNotifier<TransactionListState> {
       dateFrom: state.dateFrom,
       dateTo: state.dateTo,
       staffUserId: state.staffUserId,
+      staffId: state.staffId,
     );
     await _fetchPage1();
   }
@@ -159,17 +167,22 @@ class TransactionListNotifier extends StateNotifier<TransactionListState> {
       dateFrom: from,
       dateTo: to,
       staffUserId: state.staffUserId,
+      staffId: state.staffId,
     );
     await _fetchPage1();
   }
 
-  /// Apply status, payment and date filters together as a single update
-  /// so choosing multiple filters in the filter sheet only triggers one fetch.
+  /// Apply status, payment, date and staff filters together as a single
+  /// update so choosing multiple filters in the filter sheet only triggers
+  /// one fetch. [staffId] is the owner-selected "filter by staff" choice —
+  /// distinct from [TransactionListState.staffUserId], which restricts a
+  /// logged-in staff member to their own transactions.
   Future<void> setFilters({
     String? status,
     String? payment,
     DateTime? from,
     DateTime? to,
+    String? staffId,
   }) async {
     state = TransactionListState(
       statusFilter: status,
@@ -177,6 +190,7 @@ class TransactionListNotifier extends StateNotifier<TransactionListState> {
       dateFrom: from,
       dateTo: to,
       staffUserId: state.staffUserId,
+      staffId: staffId,
     );
     await _fetchPage1();
   }
@@ -191,6 +205,16 @@ final transactionListProvider =
   return TransactionListNotifier(
     ref.read(_transactionsRepoProvider),
     staffUserId: staffUserId,
+  );
+});
+
+// ─── Full paginated history for one staff member (owner view) ────────────────
+
+final staffHistoryProvider = StateNotifierProvider.family<
+    TransactionListNotifier, TransactionListState, String>((ref, staffId) {
+  return TransactionListNotifier(
+    ref.read(_transactionsRepoProvider),
+    staffId: staffId,
   );
 });
 

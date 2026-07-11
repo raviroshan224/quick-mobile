@@ -5,6 +5,9 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:shimmer/shimmer.dart';
 import '../../../../core/constants/app_constants.dart';
+import '../../../../features/auth/presentation/providers/auth_provider.dart';
+import '../../../../features/staff/domain/staff_models.dart';
+import '../../../../features/staff/presentation/providers/staff_provider.dart';
 import '../../domain/transaction_models.dart';
 import '../providers/transactions_provider.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -59,6 +62,7 @@ int _activeFilterCount(TransactionListState state) {
   if (state.statusFilter != null) count++;
   if (state.paymentFilter != null) count++;
   if (state.dateFrom != null) count++;
+  if (state.staffId != null) count++;
   return count;
 }
 
@@ -175,12 +179,14 @@ class TransactionsScreen extends HookConsumerWidget {
                       payment: txState.paymentFilter,
                       dateFrom: txState.dateFrom,
                       dateTo: txState.dateTo,
-                      onApply: (status, payment, from, to) =>
+                      staffId: txState.staffId,
+                      onApply: (status, payment, from, to, staffId) =>
                           notifier.setFilters(
                         status: status,
                         payment: payment,
                         from: from,
                         to: to,
+                        staffId: staffId,
                       ),
                     ),
                   ),
@@ -471,12 +477,13 @@ class _FiltersButton extends StatelessWidget {
 
 // ─── Filters sheet ────────────────────────────────────────────────────────────
 
-class _FiltersSheet extends HookWidget {
+class _FiltersSheet extends HookConsumerWidget {
   const _FiltersSheet({
     required this.status,
     required this.payment,
     required this.dateFrom,
     required this.dateTo,
+    required this.staffId,
     required this.onApply,
   });
 
@@ -484,7 +491,9 @@ class _FiltersSheet extends HookWidget {
   final String? payment;
   final DateTime? dateFrom;
   final DateTime? dateTo;
-  final void Function(String? status, String? payment, DateTime? from, DateTime? to) onApply;
+  final String? staffId;
+  final void Function(String? status, String? payment, DateTime? from,
+      DateTime? to, String? staffId) onApply;
 
   static Future<void> show(
     BuildContext context, {
@@ -492,7 +501,9 @@ class _FiltersSheet extends HookWidget {
     required String? payment,
     required DateTime? dateFrom,
     required DateTime? dateTo,
-    required void Function(String?, String?, DateTime?, DateTime?) onApply,
+    required String? staffId,
+    required void Function(String?, String?, DateTime?, DateTime?, String?)
+        onApply,
   }) {
     return showModalBottomSheet(
       context: context,
@@ -503,21 +514,27 @@ class _FiltersSheet extends HookWidget {
         payment: payment,
         dateFrom: dateFrom,
         dateTo: dateTo,
+        staffId: staffId,
         onApply: onApply,
       ),
     );
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final statusState = useState(status);
     final paymentState = useState(payment);
     final fromState = useState(dateFrom);
     final toState = useState(dateTo);
+    final staffState = useState(staffId);
+    final isOwner = ref.watch(isOwnerProvider);
+    final staffListAsync =
+        isOwner ? ref.watch(activeStaffListProvider) : null;
 
     final hasActive = statusState.value != null ||
         paymentState.value != null ||
-        fromState.value != null;
+        fromState.value != null ||
+        staffState.value != null;
 
     return Container(
       constraints:
@@ -554,6 +571,7 @@ class _FiltersSheet extends HookWidget {
                           paymentState.value = null;
                           fromState.value = null;
                           toState.value = null;
+                          staffState.value = null;
                         }
                       : null,
                   child: Text(
@@ -651,6 +669,41 @@ class _FiltersSheet extends HookWidget {
                     },
                     context: context,
                   ),
+                  if (isOwner) ...[
+                    const SizedBox(height: 24),
+                    const _FilterSectionLabel('STAFF'),
+                    const SizedBox(height: 10),
+                    staffListAsync!.when(
+                      loading: () => const SizedBox(
+                        height: 34,
+                        child: Center(
+                          child: SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        ),
+                      ),
+                      error: (_, _) => const SizedBox.shrink(),
+                      data: (staffList) => Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          _FilterChip(
+                            label: 'All',
+                            selected: staffState.value == null,
+                            onTap: () => staffState.value = null,
+                          ),
+                          for (final StaffModel s in staffList)
+                            _FilterChip(
+                              label: s.fullName,
+                              selected: staffState.value == s.id,
+                              onTap: () => staffState.value = s.id,
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -663,7 +716,7 @@ class _FiltersSheet extends HookWidget {
               child: ElevatedButton(
                 onPressed: () {
                   onApply(statusState.value, paymentState.value,
-                      fromState.value, toState.value);
+                      fromState.value, toState.value, staffState.value);
                   Navigator.pop(context);
                 },
                 style: ElevatedButton.styleFrom(
@@ -937,8 +990,8 @@ class _TransactionRow extends StatelessWidget {
                     children: [
                       Expanded(
                         child: Text(
-                          transaction.staffName != null
-                              ? '${_formatDate(transaction.createdAt)} · ${transaction.staffName}'
+                          transaction.processedByDisplayName != null
+                              ? '${_formatDate(transaction.createdAt)} · ${transaction.processedByDisplayName}'
                               : _formatDate(transaction.createdAt),
                           style: const TextStyle(
                             fontSize: 12,

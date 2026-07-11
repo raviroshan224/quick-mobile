@@ -36,6 +36,7 @@ import '../../features/more/presentation/screens/dashboard_screen.dart';
 import '../../features/more/presentation/screens/staff_screen.dart';
 import '../../features/more/presentation/screens/staff_detail_screen.dart';
 import '../../features/more/presentation/screens/staff_form_screen.dart';
+import '../../features/more/presentation/screens/staff_history_screen.dart';
 import '../../features/more/presentation/screens/refunds_screen.dart';
 import '../../features/more/presentation/screens/image_library_screen.dart';
 import '../../features/more/presentation/screens/stock_movement_screen.dart';
@@ -252,6 +253,11 @@ final routerProvider = Provider<GoRouter>((ref) {
               path: '/more/staff/:id/edit',
               builder: (_, state) => StaffFormScreen(
                     staffId: state.pathParameters['id'],
+                  )),
+          GoRoute(
+              path: '/more/staff/:id/history',
+              builder: (_, state) => StaffHistoryScreen(
+                    staffId: state.pathParameters['id']!,
                   )),
           GoRoute(
               path: AppRoutes.moreRefunds,

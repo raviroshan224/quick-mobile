@@ -68,6 +68,7 @@ class AppRoutes {
   static const String staffNew = '/more/staff/new';
   static String staffDetail(String id) => '/more/staff/$id';
   static String staffEdit(String id) => '/more/staff/$id/edit';
+  static String staffHistory(String id) => '/more/staff/$id/history';
 
   static const String services = '/more/services';
   static const String serviceNew = '/more/services/new';
