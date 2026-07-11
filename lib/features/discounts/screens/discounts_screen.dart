@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../features/auth/presentation/providers/auth_provider.dart';
 import '../models/discount_model.dart';
@@ -17,12 +18,24 @@ class DiscountsScreen extends ConsumerWidget {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded,
+              size: 18, color: Colors.black),
+          onPressed: () => context.go(AppRoutes.more),
+        ),
         title: const Text('Discounts',
             style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: Colors.black)),
         backgroundColor: Colors.white,
         elevation: 0,
         centerTitle: true,
         iconTheme: const IconThemeData(color: Colors.black),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.add, color: Colors.black),
+            onPressed:
+                isOwner ? () => context.push('/more/discounts/new') : null,
+          ),
+        ],
       ),
       body: discountsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -33,7 +46,7 @@ class DiscountsScreen extends ConsumerWidget {
           return discounts.isEmpty
               ? _EmptyState(onAdd: isOwner ? () => context.push('/more/discounts/new') : null)
               : ListView(
-              padding: const EdgeInsets.only(bottom: 100),
+              padding: const EdgeInsets.only(bottom: 24),
               children: [
                 if (active.isNotEmpty) ...[
                   _SectionHeader(
@@ -70,15 +83,6 @@ class DiscountsScreen extends ConsumerWidget {
               ],
             );
         },
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: isOwner ? () => context.push('/more/discounts/new') : null,
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        icon: const Icon(Icons.add),
-        label: const Text('New Discount',
-            style: TextStyle(fontWeight: FontWeight.w600)),
       ),
     );
   }

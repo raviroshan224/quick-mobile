@@ -36,33 +36,24 @@ class RefundsScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: AppColors.background,
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded,
+              size: 18, color: Colors.black),
+          onPressed: () => context.go(AppRoutes.more),
+        ),
+        title: const Text('Refund History',
+            style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w600,
+                color: Colors.black)),
+        centerTitle: true,
+      ),
       body: SafeArea(
         child: Column(
           children: [
-            // ── Header ────────────────────────────────────────────────────
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-              child: Row(
-                children: [
-                  GestureDetector(
-                    onTap: () => context.go(AppRoutes.more),
-                    child: const Icon(
-                      Icons.arrow_back_ios_new_rounded,
-                      size: 18,
-                      color: Colors.black,
-                    ),
-                  ),
-                  const Spacer(),
-                  const Text(
-                    'Refund History',
-                    style: TextStyle(
-                        fontSize: 17, fontWeight: FontWeight.w600),
-                  ),
-                  const Spacer(),
-                  const SizedBox(width: 18),
-                ],
-              ),
-            ),
             const SizedBox(height: 16),
 
             // ── Content ───────────────────────────────────────────────────

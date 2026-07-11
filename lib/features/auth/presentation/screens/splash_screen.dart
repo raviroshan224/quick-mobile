@@ -61,7 +61,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
                 const QuickLogo(size: 80, onDark: true),
                 const SizedBox(height: 20),
                 Text(
-                  'Quick POS',
+                  'Quick',
                   style: AppTextStyles.displayMedium.copyWith(color: Colors.white),
                 ),
                 const SizedBox(height: 6),

@@ -39,37 +39,30 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded,
+              size: 18, color: Colors.black),
+          onPressed: () => context.go(AppRoutes.more),
+        ),
+        title: const Text('Customers',
+            style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w600,
+                color: Colors.black)),
+        centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.add, color: Colors.black),
+            onPressed: () => context.push(AppRoutes.customerNew),
+          ),
+        ],
+      ),
       body: SafeArea(
         child: Column(
           children: [
-            // ── Header row ────────────────────────────────────────────────
-            Padding(
-              padding: const EdgeInsets.fromLTRB(4, 8, 8, 0),
-              child: Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.arrow_back_ios_new_rounded,
-                        size: 18, color: Colors.black),
-                    onPressed: () => context.go(AppRoutes.more),
-                  ),
-                  const Expanded(
-                    child: Text(
-                      'Customers',
-                      style: TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.black),
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.add, color: Colors.black),
-                    onPressed: () =>
-                        context.push(AppRoutes.customerNew),
-                  ),
-                ],
-              ),
-            ),
-
             // ── Search bar ────────────────────────────────────────────────
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),

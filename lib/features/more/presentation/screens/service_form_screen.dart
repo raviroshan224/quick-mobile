@@ -186,7 +186,7 @@ class _ServiceFormScreenState extends ConsumerState<ServiceFormScreen> {
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     final price = double.tryParse(_priceCtrl.text.trim()) ?? 0;
-    final duration = int.tryParse(_durationCtrl.text.trim()) ?? 30;
+    final duration = int.tryParse(_durationCtrl.text.trim()) ?? 0;
     final description = _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim();
     final repo = ref.read(_servicesRepoProvider);
 
@@ -287,38 +287,34 @@ class _ServiceFormScreenState extends ConsumerState<ServiceFormScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded,
+              size: 18, color: Colors.black),
+          onPressed: () => Navigator.canPop(context)
+              ? Navigator.pop(context)
+              : context.go(AppRoutes.moreServices),
+        ),
+        title: Text(
+          widget.isEditing ? 'Edit Service' : 'New Service',
+          style: const TextStyle(
+              fontSize: 17, fontWeight: FontWeight.w600, color: Colors.black),
+        ),
+        centerTitle: true,
+        actions: [
+          if (widget.isEditing)
+            IconButton(
+              icon: const Icon(Icons.delete_outline,
+                  color: AppColors.danger),
+              onPressed: _confirmDelete,
+            ),
+        ],
+      ),
       body: SafeArea(
         child: Column(
           children: [
-            // ── Header ────────────────────────────────────────────────────
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-              child: Row(children: [
-                GestureDetector(
-                  onTap: () => Navigator.canPop(context)
-                      ? Navigator.pop(context)
-                      : context.go(AppRoutes.moreServices),
-                  child: const Icon(Icons.arrow_back_ios_new_rounded,
-                      size: 18, color: Colors.black),
-                ),
-                const Spacer(),
-                Text(
-                  widget.isEditing ? 'Edit Service' : 'New Service',
-                  style: const TextStyle(
-                      fontSize: 17, fontWeight: FontWeight.w600),
-                ),
-                const Spacer(),
-                if (widget.isEditing)
-                  GestureDetector(
-                    onTap: _confirmDelete,
-                    child: const Icon(Icons.delete_outline,
-                        size: 22, color: AppColors.danger),
-                  )
-                else
-                  const SizedBox(width: 22),
-              ]),
-            ),
-
             // ── Form ──────────────────────────────────────────────────────
             Expanded(
               child: Form(
@@ -595,12 +591,12 @@ class _ServiceFormScreenState extends ConsumerState<ServiceFormScreen> {
                                 LengthLimitingTextInputFormatter(3),
                               ],
                               decoration: const InputDecoration(
-                                hintText: 'Or type custom minutes',
+                                hintText: 'Optional — e.g. 30',
                                 suffixText: 'min',
                               ),
                               validator: (v) {
                                 if (v == null || v.trim().isEmpty) {
-                                  return 'Duration is required';
+                                  return null;
                                 }
                                 if ((int.tryParse(v) ?? 0) <= 0) {
                                   return 'Enter a valid duration';

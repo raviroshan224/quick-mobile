@@ -40,13 +40,30 @@ class _StaffScreenState extends ConsumerState<StaffScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded,
+              size: 18, color: Colors.black),
+          onPressed: () => context.go(AppRoutes.more),
+        ),
+        title: const Text('Staff',
+            style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w600,
+                color: Colors.black)),
+        centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.add, color: Colors.black),
+            onPressed: () => context.push('/more/staff/new'),
+          ),
+        ],
+      ),
       body: SafeArea(
         child: Column(
           children: [
-            // ── Custom header ──────────────────────────────────────────────
-            _Header(
-              onAdd: () => context.push('/more/staff/new'),
-            ),
             // ── Search bar ─────────────────────────────────────────────────
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
@@ -86,7 +103,7 @@ class _StaffScreenState extends ConsumerState<StaffScreen> {
                   }
 
                   return ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
                     itemCount: filtered.length,
                     separatorBuilder: (_, _) =>
                         const SizedBox(height: 10),
@@ -106,67 +123,6 @@ class _StaffScreenState extends ConsumerState<StaffScreen> {
             ),
           ],
         ),
-      ),
-      // ── FAB-style Add Staff button ────────────────────────────────────────
-      floatingActionButton: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        child: SizedBox(
-          width: double.infinity,
-          height: 52,
-          child: FloatingActionButton.extended(
-            onPressed: () => context.push('/more/staff/new'),
-            backgroundColor: Colors.black,
-            foregroundColor: Colors.white,
-            elevation: 2,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(26),
-            ),
-            icon: const Icon(Icons.add, size: 20),
-            label: const Text(
-              'Add Staff',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 0.1,
-              ),
-            ),
-          ),
-        ),
-      ),
-      floatingActionButtonLocation:
-          FloatingActionButtonLocation.centerFloat,
-    );
-  }
-}
-
-// ─── Header ───────────────────────────────────────────────────────────────────
-
-class _Header extends StatelessWidget {
-  const _Header({required this.onAdd});
-  final VoidCallback onAdd;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-      child: Row(
-        children: [
-          GestureDetector(
-            onTap: () => context.go(AppRoutes.more),
-            child: const Icon(Icons.arrow_back_ios_new_rounded,
-                size: 18, color: Colors.black),
-          ),
-          const Spacer(),
-          const Text(
-            'Staff',
-            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
-          ),
-          const Spacer(),
-          GestureDetector(
-            onTap: onAdd,
-            child: const Icon(Icons.add, size: 24, color: Colors.black),
-          ),
-        ],
       ),
     );
   }

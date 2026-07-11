@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../services/models/service_model.dart';
 import '../../services/providers/services_provider.dart';
@@ -27,7 +28,6 @@ class _DiscountFormScreenState extends ConsumerState<DiscountFormScreen> {
   DiscountType _type = DiscountType.percentage;
   bool _isActive = true;
   DiscountScope _scope = DiscountScope.all;
-  String? _selectedCategory;
   String? _selectedServiceId;
   String? _selectedServiceName;
 
@@ -54,7 +54,6 @@ class _DiscountFormScreenState extends ConsumerState<DiscountFormScreen> {
       _type = d.type;
       _isActive = d.isActive;
       _scope = d.scope;
-      _selectedCategory = d.categoryName;
       _selectedServiceId = d.serviceId;
       _selectedServiceName = d.serviceName;
     });
@@ -68,9 +67,6 @@ class _DiscountFormScreenState extends ConsumerState<DiscountFormScreen> {
   }
 
   bool _scopeIsValid() {
-    if (_scope == DiscountScope.category && _selectedCategory == null) {
-      return false;
-    }
     if (_scope == DiscountScope.service && _selectedServiceId == null) {
       return false;
     }
@@ -81,10 +77,8 @@ class _DiscountFormScreenState extends ConsumerState<DiscountFormScreen> {
     if (!_formKey.currentState!.validate()) return;
     if (!_scopeIsValid()) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(_scope == DiscountScope.category
-              ? 'Please select a service category'
-              : 'Please select a service'),
+        const SnackBar(
+          content: Text('Please select a service'),
           backgroundColor: AppColors.refund,
         ),
       );
@@ -178,7 +172,7 @@ class _DiscountFormScreenState extends ConsumerState<DiscountFormScreen> {
       isScrollControlled: true,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (_) => _ServicePickerSheet(
         services: services,
         selectedId: _selectedServiceId,
@@ -202,27 +196,35 @@ class _DiscountFormScreenState extends ConsumerState<DiscountFormScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: Text(widget.isEditing ? 'Edit Discount' : 'New Discount'),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded,
+              size: 18, color: Colors.black),
+          onPressed: () => Navigator.canPop(context)
+              ? Navigator.pop(context)
+              : context.go(AppRoutes.moreDiscounts),
+        ),
+        title: Text(
+          widget.isEditing ? 'Edit Discount' : 'New Discount',
+          style: const TextStyle(
+              fontSize: 17, fontWeight: FontWeight.w600, color: Colors.black),
+        ),
+        centerTitle: true,
         actions: [
           if (widget.isEditing)
             IconButton(
-              icon:
-                  const Icon(Icons.delete_outline, color: AppColors.refund),
+              icon: const Icon(Icons.delete_outline,
+                  color: AppColors.refund),
               onPressed: _delete,
               tooltip: 'Delete',
             ),
-          TextButton(
-            onPressed: _save,
-            child: const Text('Save',
-                style: TextStyle(
-                    fontWeight: FontWeight.w700, color: AppColors.accent)),
-          ),
         ],
       ),
       body: Form(
         key: _formKey,
         child: ListView(
-          padding: const EdgeInsets.only(bottom: 40),
+          padding: const EdgeInsets.only(bottom: 120),
           children: [
             // ── Live preview ──────────────────────────────────────────────
             Padding(
@@ -311,30 +313,10 @@ class _DiscountFormScreenState extends ConsumerState<DiscountFormScreen> {
                 isSelected: _scope == DiscountScope.all,
                 onTap: () => setState(() {
                   _scope = DiscountScope.all;
-                  _selectedCategory = null;
                   _selectedServiceId = null;
                   _selectedServiceName = null;
                 }),
               ),
-              const Divider(height: 1, indent: 56),
-              _ScopeTile(
-                title: 'Service category',
-                subtitle: 'Applies only to services in a category',
-                icon: Icons.category_outlined,
-                isSelected: _scope == DiscountScope.category,
-                onTap: () => setState(() {
-                  _scope = DiscountScope.category;
-                  _selectedServiceId = null;
-                  _selectedServiceName = null;
-                }),
-              ),
-              // Category dropdown — shown when category scope is selected
-              if (_scope == DiscountScope.category)
-                _CategoryDropdown(
-                  selected: _selectedCategory,
-                  onChanged: (v) =>
-                      setState(() => _selectedCategory = v),
-                ),
               const Divider(height: 1, indent: 56),
               _ScopeTile(
                 title: 'Specific service',
@@ -343,7 +325,6 @@ class _DiscountFormScreenState extends ConsumerState<DiscountFormScreen> {
                 isSelected: _scope == DiscountScope.service,
                 onTap: () => setState(() {
                   _scope = DiscountScope.service;
-                  _selectedCategory = null;
                 }),
               ),
               // Service picker — shown when service scope is selected
@@ -372,34 +353,30 @@ class _DiscountFormScreenState extends ConsumerState<DiscountFormScreen> {
                 onChanged: (v) => setState(() => _isActive = v),
               ),
             ]),
-
-            // ── Delete ────────────────────────────────────────────────────
-            if (widget.isEditing) ...[
-              const _SectionHeader(label: 'Danger Zone'),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: OutlinedButton(
-                  onPressed: _delete,
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.refund,
-                    side: const BorderSide(color: AppColors.refund),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10)),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.delete_outline, size: 18),
-                      SizedBox(width: 6),
-                      Text('Delete Discount',
-                          style: TextStyle(fontWeight: FontWeight.w600)),
-                    ],
-                  ),
-                ),
-              ),
-            ],
           ],
+        ),
+      ),
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+          child: GestureDetector(
+            onTap: _save,
+            child: Container(
+              height: 52,
+              decoration: BoxDecoration(
+                color: Colors.black,
+                borderRadius: BorderRadius.circular(26),
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                widget.isEditing ? 'Save Changes' : 'Add Discount',
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600),
+              ),
+            ),
+          ),
         ),
       ),
     );
@@ -409,10 +386,6 @@ class _DiscountFormScreenState extends ConsumerState<DiscountFormScreen> {
     switch (_scope) {
       case DiscountScope.all:
         return 'All services & items';
-      case DiscountScope.category:
-        return _selectedCategory != null
-            ? '$_selectedCategory category'
-            : 'Select category…';
       case DiscountScope.service:
         return _selectedServiceName ?? 'Select service…';
     }
@@ -490,56 +463,6 @@ class _ScopeTile extends StatelessWidget {
                   : null,
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-// ── Category dropdown (shown under category scope tile) ───────────────────────
-
-class _CategoryDropdown extends StatelessWidget {
-  final String? selected;
-  final ValueChanged<String?> onChanged;
-
-  const _CategoryDropdown(
-      {required this.selected, required this.onChanged});
-
-  static const _categories = [
-    'Hair',
-    'Color',
-    'Facial',
-    'Spa',
-    'Nails',
-    'Massage',
-    'Wax',
-    'Other',
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(52, 0, 16, 12),
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: selected,
-          isExpanded: true,
-          hint: const Text('Select category',
-              style: TextStyle(
-                  fontSize: 14, color: AppColors.textSecondary)),
-          items: _categories
-              .map((c) => DropdownMenuItem(
-                    value: c,
-                    child: Text(c,
-                        style: const TextStyle(fontSize: 14)),
-                  ))
-              .toList(),
-          onChanged: onChanged,
         ),
       ),
     );
@@ -921,7 +844,7 @@ class _FormCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         border: Border.all(color: AppColors.divider),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
       ),
       child: Column(children: children),
     );

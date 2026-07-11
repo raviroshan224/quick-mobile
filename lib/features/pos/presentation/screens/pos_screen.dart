@@ -73,7 +73,7 @@ class _POSTopBar extends HookConsumerWidget {
       ),
       child: Row(
         children: [
-          Text('POS Billing', style: AppTextStyles.headlineMedium),
+          Text('Quick Billing', style: AppTextStyles.headlineMedium),
           const SizedBox(width: AppSpacing.lg),
           Expanded(
             child: AppSearchField(

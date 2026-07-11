@@ -230,9 +230,11 @@ class _ServiceTile extends StatelessWidget {
       ),
       title: Text(service.name,
           style: const TextStyle(fontSize: 14)),
-      subtitle: Text(service.durationLabel,
-          style: const TextStyle(
-              fontSize: 11, color: AppColors.textTertiary)),
+      subtitle: service.durationLabel.isEmpty
+          ? null
+          : Text(service.durationLabel,
+              style: const TextStyle(
+                  fontSize: 11, color: AppColors.textTertiary)),
       trailing: Text(
         'NPR ${service.price.toStringAsFixed(0)}',
         style: const TextStyle(

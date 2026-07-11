@@ -27,20 +27,29 @@ class TransactionItem {
   int get maxRefundable => quantity - (refundedQty ?? 0);
 
   factory TransactionItem.fromJson(Map<String, dynamic> j) {
+    // The backend stores serviceName/productName/staffName as immutable
+    // snapshot columns on the transaction item itself (so historical
+    // receipts don't change if a service/staff record is later renamed).
+    // Fall back to the nested service/product/staff relation objects in
+    // case a caller ever includes those instead.
     final service = j['service'] as Map<String, dynamic>?;
     final product = j['product'] as Map<String, dynamic>?;
     final staff = j['staff'] as Map<String, dynamic>?;
-    final firstName = staff?['firstName'] as String? ?? '';
-    final lastName = staff?['lastName'] as String? ?? '';
-    final staffName = '$firstName $lastName'.trim();
+    final nestedFirstName = staff?['firstName'] as String? ?? '';
+    final nestedLastName = staff?['lastName'] as String? ?? '';
+    final nestedStaffName = '$nestedFirstName $nestedLastName'.trim();
+
+    final staffName = (j['staffName'] as String?)?.trim();
     return TransactionItem(
       id: j['id'] as String,
       quantity: j['quantity'] as int? ?? 1,
       unitPrice: (j['unitPrice'] as num? ?? j['price'] as num? ?? 0).toDouble(),
       total: (j['totalPrice'] as num? ?? j['total'] as num? ?? 0).toDouble(),
-      serviceName: service?['name'] as String?,
-      productName: product?['name'] as String?,
-      staffName: staffName.isEmpty ? null : staffName,
+      serviceName: j['serviceName'] as String? ?? service?['name'] as String?,
+      productName: j['productName'] as String? ?? product?['name'] as String?,
+      staffName: (staffName != null && staffName.isNotEmpty)
+          ? staffName
+          : (nestedStaffName.isEmpty ? null : nestedStaffName),
       refundedQty: j['refundedQty'] as int?,
     );
   }
@@ -68,14 +77,25 @@ class RefundedItem {
   final String? displayName;
 
   factory RefundedItem.fromJson(Map<String, dynamic> j) {
+    // transactionItem carries serviceName/productName as flat snapshot
+    // columns (see TransactionItem.fromJson) — read those first and only
+    // fall back to nested service/product relation objects if present.
     final item = j['transactionItem'] as Map<String, dynamic>?;
     final service = item?['service'] as Map<String, dynamic>?;
     final product = item?['product'] as Map<String, dynamic>?;
-    final name = service?['name'] as String? ?? product?['name'] as String?;
+    final name = item?['serviceName'] as String? ??
+        item?['productName'] as String? ??
+        service?['name'] as String? ??
+        product?['name'] as String?;
+    final quantity = j['quantity'] as int? ?? 0;
+    // RefundItem has no unitPrice column — only `amount` (the refund total
+    // for this line). Derive a per-unit price so existing unitPrice*quantity
+    // display math still reconstructs the correct line total.
+    final amount = (j['amount'] as num?)?.toDouble() ?? 0;
     return RefundedItem(
       id: j['id'] as String,
-      quantity: j['quantity'] as int? ?? 0,
-      unitPrice: (j['unitPrice'] as num?)?.toDouble() ?? 0,
+      quantity: quantity,
+      unitPrice: quantity > 0 ? amount / quantity : amount,
       displayName: name,
     );
   }
@@ -151,6 +171,7 @@ class Transaction {
     this.tipAmount,
     this.refundAmount,
     this.notes,
+    this.staffName,
   });
 
   final String id;
@@ -168,6 +189,8 @@ class Transaction {
   final double? tipAmount;
   final double? refundAmount;
   final String? notes;
+  // Staff member who processed the sale (Transaction.staff on the backend).
+  final String? staffName;
 
   String get displayName {
     if (!isGuest && customerName != null && customerName!.trim().isNotEmpty) {
@@ -196,6 +219,13 @@ class Transaction {
     final lastName = customer?['lastName'] as String? ?? '';
     final fullName = '$firstName $lastName'.trim();
 
+    // Staff who processed the sale — backend includes it as staff.user.
+    final staff = j['staff'] as Map<String, dynamic>?;
+    final staffUser = staff?['user'] as Map<String, dynamic>?;
+    final staffFirst = staffUser?['firstName'] as String? ?? '';
+    final staffLast = staffUser?['lastName'] as String? ?? '';
+    final staffFullName = '$staffFirst $staffLast'.trim();
+
     return Transaction(
       id: j['id'] as String,
       receiptNumber: j['receiptNumber'] as String?,
@@ -207,6 +237,7 @@ class Transaction {
       createdAt: DateTime.parse(j['createdAt'] as String).toLocal(),
       customerName: fullName.isEmpty ? null : fullName,
       guestName: j['guestName'] as String?,
+      staffName: staffFullName.isEmpty ? null : staffFullName,
       items: itemsJson
           ?.map((e) => TransactionItem.fromJson(e as Map<String, dynamic>))
           .toList(),

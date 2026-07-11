@@ -70,8 +70,8 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
   final _emergencyNameCtrl = TextEditingController();
   final _relationshipCtrl = TextEditingController();
   final _addressCtrl = TextEditingController();
-  final _passwordCtrl = TextEditingController();
-  final _confirmCtrl = TextEditingController();
+  final _pinCtrl = TextEditingController();
+  final _confirmPinCtrl = TextEditingController();
 
   PickedImage? _pickedImage;
   PickedImage? _govIdImage;
@@ -79,8 +79,6 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
 
   bool _isActive = true;
   bool _loading = true;
-  bool _showPassword = false;
-  bool _showConfirm = false;
 
   Set<String> _selectedSpecialties = {};
   final _commissionCtrl = TextEditingController();
@@ -133,8 +131,8 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
     _relationshipCtrl.dispose();
     _addressCtrl.dispose();
     _commissionCtrl.dispose();
-    _passwordCtrl.dispose();
-    _confirmCtrl.dispose();
+    _pinCtrl.dispose();
+    _confirmPinCtrl.dispose();
     super.dispose();
   }
 
@@ -239,15 +237,11 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
       final repo = ref.read(_staffRepoProvider);
       final rawEmail = _emailCtrl.text.trim().toLowerCase();
       final phone = _mobileCtrl.text.trim();
-      final email = rawEmail.isNotEmpty
-          ? rawEmail
-          : '${_previewFirstName.toLowerCase()}${_previewLastName.toLowerCase()}$phone@quickpos.staff';
-      final password = _passwordCtrl.text;
       final result = await repo.createWithAccount(
         firstName: _previewFirstName,
         lastName: _previewLastName,
-        email: email,
-        password: password,
+        email: rawEmail.isEmpty ? null : rawEmail,
+        pin: _pinCtrl.text,
         phone: phone.isEmpty ? null : phone,
         specialties: _selectedSpecialties.toList(),
         commissionRate: double.tryParse(_commissionCtrl.text.trim()),
@@ -266,7 +260,7 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
             : _addressCtrl.text.trim(),
         govIdType: _govIdType,
       );
-      if (mounted) _showCreatedDialog(result.email, result.password);
+      if (mounted) _showCreatedDialog(result.email);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -278,7 +272,7 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
     }
   }
 
-  void _showCreatedDialog(String email, String password) {
+  void _showCreatedDialog(String email) {
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -308,7 +302,7 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Share these login credentials with the staff member:',
+              'The staff member can now sign in from the profile picker using the PIN you just set.',
               style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
             ),
             const SizedBox(height: 16),
@@ -320,19 +314,7 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: AppColors.divider),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _CredRow(label: 'Email', value: email),
-                  const SizedBox(height: 8),
-                  _CredRow(label: 'Password', value: password),
-                ],
-              ),
-            ),
-            const SizedBox(height: 10),
-            const Text(
-              'The staff member can log in and change their password from Settings.',
-              style: TextStyle(fontSize: 12, color: AppColors.textTertiary),
+              child: _CredRow(label: 'Email', value: email),
             ),
           ],
         ),
@@ -514,19 +496,36 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded,
+              size: 18, color: Colors.black),
+          onPressed: () => Navigator.canPop(context)
+              ? Navigator.pop(context)
+              : widget.isEditing
+              ? context.go('/more/staff/${widget.staffId}')
+              : context.go('/more/staff'),
+        ),
+        title: Text(
+          widget.isEditing ? 'Edit Staff' : 'New Staff Member',
+          style: const TextStyle(
+              fontSize: 17, fontWeight: FontWeight.w600, color: Colors.black),
+        ),
+        centerTitle: true,
+        actions: [
+          if (widget.isEditing)
+            IconButton(
+              icon: const Icon(Icons.delete_outline,
+                  color: AppColors.danger),
+              onPressed: _delete,
+            ),
+        ],
+      ),
       body: SafeArea(
         child: Column(
           children: [
-            // ── Header ────────────────────────────────────────────────────
-            _FormHeader(
-              isEditing: widget.isEditing,
-              onBack: () => Navigator.canPop(context)
-                  ? Navigator.pop(context)
-                  : widget.isEditing
-                  ? context.go('/more/staff/${widget.staffId}')
-                  : context.go('/more/staff'),
-              onDelete: widget.isEditing ? _delete : null,
-            ),
             // ── Scrollable form body ───────────────────────────────────────
             Expanded(
               child: Form(
@@ -964,65 +963,51 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
                       ],
                     ),
 
-                    // ── Login Credentials ─────────────────────────────────
+                    // ── Sign-in PIN ─────────────────────────────────────────
                     if (!widget.isEditing) ...[
-                      const _SectionHeader(label: 'Login Credentials'),
+                      const _SectionHeader(label: 'Sign-in PIN'),
                       _FormCard(
                         children: [
                           _Field(
-                            label: 'Password',
+                            label: 'PIN',
                             child: TextFormField(
-                              controller: _passwordCtrl,
-                              obscureText: !_showPassword,
-                              decoration: InputDecoration(
-                                hintText: 'Min 8 chars, upper, lower & number',
-                                suffixIcon: IconButton(
-                                  icon: Icon(
-                                    _showPassword
-                                        ? Icons.visibility_outlined
-                                        : Icons.visibility_off_outlined,
-                                    size: 18,
-                                    color: AppColors.textTertiary,
-                                  ),
-                                  onPressed: () => setState(
-                                    () => _showPassword = !_showPassword,
-                                  ),
-                                ),
+                              controller: _pinCtrl,
+                              keyboardType: TextInputType.number,
+                              obscureText: true,
+                              maxLength: 4,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.digitsOnly,
+                              ],
+                              decoration: const InputDecoration(
+                                hintText: '4-digit PIN',
+                                counterText: '',
                               ),
                               validator: (v) {
-                                if (v == null || v.isEmpty) return 'Password is required';
-                                if (v.length < 8) return 'At least 8 characters';
-                                if (!RegExp(r'[A-Z]').hasMatch(v)) return 'Include an uppercase letter';
-                                if (!RegExp(r'[a-z]').hasMatch(v)) return 'Include a lowercase letter';
-                                if (!RegExp(r'[0-9]').hasMatch(v)) return 'Include a number';
+                                if (v == null || v.length != 4) {
+                                  return 'PIN must be 4 digits';
+                                }
                                 return null;
                               },
                             ),
                           ),
                           const _FieldDivider(),
                           _Field(
-                            label: 'Confirm Password',
+                            label: 'Confirm PIN',
                             child: TextFormField(
-                              controller: _confirmCtrl,
-                              obscureText: !_showConfirm,
-                              decoration: InputDecoration(
-                                hintText: 'Re-enter password',
-                                suffixIcon: IconButton(
-                                  icon: Icon(
-                                    _showConfirm
-                                        ? Icons.visibility_outlined
-                                        : Icons.visibility_off_outlined,
-                                    size: 18,
-                                    color: AppColors.textTertiary,
-                                  ),
-                                  onPressed: () => setState(
-                                    () => _showConfirm = !_showConfirm,
-                                  ),
-                                ),
+                              controller: _confirmPinCtrl,
+                              keyboardType: TextInputType.number,
+                              obscureText: true,
+                              maxLength: 4,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.digitsOnly,
+                              ],
+                              decoration: const InputDecoration(
+                                hintText: 'Re-enter PIN',
+                                counterText: '',
                               ),
                               validator: (v) {
-                                if (v != _passwordCtrl.text) {
-                                  return 'Passwords do not match';
+                                if (v != _pinCtrl.text) {
+                                  return 'PINs do not match';
                                 }
                                 return null;
                               },
@@ -1111,55 +1096,6 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
           onTap: _save,
           isLoading: _loading,
         ),
-      ),
-    );
-  }
-}
-
-// ─── Header ───────────────────────────────────────────────────────────────────
-
-class _FormHeader extends StatelessWidget {
-  const _FormHeader({
-    required this.isEditing,
-    required this.onBack,
-    this.onDelete,
-  });
-  final bool isEditing;
-  final VoidCallback onBack;
-  final VoidCallback? onDelete;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-      child: Row(
-        children: [
-          GestureDetector(
-            onTap: onBack,
-            child: const Icon(
-              Icons.arrow_back_ios_new_rounded,
-              size: 18,
-              color: Colors.black,
-            ),
-          ),
-          const Spacer(),
-          Text(
-            isEditing ? 'Edit Staff' : 'New Staff Member',
-            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
-          ),
-          const Spacer(),
-          if (onDelete != null)
-            GestureDetector(
-              onTap: onDelete,
-              child: const Icon(
-                Icons.delete_outline,
-                size: 22,
-                color: AppColors.danger,
-              ),
-            )
-          else
-            const SizedBox(width: 22),
-        ],
       ),
     );
   }

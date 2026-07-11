@@ -1,3 +1,4 @@
+import 'dart:math';
 import '../../../core/models/paginated_response.dart';
 import '../../../core/network/api_client.dart';
 import '../domain/staff_models.dart';
@@ -5,6 +6,20 @@ import '../domain/staff_models.dart';
 class StaffRepository {
   StaffRepository(this._api);
   final ApiClient _api;
+
+  // Staff sign in with a PIN, not a password — the account still needs one
+  // internally, so generate a random one the owner never sees or shares.
+  String _generatePassword() {
+    final rand = Random.secure();
+    const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+    const lower = 'abcdefghijkmnopqrstuvwxyz';
+    const digits = '23456789';
+    final chars = List.generate(12, (i) {
+      final pool = switch (i % 3) { 0 => upper, 1 => lower, _ => digits };
+      return pool[rand.nextInt(pool.length)];
+    })..shuffle(rand);
+    return chars.join();
+  }
 
   Future<List<StaffModel>> getAll({bool activeOnly = false}) async {
     final data = await _api.get('/staff', queryParameters: {
@@ -19,14 +34,16 @@ class StaffRepository {
     return StaffModel.fromJson(data);
   }
 
-  // Creates a staff account and profile in two steps:
-  // 1. POST /auth/register → creates the User account
+  // Creates a staff account and profile in three steps:
+  // 1. POST /auth/register → creates the User account (random password;
+  //    staff sign in with their PIN, not this)
   // 2. POST /staff → creates the Staff profile linked to that user
-  Future<({StaffModel staff, String email, String password})> createWithAccount({
+  // 3. PATCH /auth/staff/:id/pin → sets the sign-in PIN
+  Future<({StaffModel staff, String email})> createWithAccount({
     required String firstName,
     required String lastName,
-    required String email,
-    required String password,
+    required String pin,
+    String? email,
     String? phone,
     List<String> specialties = const [],
     double? commissionRate,
@@ -37,12 +54,16 @@ class StaffRepository {
     String? address,
     String? govIdType,
   }) async {
+    final resolvedEmail = (email != null && email.isNotEmpty)
+        ? email
+        : '${firstName.toLowerCase()}${lastName.toLowerCase()}$phone@quickpos.staff';
+
     // Step 1: create user account.
     final userResult = await _api.post('/auth/register', data: {
-      'email': email,
+      'email': resolvedEmail,
       'firstName': firstName,
       'lastName': lastName,
-      'password': password,
+      'password': _generatePassword(),
     }) as Map<String, dynamic>;
 
     final userId = (userResult['user'] as Map<String, dynamic>?)?['id'] as String? ??
@@ -62,11 +83,12 @@ class StaffRepository {
       'govIdType': ?govIdType,
     }) as Map<String, dynamic>;
 
-    return (
-      staff: StaffModel.fromJson(staffData),
-      email: email,
-      password: password,
-    );
+    final staff = StaffModel.fromJson(staffData);
+
+    // Step 3: set the sign-in PIN.
+    await _api.patch('/auth/staff/${staff.id}/pin', data: {'pin': pin});
+
+    return (staff: staff, email: resolvedEmail);
   }
 
   Future<StaffModel> update(

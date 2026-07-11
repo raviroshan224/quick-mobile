@@ -7,7 +7,6 @@ enum DiscountType { percentage, fixed }
 /// Where the discount applies during checkout.
 enum DiscountScope {
   all,       // entire cart subtotal
-  category,  // line items belonging to a specific service category
   service,   // one specific service
 }
 
@@ -20,7 +19,6 @@ class Discount {
 
   // scope
   final DiscountScope scope;
-  final String? categoryName; // e.g. 'Hair', 'Facial' — set when scope == category
   final String? serviceId;    // UUID — set when scope == service
   final String? serviceName;  // denormalised for display
 
@@ -31,7 +29,6 @@ class Discount {
     required this.value,
     this.isActive = true,
     this.scope = DiscountScope.all,
-    this.categoryName,
     this.serviceId,
     this.serviceName,
   });
@@ -44,13 +41,11 @@ class Discount {
     return 'Rs ${value.toStringAsFixed(0)} off';
   }
 
-  /// Where this discount applies, e.g. "All services & items" or "Hair".
+  /// Where this discount applies, e.g. "All services & items" or a service name.
   String get scopeLabel {
     switch (scope) {
       case DiscountScope.all:
         return 'All services & items';
-      case DiscountScope.category:
-        return categoryName ?? 'All categories';
       case DiscountScope.service:
         return serviceName ?? 'Specific service';
     }
@@ -71,7 +66,6 @@ class Discount {
     double? value,
     bool? isActive,
     DiscountScope? scope,
-    String? categoryName,
     String? serviceId,
     String? serviceName,
   }) {
@@ -83,9 +77,6 @@ class Discount {
       isActive: isActive ?? this.isActive,
       scope: scope ?? this.scope,
       // When scope changes to `all`, clear the scope-specific fields.
-      categoryName: (scope ?? this.scope) == DiscountScope.category
-          ? (categoryName ?? this.categoryName)
-          : null,
       serviceId: (scope ?? this.scope) == DiscountScope.service
           ? (serviceId ?? this.serviceId)
           : null,
@@ -101,7 +92,6 @@ class Discount {
     required double value,
     bool isActive = true,
     DiscountScope scope = DiscountScope.all,
-    String? categoryName,
     String? serviceId,
     String? serviceName,
   }) {
@@ -112,7 +102,6 @@ class Discount {
       value: value,
       isActive: isActive,
       scope: scope,
-      categoryName: scope == DiscountScope.category ? categoryName : null,
       serviceId: scope == DiscountScope.service ? serviceId : null,
       serviceName: scope == DiscountScope.service ? serviceName : null,
     );

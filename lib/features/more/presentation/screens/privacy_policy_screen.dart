@@ -36,8 +36,8 @@ class PrivacyPolicyScreen extends StatelessWidget {
                 _Section(
                   title: '1. Introduction',
                   body:
-                      'Quick POS ("Quick", "we", "our") is a point-of-sale application designed for salons and beauty businesses. This Privacy Policy explains what information we collect when you use Quick POS, how we use it, and the rights you have regarding your data.\n\n'
-                      'By using Quick POS you agree to the practices described in this policy. If you do not agree, please discontinue use of the app.',
+                      'Quick ("we", "our") is a point-of-sale application designed for salons and beauty businesses. This Privacy Policy explains what information we collect when you use Quick, how we use it, and the rights you have regarding your data.\n\n'
+                      'By using Quick you agree to the practices described in this policy. If you do not agree, please discontinue use of the app.',
                 ),
                 _Section(
                   title: '2. Information We Collect',
@@ -64,7 +64,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
                 _Section(
                   title: '3. How We Use Your Information',
                   body:
-                      '• Operate the POS: process sales, generate receipts, and maintain transaction history\n'
+                      '• Operate Quick: process sales, generate receipts, and maintain transaction history\n'
                       '• Customer management: display visit history, apply loyalty tracking, and allow customer lookup at checkout\n'
                       '• Staff management: calculate commission, display performance reports, and manage access credentials\n'
                       '• Notifications: send low-stock alerts and appointment reminders via email using the contact details you provide\n'
@@ -106,12 +106,12 @@ class PrivacyPolicyScreen extends StatelessWidget {
                 _Section(
                   title: '8. Children\'s Privacy',
                   body:
-                      'Quick POS is a business tool intended for use by adults. We do not knowingly collect personal information from individuals under 18 years of age.',
+                      'Quick is a business tool intended for use by adults. We do not knowingly collect personal information from individuals under 18 years of age.',
                 ),
                 _Section(
                   title: '9. Changes to This Policy',
                   body:
-                      'We may update this Privacy Policy from time to time. Significant changes will be communicated via an in-app notification or email. Continued use of Quick POS after changes take effect constitutes acceptance of the revised policy.',
+                      'We may update this Privacy Policy from time to time. Significant changes will be communicated via an in-app notification or email. Continued use of Quick after changes take effect constitutes acceptance of the revised policy.',
                 ),
                 _Section(
                   title: '10. Contact',

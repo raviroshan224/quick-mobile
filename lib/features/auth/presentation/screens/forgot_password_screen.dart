@@ -196,7 +196,7 @@ class _BrandPanel extends StatelessWidget {
         children: [
           const QuickLogo(size: 64, onDark: true),
           const SizedBox(height: 32),
-          Text('Quick POS', style: AppTextStyles.displayLarge.copyWith(color: Colors.white)),
+          Text('Quick', style: AppTextStyles.displayLarge.copyWith(color: Colors.white)),
           const SizedBox(height: 12),
           Text(
             'Fast, beautiful point-of-sale\nfor modern salons.',
@@ -216,7 +216,7 @@ class _Logo extends StatelessWidget {
       children: [
         const QuickLogo(size: 40, onDark: true),
         const SizedBox(width: 10),
-        Text('Quick POS', style: AppTextStyles.headlineLarge.copyWith(color: Colors.white)),
+        Text('Quick', style: AppTextStyles.headlineLarge.copyWith(color: Colors.white)),
       ],
     );
   }

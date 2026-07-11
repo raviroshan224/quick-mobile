@@ -4,6 +4,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:shimmer/shimmer.dart';
 import '../../../../core/network/api_client.dart';
+import '../../../../features/dashboard/presentation/providers/dashboard_provider.dart';
 import '../../data/transactions_repository.dart';
 import '../../domain/transaction_models.dart';
 import '../providers/transactions_provider.dart';
@@ -169,6 +170,12 @@ class _DetailBody extends HookConsumerWidget {
                       _InfoRow(
                           label: 'Customer',
                           value: transaction.displayName),
+                      if (transaction.staffName != null) ...[
+                        const SizedBox(height: 8),
+                        _InfoRow(
+                            label: 'Staff',
+                            value: transaction.staffName!),
+                      ],
                       const SizedBox(height: 8),
                       _InfoRow(
                           label: 'Date',
@@ -461,6 +468,7 @@ class _RefundSheet extends HookConsumerWidget {
           ref.invalidate(transactionListProvider);
           ref.invalidate(refundHistoryProvider);
           ref.invalidate(todayRevenueProvider);
+          ref.invalidate(dashboardProvider);
           Navigator.of(context).pop();
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text('Refund of ${_formatNpr(amt)} processed'),

@@ -95,7 +95,7 @@ class ManualDiscountSheet extends HookConsumerWidget {
       constraints: BoxConstraints(maxHeight: screenHeight * 0.92),
       decoration: const BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       padding: EdgeInsets.only(
         bottom: MediaQuery.of(context).viewInsets.bottom,

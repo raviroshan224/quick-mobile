@@ -311,7 +311,7 @@ class _NoteSheet extends HookConsumerWidget {
     return Container(
       decoration: const BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       padding: EdgeInsets.only(
         bottom: MediaQuery.of(context).viewInsets.bottom,
@@ -701,68 +701,134 @@ class _ServiceListTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return InkWell(
-      onTap: () {
-        ref.read(cartProvider.notifier).addService(service);
-        HapticFeedback.selectionClick();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${service.name} added'),
-            duration: const Duration(milliseconds: 1200),
-            behavior: SnackBarBehavior.floating,
-            backgroundColor: Colors.black,
-            margin: const EdgeInsets.fromLTRB(16, 0, 16, 80),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
+    final cart = ref.watch(cartProvider);
+    final matching = cart.items.where((i) => i.service?.id == service.id).toList();
+    final inCartCount = matching.length;
+    final inCart = inCartCount > 0;
+
+    void showToast(String message) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          duration: const Duration(milliseconds: 1200),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: Colors.black,
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 80),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+      );
+    }
+
+    void addOne() {
+      HapticFeedback.selectionClick();
+      ref.read(cartProvider.notifier).addService(service);
+      showToast('${service.name} added');
+    }
+
+    void removeOne() {
+      HapticFeedback.selectionClick();
+      ref.read(cartProvider.notifier).removeItem(matching.last.id);
+      showToast('${service.name} removed');
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          // Tapping the icon/name/duration area always adds another
+          // instance — this is how you add the same service multiple times.
+          Expanded(
+            child: InkWell(
+              borderRadius: BorderRadius.circular(8),
+              onTap: addOne,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: inCart ? AppColors.primary : iconBg,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(
+                        inCart ? Icons.check_rounded : icon,
+                        size: 18,
+                        color: inCart ? Colors.white : Colors.black54,
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            service.name,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w400,
+                            ),
+                          ),
+                          if (service.durationLabel.isNotEmpty)
+                            Text(
+                              service.durationLabel,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: AppColors.textTertiary,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
-        );
-      },
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Row(
-          children: [
-            Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                color: iconBg,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(icon, size: 18, color: Colors.black54),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    service.name,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w400,
+          // Separate remove control — tapping this (not the row) takes one
+          // instance out, so it never conflicts with adding more.
+          if (inCart) ...[
+            GestureDetector(
+              onTap: removeOne,
+              behavior: HitTestBehavior.opaque,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.primaryLight,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '×$inCartCount',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.primaryDark,
+                      ),
                     ),
-                  ),
-                  Text(
-                    service.durationLabel,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.textTertiary,
-                    ),
-                  ),
-                ],
+                    const SizedBox(width: 4),
+                    const Icon(Icons.remove_circle_outline,
+                        size: 16, color: AppColors.primaryDark),
+                  ],
+                ),
               ),
             ),
-            Text(
-              'NPR ${service.price.toStringAsFixed(0)}',
-              style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w500,
-                color: Colors.black,
-              ),
-            ),
+            const SizedBox(width: 10),
           ],
-        ),
+          Text(
+            'NPR ${service.price.toStringAsFixed(0)}',
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w500,
+              color: Colors.black,
+            ),
+          ),
+        ],
       ),
     );
   }

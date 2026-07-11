@@ -8,6 +8,7 @@ import '../providers/auth_provider.dart';
 import '../../data/auth_repository.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../core/storage/secure_storage_service.dart';
+import '../../../../shared/widgets/quick_logo.dart';
 
 class ProfilePickerScreen extends ConsumerWidget {
   const ProfilePickerScreen({super.key});
@@ -27,19 +28,10 @@ class ProfilePickerScreen extends ConsumerWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(Icons.point_of_sale_rounded,
-                      size: 20, color: Colors.black),
-                ),
+                const QuickLogo(size: 36, onDark: true),
                 const SizedBox(width: 10),
                 const Text(
-                  'Quick POS',
+                  'Quick',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 20,

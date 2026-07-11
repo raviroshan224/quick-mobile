@@ -1,7 +1,7 @@
 class AppConstants {
   AppConstants._();
 
-  static const String appName = 'Quick POS';
+  static const String appName = 'Quick';
   static const String tokenKey = 'auth_token';
   static const String userKey = 'current_user';
 

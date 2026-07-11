@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Quick POS logo mark.
+/// Quick logo mark.
 /// [onDark] = true renders white on dark backgrounds (splash, sidebar, brand panels).
 /// [onDark] = false renders the native black mark on light backgrounds.
 class QuickLogo extends StatelessWidget {

@@ -5,6 +5,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../features/customers/domain/customer_models.dart';
 import '../../../../features/customers/presentation/providers/customers_provider.dart';
+import '../../../../features/dashboard/presentation/providers/dashboard_provider.dart';
 import '../../../../features/pos/domain/pos_models.dart';
 import '../../../../features/pos/presentation/providers/cart_provider.dart';
 import '../../../../features/transactions/data/transactions_repository.dart';
@@ -61,28 +62,36 @@ class ReviewSaleSheet extends HookConsumerWidget {
           ? (total - splitCash).clamp(0.0, total)
           : null;
 
-      ref.read(_reviewRepoProvider).checkout(
-        cart: checkoutCart,
-        paymentMethod: method.value,
-        splitCash: splitCash,
-        splitFonepay: splitFonepay,
-        keypadAmount: checkoutCart.items.isEmpty ? keypadAmount : null,
-      ).then((_) {
-        ref.read(cartProvider.notifier).clear();
-        ref.read(manualDiscountProvider.notifier).state = null;
-        ref.read(transactionListProvider.notifier).refresh();
-        isProcessing.value = false;
-        step.value = _Step.success;
-      }).catchError((dynamic e) {
-        isProcessing.value = false;
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(e.toString()),
-            backgroundColor: Colors.red,
-            behavior: SnackBarBehavior.floating,
-          ));
-        }
-      });
+      ref
+          .read(_reviewRepoProvider)
+          .checkout(
+            cart: checkoutCart,
+            paymentMethod: method.value,
+            splitCash: splitCash,
+            splitFonepay: splitFonepay,
+            keypadAmount: checkoutCart.items.isEmpty ? keypadAmount : null,
+          )
+          .then((_) {
+            ref.read(cartProvider.notifier).clear();
+            ref.read(manualDiscountProvider.notifier).state = null;
+            ref.read(transactionListProvider.notifier).refresh();
+            ref.invalidate(dashboardProvider);
+            ref.invalidate(todayRevenueProvider);
+            isProcessing.value = false;
+            step.value = _Step.success;
+          })
+          .catchError((dynamic e) {
+            isProcessing.value = false;
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(e.toString()),
+                  backgroundColor: Colors.red,
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            }
+          });
     }
 
     void go(PaymentMethod m) {
@@ -239,7 +248,11 @@ class _BigBtn extends StatelessWidget {
                   )
                 : Text(
                     label,
-                    style: TextStyle(color: fg, fontSize: 16, fontWeight: FontWeight.w600),
+                    style: TextStyle(
+                      color: fg,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
           ),
         ),
@@ -371,149 +384,181 @@ class _PickStep extends HookConsumerWidget {
     return Column(
       children: [
         const _Handle(),
-        // Total amount
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
-          child: Row(
-            children: [
-              const Spacer(),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Text(
-                    'NPR ${total.toStringAsFixed(2)}',
-                    style: const TextStyle(
-                      fontSize: 34,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: -0.5,
-                    ),
-                  ),
-                  if (cart.items.isNotEmpty)
-                    Text(
-                      '${cart.itemCount} item${cart.itemCount == 1 ? '' : 's'}',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: AppColors.textTertiary,
-                      ),
-                    ),
-                ],
-              ),
-              const Spacer(),
-              GestureDetector(
-                onTap: onClose,
-                child: const Icon(
-                  Icons.close,
-                  size: 22,
-                  color: AppColors.textTertiary,
-                ),
-              ),
-            ],
-          ),
-        ),
-        // Items summary (if any)
-        if (cart.items.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                color: AppColors.background,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Column(
-                children: cart.items
-                    .map(
-                      (item) => Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 3),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                item.name,
-                                style: const TextStyle(fontSize: 13),
-                              ),
+        Expanded(
+          child: SingleChildScrollView(
+            child: Column(
+              children: [
+                // Total amount
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
+                  child: Row(
+                    children: [
+                      const Spacer(),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Text(
+                            'NPR ${total.toStringAsFixed(2)}',
+                            style: const TextStyle(
+                              fontSize: 34,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: -0.5,
                             ),
+                          ),
+                          if (cart.items.isNotEmpty)
                             Text(
-                              '×${item.quantity}',
+                              '${cart.itemCount} item${cart.itemCount == 1 ? '' : 's'}',
                               style: const TextStyle(
                                 fontSize: 13,
                                 color: AppColors.textTertiary,
                               ),
                             ),
-                            const SizedBox(width: 12),
-                            Text(
-                              'NPR ${item.totalPrice.toStringAsFixed(0)}',
-                              style: const TextStyle(fontSize: 13),
-                            ),
-                          ],
+                        ],
+                      ),
+                      const Spacer(),
+                      GestureDetector(
+                        onTap: onClose,
+                        child: const Icon(
+                          Icons.close,
+                          size: 22,
+                          color: AppColors.textTertiary,
                         ),
                       ),
-                    )
-                    .toList(),
-              ),
-            ),
-          ),
-        ],
-        const SizedBox(height: 12),
-        // Customer row
-        _CustomerRow(
-          customer: customer,
-          onTap: () => _pickCustomer(context),
-          onRemove: () => onCustomerChanged(null),
-        ),
-        const Divider(height: 1, color: AppColors.divider),
-        // Discount row
-        _DiscountRow(subtotal: total),
-        const Divider(height: 1, color: AppColors.divider),
-        const SizedBox(height: 12),
-        // Payment method label
-        const Padding(
-          padding: EdgeInsets.only(left: 20, bottom: 8),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              'Pay with',
-              style: TextStyle(
-                fontSize: 12,
-                color: AppColors.textTertiary,
-                fontWeight: FontWeight.w500,
-                letterSpacing: 0.4,
-              ),
-            ),
-          ),
-        ),
-        // 3 payment method rows
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: Container(
-            decoration: BoxDecoration(
-              border: Border.all(color: AppColors.divider),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Column(
-              children: [
-                _MethodRow(
-                  icon: Icons.payments_outlined,
-                  label: 'Cash',
-                  color: Colors.black,
-                  onTap: () => onPick(PaymentMethod.cash),
-                  showDivider: true,
+                    ],
+                  ),
                 ),
-                _MethodRow(
-                  icon: Icons.qr_code_rounded,
-                  label: 'Fonepay QR',
-                  color: const Color(0xFF6BBD44),
-                  onTap: () => onPick(PaymentMethod.fonepay),
-                  showDivider: true,
+                // Items summary (if any)
+                if (cart.items.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.background,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Column(
+                        children: cart.items
+                            .map(
+                              (item) => Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 3,
+                                ),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        item.name,
+                                        style: const TextStyle(fontSize: 13),
+                                      ),
+                                    ),
+                                    Text(
+                                      '×${item.quantity}',
+                                      style: const TextStyle(
+                                        fontSize: 13,
+                                        color: AppColors.textTertiary,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Text(
+                                      'NPR ${item.totalPrice.toStringAsFixed(0)}',
+                                      style: const TextStyle(fontSize: 13),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    GestureDetector(
+                                      onTap: () => ref
+                                          .read(cartProvider.notifier)
+                                          .removeItem(item.id),
+                                      behavior: HitTestBehavior.opaque,
+                                      child: const Padding(
+                                        padding: EdgeInsets.symmetric(
+                                          horizontal: 2,
+                                          vertical: 4,
+                                        ),
+                                        child: Icon(
+                                          Icons.close_rounded,
+                                          size: 16,
+                                          color: AppColors.textTertiary,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            )
+                            .toList(),
+                      ),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 12),
+                // Customer row
+                _CustomerRow(
+                  customer: customer,
+                  onTap: () => _pickCustomer(context),
+                  onRemove: () => onCustomerChanged(null),
                 ),
-                _MethodRow(
-                  icon: Icons.call_split_rounded,
-                  label: 'Split Payment',
-                  color: AppColors.primary,
-                  onTap: () => onPick(PaymentMethod.split),
-                  showDivider: false,
+                const Divider(height: 1, color: AppColors.divider),
+                // Discount row
+                _DiscountRow(subtotal: total),
+                const Divider(height: 1, color: AppColors.divider),
+                const SizedBox(height: 12),
+                // Payment method label
+                const Padding(
+                  padding: EdgeInsets.only(left: 20, bottom: 8),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Pay with',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textTertiary,
+                        fontWeight: FontWeight.w500,
+                        letterSpacing: 0.4,
+                      ),
+                    ),
+                  ),
                 ),
+                // 3 payment method rows
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(color: AppColors.divider),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Column(
+                      children: [
+                        _MethodRow(
+                          icon: Icons.payments_outlined,
+                          label: 'Cash',
+                          color: Colors.black,
+                          onTap: () => onPick(PaymentMethod.cash),
+                          showDivider: true,
+                        ),
+                        _MethodRow(
+                          icon: Icons.qr_code_rounded,
+                          label: 'Fonepay QR',
+                          color: const Color(0xFF6BBD44),
+                          onTap: () => onPick(PaymentMethod.fonepay),
+                          showDivider: true,
+                        ),
+                        _MethodRow(
+                          icon: Icons.call_split_rounded,
+                          label: 'Split Payment',
+                          color: AppColors.primary,
+                          onTap: () => onPick(PaymentMethod.split),
+                          showDivider: false,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
               ],
             ),
           ),
@@ -650,7 +695,11 @@ class _CustomerRow extends StatelessWidget {
           ),
           GestureDetector(
             onTap: onRemove,
-            child: const Icon(Icons.close, size: 16, color: AppColors.textTertiary),
+            child: const Icon(
+              Icons.close,
+              size: 16,
+              color: AppColors.textTertiary,
+            ),
           ),
         ],
       ),
@@ -734,7 +783,11 @@ class _DiscountRow extends ConsumerWidget {
           ),
           GestureDetector(
             onTap: () => ref.read(manualDiscountProvider.notifier).state = null,
-            child: const Icon(Icons.close, size: 16, color: AppColors.textTertiary),
+            child: const Icon(
+              Icons.close,
+              size: 16,
+              color: AppColors.textTertiary,
+            ),
           ),
         ],
       ),
@@ -779,7 +832,10 @@ class _CustomerPicker extends HookConsumerWidget {
                   onTap: () => Navigator.pop(context),
                   child: const Text(
                     'Cancel',
-                    style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: AppColors.textSecondary,
+                    ),
                   ),
                 ),
               ],
@@ -1450,7 +1506,10 @@ class _SplitTile extends StatelessWidget {
             children: [
               Text(
                 label,
-                style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: AppColors.textSecondary,
+                ),
               ),
               if (note != null)
                 Text(

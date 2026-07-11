@@ -54,6 +54,14 @@ String _shortDate(DateTime dt) {
   return '${months[dt.month]} ${dt.day}';
 }
 
+int _activeFilterCount(TransactionListState state) {
+  var count = 0;
+  if (state.statusFilter != null) count++;
+  if (state.paymentFilter != null) count++;
+  if (state.dateFrom != null) count++;
+  return count;
+}
+
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
 class TransactionsScreen extends HookConsumerWidget {
@@ -64,6 +72,7 @@ class TransactionsScreen extends HookConsumerWidget {
     final txState = ref.watch(transactionListProvider);
     final notifier = ref.read(transactionListProvider.notifier);
     final refundState = ref.watch(refundHistoryProvider);
+    final activeFilterCount = _activeFilterCount(txState);
 
     final scrollCtrl = useScrollController();
 
@@ -123,11 +132,20 @@ class TransactionsScreen extends HookConsumerWidget {
                     ),
                   ),
                   const Spacer(),
-                  Text(
-                    _shortDate(DateTime.now()),
-                    style: const TextStyle(
-                      fontSize: 14,
-                      color: AppColors.textTertiary,
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryLight,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      'Today · ${_shortDate(DateTime.now())}',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.primaryDark,
+                      ),
                     ),
                   ),
                 ],
@@ -144,91 +162,48 @@ class TransactionsScreen extends HookConsumerWidget {
 
             const SizedBox(height: 14),
 
-            // ── Status filter chips ─────────────────────────────────────────
-            SizedBox(
-              height: 36,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 20),
+            // ── Filters ──────────────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
                 children: [
-                  _FilterChip(
-                    label: 'All',
-                    selected: txState.statusFilter == null,
-                    onTap: () => notifier.setStatusFilter(null),
-                  ),
-                  const SizedBox(width: 8),
-                  _FilterChip(
-                    label: 'Completed',
-                    selected: txState.statusFilter == 'COMPLETED',
-                    onTap: () => notifier.setStatusFilter(
-                      txState.statusFilter == 'COMPLETED' ? null : 'COMPLETED',
+                  _FiltersButton(
+                    activeCount: activeFilterCount,
+                    onTap: () => _FiltersSheet.show(
+                      context,
+                      status: txState.statusFilter,
+                      payment: txState.paymentFilter,
+                      dateFrom: txState.dateFrom,
+                      dateTo: txState.dateTo,
+                      onApply: (status, payment, from, to) =>
+                          notifier.setFilters(
+                        status: status,
+                        payment: payment,
+                        from: from,
+                        to: to,
+                      ),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  _FilterChip(
-                    label: 'Refunded',
-                    selected: txState.statusFilter == 'REFUNDED',
-                    onTap: () => notifier.setStatusFilter(
-                      txState.statusFilter == 'REFUNDED' ? null : 'REFUNDED',
+                  if (activeFilterCount > 0) ...[
+                    const SizedBox(width: 12),
+                    GestureDetector(
+                      onTap: () => notifier.setFilters(),
+                      child: const Text(
+                        'Clear all',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textSecondary,
+                          decoration: TextDecoration.underline,
+                        ),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  _FilterChip(
-                    label: 'Voided',
-                    selected: txState.statusFilter == 'VOIDED',
-                    onTap: () => notifier.setStatusFilter(
-                      txState.statusFilter == 'VOIDED' ? null : 'VOIDED',
-                    ),
-                  ),
+                  ],
                 ],
               ),
             ),
 
-            const SizedBox(height: 8),
-
-            // ── Payment + date filter row ────────────────────────────────────
-            SizedBox(
-              height: 36,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                children: [
-                  _FilterChip(
-                    label: 'Cash',
-                    selected: txState.paymentFilter == 'CASH',
-                    onTap: () => notifier.setPaymentFilter(
-                      txState.paymentFilter == 'CASH' ? null : 'CASH',
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  _FilterChip(
-                    label: 'Fonepay',
-                    selected: txState.paymentFilter == 'FONEPAY',
-                    onTap: () => notifier.setPaymentFilter(
-                      txState.paymentFilter == 'FONEPAY' ? null : 'FONEPAY',
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  _FilterChip(
-                    label: 'Split',
-                    selected: txState.paymentFilter == 'SPLIT',
-                    onTap: () => notifier.setPaymentFilter(
-                      txState.paymentFilter == 'SPLIT' ? null : 'SPLIT',
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  _DateRangeButton(
-                    dateFrom: txState.dateFrom,
-                    dateTo: txState.dateTo,
-                    onPick: (from, to) => notifier.setDateRange(from, to),
-                    onClear: () => notifier.setDateRange(null, null),
-                    context: context,
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 10),
+            const SizedBox(height: 14),
 
             // ── List ─────────────────────────────────────────────────────────
             Expanded(
@@ -431,6 +406,305 @@ class _VolumeChip extends StatelessWidget {
   }
 }
 
+// ─── Filters button ───────────────────────────────────────────────────────────
+
+class _FiltersButton extends StatelessWidget {
+  const _FiltersButton({required this.activeCount, required this.onTap});
+  final int activeCount;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final active = activeCount > 0;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: active ? Colors.black : Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+            color: active ? Colors.black : AppColors.divider,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.tune_rounded,
+              size: 16,
+              color: active ? Colors.white : AppColors.textSecondary,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'Filters',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: active ? Colors.white : AppColors.textPrimary,
+              ),
+            ),
+            if (active) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  '$activeCount',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.black,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Filters sheet ────────────────────────────────────────────────────────────
+
+class _FiltersSheet extends HookWidget {
+  const _FiltersSheet({
+    required this.status,
+    required this.payment,
+    required this.dateFrom,
+    required this.dateTo,
+    required this.onApply,
+  });
+
+  final String? status;
+  final String? payment;
+  final DateTime? dateFrom;
+  final DateTime? dateTo;
+  final void Function(String? status, String? payment, DateTime? from, DateTime? to) onApply;
+
+  static Future<void> show(
+    BuildContext context, {
+    required String? status,
+    required String? payment,
+    required DateTime? dateFrom,
+    required DateTime? dateTo,
+    required void Function(String?, String?, DateTime?, DateTime?) onApply,
+  }) {
+    return showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _FiltersSheet(
+        status: status,
+        payment: payment,
+        dateFrom: dateFrom,
+        dateTo: dateTo,
+        onApply: onApply,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final statusState = useState(status);
+    final paymentState = useState(payment);
+    final fromState = useState(dateFrom);
+    final toState = useState(dateTo);
+
+    final hasActive = statusState.value != null ||
+        paymentState.value != null ||
+        fromState.value != null;
+
+    return Container(
+      constraints:
+          BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.85),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 36,
+            height: 4,
+            margin: const EdgeInsets.symmetric(vertical: 12),
+            decoration: BoxDecoration(
+              color: AppColors.divider,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(
+              children: [
+                const Text(
+                  'Filters',
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+                ),
+                const Spacer(),
+                GestureDetector(
+                  onTap: hasActive
+                      ? () {
+                          statusState.value = null;
+                          paymentState.value = null;
+                          fromState.value = null;
+                          toState.value = null;
+                        }
+                      : null,
+                  child: Text(
+                    'Reset',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: hasActive
+                          ? AppColors.primaryDark
+                          : AppColors.textTertiary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          const Divider(height: 1, color: AppColors.divider),
+          Flexible(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const _FilterSectionLabel('STATUS'),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _FilterChip(
+                        label: 'All',
+                        selected: statusState.value == null,
+                        onTap: () => statusState.value = null,
+                      ),
+                      _FilterChip(
+                        label: 'Completed',
+                        selected: statusState.value == 'COMPLETED',
+                        onTap: () => statusState.value = 'COMPLETED',
+                      ),
+                      _FilterChip(
+                        label: 'Refunded',
+                        selected: statusState.value == 'REFUNDED',
+                        onTap: () => statusState.value = 'REFUNDED',
+                      ),
+                      _FilterChip(
+                        label: 'Voided',
+                        selected: statusState.value == 'VOIDED',
+                        onTap: () => statusState.value = 'VOIDED',
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  const _FilterSectionLabel('PAYMENT METHOD'),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _FilterChip(
+                        label: 'All',
+                        selected: paymentState.value == null,
+                        onTap: () => paymentState.value = null,
+                      ),
+                      _FilterChip(
+                        label: 'Cash',
+                        selected: paymentState.value == 'CASH',
+                        onTap: () => paymentState.value = 'CASH',
+                      ),
+                      _FilterChip(
+                        label: 'Fonepay',
+                        selected: paymentState.value == 'FONEPAY',
+                        onTap: () => paymentState.value = 'FONEPAY',
+                      ),
+                      _FilterChip(
+                        label: 'Split',
+                        selected: paymentState.value == 'SPLIT',
+                        onTap: () => paymentState.value = 'SPLIT',
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  const _FilterSectionLabel('DATE RANGE'),
+                  const SizedBox(height: 10),
+                  _DateRangeButton(
+                    dateFrom: fromState.value,
+                    dateTo: toState.value,
+                    onPick: (from, to) {
+                      fromState.value = from;
+                      toState.value = to;
+                    },
+                    onClear: () {
+                      fromState.value = null;
+                      toState.value = null;
+                    },
+                    context: context,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+                20, 12, 20, MediaQuery.of(context).viewInsets.bottom + 20),
+            child: SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () {
+                  onApply(statusState.value, paymentState.value,
+                      fromState.value, toState.value);
+                  Navigator.pop(context);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.black,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                  elevation: 0,
+                ),
+                child: const Text(
+                  'Apply Filters',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FilterSectionLabel extends StatelessWidget {
+  const _FilterSectionLabel(this.label);
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      label,
+      style: const TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.w600,
+        letterSpacing: 0.8,
+        color: AppColors.textSecondary,
+      ),
+    );
+  }
+}
+
 // ─── Filter chip ──────────────────────────────────────────────────────────────
 
 class _FilterChip extends StatelessWidget {
@@ -449,7 +723,7 @@ class _FilterChip extends StatelessWidget {
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
         decoration: BoxDecoration(
           color: selected ? Colors.black : Colors.white,
           borderRadius: BorderRadius.circular(20),
@@ -524,7 +798,7 @@ class _DateRangeButton extends StatelessWidget {
       },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
         decoration: BoxDecoration(
           color: isActive ? Colors.black : Colors.white,
           borderRadius: BorderRadius.circular(20),
@@ -575,14 +849,15 @@ class _DayHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isToday = label == 'Today';
     return Padding(
       padding: const EdgeInsets.fromLTRB(0, 12, 0, 6),
       child: Text(
         label,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 13,
-          fontWeight: FontWeight.w600,
-          color: AppColors.textSecondary,
+          fontWeight: FontWeight.w700,
+          color: isToday ? AppColors.primaryDark : AppColors.textSecondary,
         ),
       ),
     );
@@ -660,11 +935,17 @@ class _TransactionRow extends StatelessWidget {
                   const SizedBox(height: 3),
                   Row(
                     children: [
-                      Text(
-                        _formatDate(transaction.createdAt),
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: AppColors.textTertiary,
+                      Expanded(
+                        child: Text(
+                          transaction.staffName != null
+                              ? '${_formatDate(transaction.createdAt)} · ${transaction.staffName}'
+                              : _formatDate(transaction.createdAt),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textTertiary,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       const SizedBox(width: 8),

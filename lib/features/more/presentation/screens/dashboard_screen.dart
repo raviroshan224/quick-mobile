@@ -303,12 +303,24 @@ class _GreetingRow extends StatelessWidget {
   Widget build(BuildContext context) => Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text('$greeting, $firstName!',
-              style: const TextStyle(
-                  fontSize: 18, fontWeight: FontWeight.w700)),
-          Text(dateLabel,
-              style: const TextStyle(
-                  fontSize: 13, color: AppColors.textSecondary)),
+          Expanded(
+            child: Text('$greeting, $firstName!',
+                style: const TextStyle(
+                    fontSize: 18, fontWeight: FontWeight.w700)),
+          ),
+          const SizedBox(width: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: AppColors.primaryLight,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text('Today · $dateLabel',
+                style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.primaryDark)),
+          ),
         ],
       );
 }

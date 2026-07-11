@@ -49,15 +49,23 @@ class MoreScreen extends ConsumerWidget {
               child: ListView(
                 padding: const EdgeInsets.only(bottom: 24),
                 children: [
-                  // ── Staff-only section ────────────────────────────────
-                  if (!isOwner) ...[
-                    _SectionLabel(text: 'ACCOUNT'),
+                  // ── Account (both roles) ──────────────────────────────
+                  _SectionLabel(text: 'ACCOUNT'),
+                  if (!isOwner)
                     _MoreTile(
                       icon: Icons.account_circle_outlined,
                       label: 'My Profile',
                       onTap: () => context.go('/more/my-profile'),
                     ),
-                    const SizedBox(height: 8),
+                  _MoreTile(
+                    icon: Icons.swap_horiz_rounded,
+                    label: 'Switch Profile',
+                    onTap: () => ref.read(authProvider.notifier).switchProfile(),
+                  ),
+                  const SizedBox(height: 8),
+
+                  // ── Staff-only section ────────────────────────────────
+                  if (!isOwner) ...[
                     _SectionLabel(text: 'CUSTOMERS'),
                     _MoreTile(
                       icon: Icons.person_outline_rounded,
@@ -194,17 +202,51 @@ class MoreScreen extends ConsumerWidget {
                         ],
                       ),
                     ),
-                    GestureDetector(
-                      onTap: () =>
-                          ref.read(authProvider.notifier).logout(),
-                      child: const Icon(Icons.logout_rounded,
-                          size: 20, color: AppColors.textTertiary),
+                    Tooltip(
+                      message: 'Sign Out',
+                      child: GestureDetector(
+                        onTap: () => _confirmSignOut(context, ref),
+                        child: const Padding(
+                          padding: EdgeInsets.all(4),
+                          child: Icon(Icons.logout_rounded,
+                              size: 20, color: AppColors.textTertiary),
+                        ),
+                      ),
                     ),
                   ],
                 ),
               ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _confirmSignOut(BuildContext context, WidgetRef ref) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        title: const Text('Sign out?',
+            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+        content: const Text('You will be returned to the login screen.',
+            style: TextStyle(fontSize: 14, color: AppColors.textSecondary)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel',
+                style: TextStyle(color: AppColors.textSecondary)),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              ref.read(authProvider.notifier).logout();
+            },
+            child: const Text('Sign Out',
+                style: TextStyle(
+                    color: AppColors.danger, fontWeight: FontWeight.w600)),
+          ),
+        ],
       ),
     );
   }

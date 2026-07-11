@@ -329,7 +329,7 @@ class SettingsScreen extends ConsumerWidget {
                   _InfoTile(
                       icon: Icons.business_outlined,
                       label: 'Built for',
-                      value: 'Nepal Salon POS'),
+                      value: 'Nepal Salons'),
                 ]),
                 const SizedBox(height: 20),
 

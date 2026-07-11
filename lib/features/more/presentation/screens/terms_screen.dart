@@ -36,13 +36,13 @@ class TermsScreen extends StatelessWidget {
                 _Section(
                   title: '1. Acceptance of Terms',
                   body:
-                      'By downloading, installing, or using Quick POS ("Quick", "the App"), you ("Business Owner", "User") agree to be bound by these Terms of Use. If you do not agree to these terms, do not use the App.\n\n'
-                      'These terms apply to all users of Quick POS, including business owners and their staff members.',
+                      'By downloading, installing, or using Quick ("the App"), you ("Business Owner", "User") agree to be bound by these Terms of Use. If you do not agree to these terms, do not use the App.\n\n'
+                      'These terms apply to all users of Quick, including business owners and their staff members.',
                 ),
                 _Section(
                   title: '2. Description of Service',
                   body:
-                      'Quick POS is a point-of-sale application for salons and beauty businesses. It provides the following features:\n\n'
+                      'Quick is a point-of-sale application for salons and beauty businesses. It provides the following features:\n\n'
                       '• Sales checkout with service and product selection\n'
                       '• Cash and Fonepay payment processing\n'
                       '• Customer management and visit history\n'
@@ -64,7 +64,7 @@ class TermsScreen extends StatelessWidget {
                 _Section(
                   title: '4. Acceptable Use',
                   body:
-                      'You agree to use Quick POS only for lawful business purposes. You must not:\n\n'
+                      'You agree to use Quick only for lawful business purposes. You must not:\n\n'
                       '• Use the App for any fraudulent, deceptive, or illegal activity\n'
                       '• Process transactions for goods or services that are illegal under Nepalese law\n'
                       '• Attempt to reverse-engineer, decompile, or modify the App\n'
@@ -82,7 +82,7 @@ class TermsScreen extends StatelessWidget {
                 _Section(
                   title: '6. Customer Data Responsibility',
                   body:
-                      'You are the data controller for any customer personal information entered into Quick POS. You are responsible for:\n\n'
+                      'You are the data controller for any customer personal information entered into Quick. You are responsible for:\n\n'
                       '• Obtaining any necessary consent from customers before collecting their information\n'
                       '• Complying with applicable data protection laws in Nepal\n'
                       '• Keeping customer data accurate and up to date\n'
@@ -91,13 +91,13 @@ class TermsScreen extends StatelessWidget {
                 _Section(
                   title: '7. Intellectual Property',
                   body:
-                      'Quick POS and all content, features, and functionality (including but not limited to the interface, design, logos, and software) are owned by Quick and are protected by applicable intellectual property laws.\n\n'
+                      'Quick and all content, features, and functionality (including but not limited to the interface, design, logos, and software) are owned by Quick and are protected by applicable intellectual property laws.\n\n'
                       'You are granted a limited, non-exclusive, non-transferable licence to use the App for your internal salon business operations. This licence does not include the right to resell, sublicense, or distribute the App.',
                 ),
                 _Section(
                   title: '8. Disclaimers',
                   body:
-                      'Quick POS is provided "as is" without warranties of any kind. We do not warrant that:\n\n'
+                      'Quick is provided "as is" without warranties of any kind. We do not warrant that:\n\n'
                       '• The App will be uninterrupted or error-free\n'
                       '• Reports and analytics will be free of inaccuracies\n'
                       '• The App will meet every specific business requirement\n\n'
@@ -112,7 +112,7 @@ class TermsScreen extends StatelessWidget {
                 _Section(
                   title: '10. Changes to Terms',
                   body:
-                      'We may update these Terms of Use from time to time. Significant changes will be communicated via an in-app notification or email. Continued use of Quick POS after the effective date of revised terms constitutes your acceptance of the changes.',
+                      'We may update these Terms of Use from time to time. Significant changes will be communicated via an in-app notification or email. Continued use of Quick after the effective date of revised terms constitutes your acceptance of the changes.',
                 ),
                 _Section(
                   title: '11. Governing Law',

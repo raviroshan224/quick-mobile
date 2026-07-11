@@ -203,57 +203,38 @@ class _CustomerFormScreenState
 
     return Scaffold(
       backgroundColor: AppColors.background,
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded,
+              size: 18, color: Colors.black),
+          onPressed: () {
+            if (widget.isEditing) {
+              context.go(AppRoutes.customerDetail(widget.customerId!));
+            } else {
+              context.go(AppRoutes.moreCustomers);
+            }
+          },
+        ),
+        title: Text(
+          widget.isEditing ? 'Edit Customer' : 'New Customer',
+          style: const TextStyle(
+              fontSize: 17, fontWeight: FontWeight.w600, color: Colors.black),
+        ),
+        centerTitle: true,
+        actions: [
+          if (widget.isEditing)
+            IconButton(
+              icon: const Icon(Icons.delete_outline,
+                  color: AppColors.danger),
+              onPressed: _confirmDelete,
+            ),
+        ],
+      ),
       body: SafeArea(
         child: Column(
           children: [
-            // ── Header ────────────────────────────────────────────
-            Padding(
-              padding: const EdgeInsets.fromLTRB(4, 8, 8, 0),
-              child: Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(
-                        Icons.arrow_back_ios_new_rounded,
-                        size: 18,
-                        color: Colors.black),
-                    onPressed: () {
-                      if (widget.isEditing) {
-                        context.go(AppRoutes.customerDetail(
-                            widget.customerId!));
-                      } else {
-                        context.go(AppRoutes.moreCustomers);
-                      }
-                    },
-                  ),
-                  Expanded(
-                    child: Text(
-                      widget.isEditing
-                          ? 'Edit Customer'
-                          : 'New Customer',
-                      style: const TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.black),
-                    ),
-                  ),
-                  // Save text button
-                  TextButton(
-                    onPressed: _saving ? null : _save,
-                    child: Text(
-                      _saving ? 'Saving…' : 'Save',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: _saving
-                            ? AppColors.textTertiary
-                            : Colors.black,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
             // ── Form body ─────────────────────────────────────────
             Expanded(
               child: Form(
@@ -387,49 +368,41 @@ class _CustomerFormScreenState
                         ),
                       ],
                     ),
-
-                    // ── Delete (edit mode only) ───────────────────
-                    if (widget.isEditing) ...[
-                      const SizedBox(height: 28),
-                      const _SectionLabel(text: 'DANGER ZONE'),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 16),
-                        child: OutlinedButton(
-                          onPressed: _confirmDelete,
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor:
-                                AppColors.danger,
-                            side: const BorderSide(
-                                color: AppColors.danger),
-                            shape: RoundedRectangleBorder(
-                                borderRadius:
-                                    BorderRadius.circular(12)),
-                            padding: const EdgeInsets.symmetric(
-                                vertical: 14),
-                          ),
-                          child: const Row(
-                            mainAxisAlignment:
-                                MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.delete_outline,
-                                  size: 17),
-                              SizedBox(width: 8),
-                              Text('Delete Customer',
-                                  style: TextStyle(
-                                      fontWeight:
-                                          FontWeight.w600,
-                                      fontSize: 14)),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
                   ],
                 ),
               ),
             ),
           ],
+        ),
+      ),
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+          child: GestureDetector(
+            onTap: _saving ? null : _save,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              height: 52,
+              decoration: BoxDecoration(
+                color: _saving ? Colors.black54 : Colors.black,
+                borderRadius: BorderRadius.circular(26),
+              ),
+              alignment: Alignment.center,
+              child: _saving
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
+                  : Text(
+                      widget.isEditing ? 'Save Changes' : 'Add Customer',
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600),
+                    ),
+            ),
+          ),
         ),
       ),
     );

@@ -163,6 +163,24 @@ class TransactionListNotifier extends StateNotifier<TransactionListState> {
     await _fetchPage1();
   }
 
+  /// Apply status, payment and date filters together as a single update
+  /// so choosing multiple filters in the filter sheet only triggers one fetch.
+  Future<void> setFilters({
+    String? status,
+    String? payment,
+    DateTime? from,
+    DateTime? to,
+  }) async {
+    state = TransactionListState(
+      statusFilter: status,
+      paymentFilter: payment,
+      dateFrom: from,
+      dateTo: to,
+      staffUserId: state.staffUserId,
+    );
+    await _fetchPage1();
+  }
+
   Future<void> refresh() => _fetchPage1();
 }
 

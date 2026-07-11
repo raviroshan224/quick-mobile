@@ -23,7 +23,7 @@ class SalonPosApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(routerProvider);
     return MaterialApp.router(
-      title: 'Quick POS',
+      title: 'Quick',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       routerConfig: router,

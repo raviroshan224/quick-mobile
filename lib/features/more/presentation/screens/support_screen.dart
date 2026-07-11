@@ -222,7 +222,7 @@ class _SupportScreenState extends State<SupportScreen> {
                         subtitle: 'info@quick.com.np',
                         color: AppColors.primary,
                         onTap: () => _launch(context,
-                            'mailto:info@quick.com.np?subject=Quick%20POS%20Support'),
+                            'mailto:info@quick.com.np?subject=Quick%20Support'),
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -282,7 +282,7 @@ class _SupportScreenState extends State<SupportScreen> {
                           Icon(Icons.auto_awesome,
                               size: 16, color: AppColors.textTertiary),
                           SizedBox(width: 6),
-                          Text('Quick POS · Version 1.0.0',
+                          Text('Quick · Version 1.0.0',
                               style: TextStyle(
                                   fontSize: 13,
                                   color: AppColors.textTertiary)),

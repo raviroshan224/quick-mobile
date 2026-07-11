@@ -12,21 +12,6 @@ final _inventoryRepoProvider = Provider<InventoryRepository>(
   (ref) => InventoryRepository(ref.read(apiClientProvider)),
 );
 
-const _kCategories = [
-  'Hair Care',
-  'Skin Care',
-  'Nails',
-  'Shampoo',
-  'Conditioner',
-  'Hair Color',
-  'Treatment',
-  'Scissors',
-  'Combs',
-  'Blades',
-  'Massage',
-  'Other',
-];
-
 class ItemFormScreen extends ConsumerStatefulWidget {
   const ItemFormScreen({super.key, this.productId});
   final String? productId;
@@ -46,8 +31,8 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
   final _stockCtrl = TextEditingController(text: '0');
   final _thresholdCtrl = TextEditingController(text: '5');
   final _descCtrl = TextEditingController();
+  final _categoryCtrl = TextEditingController();
 
-  String _category = 'Hair Care';
   bool _isActive = true;
   bool _loading = false;
 
@@ -69,6 +54,7 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
     _stockCtrl.dispose();
     _thresholdCtrl.dispose();
     _descCtrl.dispose();
+    _categoryCtrl.dispose();
     super.dispose();
   }
 
@@ -84,8 +70,8 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
       _stockCtrl.text = product.stock.toString();
       _thresholdCtrl.text = product.lowStockThreshold.toString();
       _descCtrl.text = product.description ?? '';
+      _categoryCtrl.text = product.category ?? '';
       setState(() {
-        _category = product.category ?? 'Hair Care';
         _isActive = product.isActive;
       });
     } catch (e) {
@@ -108,6 +94,8 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
       final threshold = int.tryParse(_thresholdCtrl.text.trim()) ?? 5;
       final sku = _skuCtrl.text.trim().isEmpty ? null : _skuCtrl.text.trim();
       final desc = _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim();
+      final category =
+          _categoryCtrl.text.trim().isEmpty ? null : _categoryCtrl.text.trim();
 
       if (widget.isEditing) {
         await repo.update(
@@ -118,7 +106,7 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
           cost: cost,
           sku: sku,
           description: desc,
-          category: _category,
+          category: category,
           lowStockThreshold: threshold,
           isActive: _isActive,
         );
@@ -130,7 +118,7 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
           cost: cost,
           sku: sku,
           description: desc,
-          category: _category,
+          category: category,
           lowStockThreshold: threshold,
           isActive: _isActive,
         );
@@ -167,31 +155,13 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
               fontSize: 17, fontWeight: FontWeight.w600, color: Colors.black),
         ),
         centerTitle: true,
-        actions: [
-          if (_loading)
-            const Padding(
-              padding: EdgeInsets.all(16),
-              child: SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2)),
-            )
-          else
-            TextButton(
-              onPressed: _save,
-              child: const Text('Save',
-                  style: TextStyle(
-                      color: Colors.black,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 15)),
-            ),
-        ],
       ),
       body: Form(
         key: _formKey,
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            const _SectionLabel(text: 'Basic Information'),
             _FormCard(children: [
               _Field(
                 label: 'Item Name *',
@@ -215,6 +185,7 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
             ]),
 
             const SizedBox(height: 16),
+            const _SectionLabel(text: 'Pricing'),
             _FormCard(children: [
               _Field(
                 label: 'Selling Price (NPR) *',
@@ -252,6 +223,7 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
             ]),
 
             const SizedBox(height: 16),
+            const _SectionLabel(text: 'Inventory'),
             _FormCard(children: [
               _Field(
                 label: 'Stock Quantity *',
@@ -277,17 +249,15 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
             ]),
 
             const SizedBox(height: 16),
+            const _SectionLabel(text: 'Details'),
             _FormCard(children: [
               _Field(
                 label: 'Category',
-                child: DropdownButtonFormField<String>(
-                  initialValue: _category,
-                  decoration:
-                      const InputDecoration(border: InputBorder.none, isDense: true),
-                  items: _kCategories
-                      .map((c) => DropdownMenuItem(value: c, child: Text(c)))
-                      .toList(),
-                  onChanged: (v) => setState(() => _category = v ?? _category),
+                child: TextFormField(
+                  controller: _categoryCtrl,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(
+                      hintText: 'e.g. Hair Care (optional)'),
                 ),
               ),
               const _FieldDivider(),
@@ -305,6 +275,7 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
 
             if (widget.isEditing) ...[
               const SizedBox(height: 16),
+              const _SectionLabel(text: 'Status'),
               _FormCard(children: [
                 SwitchListTile(
                   value: _isActive,
@@ -385,18 +356,16 @@ class _Field extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(
-              width: 140,
-              child: Text(label,
-                  style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      color: AppColors.textSecondary)),
-            ),
-            Expanded(child: child),
+            Text(label,
+                style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.textSecondary)),
+            const SizedBox(height: 5),
+            child,
           ],
         ),
       );
@@ -408,4 +377,19 @@ class _FieldDivider extends StatelessWidget {
   @override
   Widget build(BuildContext context) => const Divider(
       height: 1, indent: 16, endIndent: 16, color: AppColors.divider);
+}
+
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel({required this.text});
+  final String text;
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+        child: Text(text.toUpperCase(),
+            style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textSecondary,
+                letterSpacing: 0.8)),
+      );
 }

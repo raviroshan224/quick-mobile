@@ -29,7 +29,7 @@ class ServiceModel {
   final String id;
   final String name;
   final double price;
-  final int duration; // minutes
+  final int duration; // minutes; 0 means not set
   final String? description;
   final ServiceCategory? category;
   final String? iconUrl;
@@ -41,7 +41,7 @@ class ServiceModel {
       id: j['id'] as String,
       name: j['name'] as String,
       price: (j['price'] as num).toDouble(),
-      duration: j['duration'] as int? ?? 30,
+      duration: j['duration'] as int? ?? 0,
       description: j['description'] as String?,
       category: cat != null ? ServiceCategory.fromJson(cat) : null,
       iconUrl: j['iconUrl'] as String?,
@@ -49,7 +49,12 @@ class ServiceModel {
     );
   }
 
-  String get durationLabel => duration >= 60 ? '${duration ~/ 60}h ${duration % 60 > 0 ? '${duration % 60}m' : ''}' : '${duration}m';
+  String get durationLabel {
+    if (duration <= 0) return '';
+    return duration >= 60
+        ? '${duration ~/ 60}h ${duration % 60 > 0 ? '${duration % 60}m' : ''}'
+        : '${duration}m';
+  }
   String get priceLabel => 'NPR ${price.toStringAsFixed(0)}';
 
   ServiceModel copyWith({
