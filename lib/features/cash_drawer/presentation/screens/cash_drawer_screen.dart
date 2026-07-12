@@ -93,17 +93,17 @@ class _OpenDrawer extends HookConsumerWidget {
               _BalanceChip(
                   label: 'Current Balance',
                   value:
-                      'NPR ${session.currentBalance.toStringAsFixed(0)}',
+                      'Rs ${session.currentBalance.toStringAsFixed(0)}',
                   color: AppColors.success),
               const SizedBox(width: AppSpacing.md),
               _BalanceChip(
                   label: 'Total In',
-                  value: 'NPR ${session.totalIn.toStringAsFixed(0)}',
+                  value: 'Rs ${session.totalIn.toStringAsFixed(0)}',
                   color: AppColors.primary),
               const SizedBox(width: AppSpacing.md),
               _BalanceChip(
                   label: 'Total Out',
-                  value: 'NPR ${session.totalOut.toStringAsFixed(0)}',
+                  value: 'Rs ${session.totalOut.toStringAsFixed(0)}',
                   color: AppColors.danger),
             ],
           ),
@@ -251,7 +251,7 @@ class _MovementTile extends StatelessWidget {
       title: Text(entry.reason, style: AppTextStyles.titleMedium),
       subtitle: Text(entry.type.name, style: AppTextStyles.bodySmall),
       trailing: Text(
-        '${isIn ? '+' : '-'} NPR ${entry.amount.toStringAsFixed(0)}',
+        '${isIn ? '+' : '-'} Rs ${entry.amount.toStringAsFixed(0)}',
         style: TextStyle(
             color: isIn ? AppColors.success : AppColors.danger,
             fontWeight: FontWeight.w700,
@@ -287,7 +287,7 @@ class _MovementSheet extends HookWidget {
             controller: amountCtrl,
             keyboardType: TextInputType.number,
             decoration: const InputDecoration(
-                labelText: 'Amount *', prefixText: 'NPR '),
+                labelText: 'Amount *', prefixText: 'Rs '),
           ),
           const SizedBox(height: AppSpacing.md),
           TextField(

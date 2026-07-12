@@ -20,6 +20,8 @@ class SalonSettings {
   final bool lowStockAlerts;
   final bool dailySummary;
   final String currency;
+  final bool commissionEnabled;
+  final bool staffCanViewCustomerDetails;
 
   const SalonSettings({
     this.salonName = 'My Salon',
@@ -31,7 +33,9 @@ class SalonSettings {
     this.requireCustomer = false,
     this.lowStockAlerts = true,
     this.dailySummary = false,
-    this.currency = 'NPR',
+    this.currency = 'Rs',
+    this.commissionEnabled = true,
+    this.staffCanViewCustomerDetails = true,
   });
 
   SalonSettings copyWith({
@@ -45,6 +49,8 @@ class SalonSettings {
     bool? lowStockAlerts,
     bool? dailySummary,
     String? currency,
+    bool? commissionEnabled,
+    bool? staffCanViewCustomerDetails,
   }) => SalonSettings(
     salonName: salonName ?? this.salonName,
     address: address ?? this.address,
@@ -56,6 +62,9 @@ class SalonSettings {
     lowStockAlerts: lowStockAlerts ?? this.lowStockAlerts,
     dailySummary: dailySummary ?? this.dailySummary,
     currency: currency ?? this.currency,
+    commissionEnabled: commissionEnabled ?? this.commissionEnabled,
+    staffCanViewCustomerDetails:
+        staffCanViewCustomerDetails ?? this.staffCanViewCustomerDetails,
   );
 }
 
@@ -74,15 +83,25 @@ class _SettingsNotifier extends StateNotifier<SalonSettings> {
       final j = await _repo.get();
       state = SalonSettings(
         salonName: j['salonName'] as String? ?? state.salonName,
-        address: j['address'] as String? ?? state.address,
-        phone: j['phone'] as String? ?? state.phone,
-        fonepayId: j['fonepayId'] as String? ?? state.fonepayId,
+        // The backend has no fields for address/phone/fonepayId under those
+        // names (it's salonAddress/salonPhone/fonePayMerchantId), and has no
+        // autoPrintReceipt/requireCustomer/lowStockAlerts/dailySummary at
+        // all yet — those four stay local-only until the backend supports
+        // them, so they intentionally aren't read from the response here.
+        address: j['salonAddress'] as String? ?? state.address,
+        phone: j['salonPhone'] as String? ?? state.phone,
+        fonepayId: j['fonePayMerchantId'] as String? ?? state.fonepayId,
         receiptFooter: j['receiptFooter'] as String? ?? state.receiptFooter,
-        autoPrintReceipt: j['autoPrintReceipt'] as bool? ?? state.autoPrintReceipt,
-        requireCustomer: j['requireCustomer'] as bool? ?? state.requireCustomer,
-        lowStockAlerts: j['lowStockAlerts'] as bool? ?? state.lowStockAlerts,
-        dailySummary: j['dailySummary'] as bool? ?? state.dailySummary,
+        autoPrintReceipt: state.autoPrintReceipt,
+        requireCustomer: state.requireCustomer,
+        lowStockAlerts: state.lowStockAlerts,
+        dailySummary: state.dailySummary,
         currency: j['currency'] as String? ?? state.currency,
+        commissionEnabled:
+            j['commissionEnabled'] as bool? ?? state.commissionEnabled,
+        staffCanViewCustomerDetails:
+            j['staffCanViewCustomerDetails'] as bool? ??
+                state.staffCanViewCustomerDetails,
       );
     } catch (_) {
       // keep defaults on error
@@ -94,15 +113,16 @@ class _SettingsNotifier extends StateNotifier<SalonSettings> {
     try {
       await _repo.update({
         'salonName': s.salonName,
-        'address': s.address,
-        'phone': s.phone,
-        'fonepayId': s.fonepayId,
+        // See the comment in _load() — these four have no backend field yet,
+        // so sending them would make the whole request fail (the API
+        // rejects any unrecognized property outright).
+        'salonAddress': s.address,
+        'salonPhone': s.phone,
+        'fonePayMerchantId': s.fonepayId,
         'receiptFooter': s.receiptFooter,
-        'autoPrintReceipt': s.autoPrintReceipt,
-        'requireCustomer': s.requireCustomer,
-        'lowStockAlerts': s.lowStockAlerts,
-        'dailySummary': s.dailySummary,
         'currency': s.currency,
+        'commissionEnabled': s.commissionEnabled,
+        'staffCanViewCustomerDetails': s.staffCanViewCustomerDetails,
       });
     } catch (_) {
       // ignore save errors silently; state already updated locally
@@ -276,11 +296,36 @@ class SettingsScreen extends ConsumerWidget {
                 ]),
                 const SizedBox(height: 16),
 
+                // ── Staff ──────────────────────────────────────────────────
+                _Section(title: 'Staff', tiles: [
+                  _ToggleTile(
+                    icon: Icons.percent_rounded,
+                    label: 'Commission Tracking',
+                    subtitle: settings.commissionEnabled
+                        ? 'Staff earn commission per their set rate'
+                        : 'Commission is off for everyone, business-wide',
+                    value: settings.commissionEnabled,
+                    onChanged: (v) => notifier
+                        .update(settings.copyWith(commissionEnabled: v)),
+                  ),
+                  _ToggleTile(
+                    icon: Icons.visibility_outlined,
+                    label: 'Staff Can View Customer Details',
+                    subtitle: settings.staffCanViewCustomerDetails
+                        ? 'Staff can see customer phone, email, and history'
+                        : 'Customer contact info is hidden from staff',
+                    value: settings.staffCanViewCustomerDetails,
+                    onChanged: (v) => notifier.update(
+                        settings.copyWith(staffCanViewCustomerDetails: v)),
+                  ),
+                ]),
+                const SizedBox(height: 16),
+
                 // ── Checkout ───────────────────────────────────────────────
                 _Section(title: 'Checkout', tiles: [
                   _ToggleTile(
                     icon: Icons.person_search_outlined,
-                    label: 'Require Customer',
+                    label: 'Required Customer Details',
                     subtitle: 'Prompt to add customer before every sale',
                     value: settings.requireCustomer,
                     onChanged: (v) => notifier

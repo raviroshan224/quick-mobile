@@ -14,7 +14,7 @@ import '../../../../features/transactions/presentation/providers/transactions_pr
 final _nprFmt = NumberFormat('#,##0.00', 'en_IN');
 final _dateFmt = DateFormat('dd MMM yyyy HH:mm');
 
-String _fmtNpr(double amount) => 'NPR ${_nprFmt.format(amount)}';
+String _fmtNpr(double amount) => 'Rs ${_nprFmt.format(amount)}';
 String _fmtDate(DateTime dt) => _dateFmt.format(dt);
 
 String _displayId(RefundRecord r) {
@@ -172,12 +172,21 @@ class _RefundRow extends StatelessWidget {
                   fontSize: 14, color: Colors.black87),
             ),
             const SizedBox(height: 4),
-            Text(
-              refund.reason,
-              style: const TextStyle(
-                  fontSize: 13, color: AppColors.textSecondary),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+            Row(
+              children: [
+                const Icon(Icons.notes_rounded,
+                    size: 13, color: AppColors.textTertiary),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    refund.reason,
+                    style: const TextStyle(
+                        fontSize: 13, color: AppColors.textSecondary),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 8),
             Row(

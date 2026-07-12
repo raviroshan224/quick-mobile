@@ -151,7 +151,7 @@ class _CustomerDetailBody extends ConsumerWidget {
                     Expanded(
                       child: _StatCard(
                         label: 'Total Spent',
-                        value: 'NPR ${_fmt(customer.totalSpent)}',
+                        value: 'Rs ${_fmt(customer.totalSpent)}',
                         icon: Icons.payments_outlined,
                       ),
                     ),
@@ -487,7 +487,7 @@ class _VisitRow extends StatelessWidget {
             ),
           ),
           Text(
-            'NPR ${transaction.total.toStringAsFixed(0)}',
+            'Rs ${transaction.total.toStringAsFixed(0)}',
             style: const TextStyle(
                 fontSize: 14, fontWeight: FontWeight.w600),
           ),

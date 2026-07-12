@@ -63,7 +63,7 @@ class _ClosedState extends StatelessWidget {
               keyboardType:
                   const TextInputType.numberWithOptions(decimal: true),
               decoration: const InputDecoration(
-                labelText: 'Opening Balance (NPR)',
+                labelText: 'Opening Balance (Rs)',
                 border: OutlineInputBorder(),
               ),
               autofocus: true,
@@ -162,7 +162,7 @@ class _OpenState extends StatelessWidget {
               keyboardType:
                   const TextInputType.numberWithOptions(decimal: true),
               decoration: InputDecoration(
-                labelText: '${isIn ? 'Amount In' : 'Amount Out'} (NPR)',
+                labelText: '${isIn ? 'Amount In' : 'Amount Out'} (Rs)',
                 border: const OutlineInputBorder(),
               ),
               autofocus: true,
@@ -227,7 +227,7 @@ class _OpenState extends StatelessWidget {
                       color: AppColors.textTertiary, fontSize: 13)),
               const SizedBox(height: 8),
               Text(
-                'NPR ${session.currentBalance.toStringAsFixed(2)}',
+                'Rs ${session.currentBalance.toStringAsFixed(2)}',
                 style: const TextStyle(
                     color: Colors.white,
                     fontSize: 30,
@@ -238,11 +238,11 @@ class _OpenState extends StatelessWidget {
                 children: [
                   _Chip(
                       label:
-                          '+ NPR ${session.totalIn.toStringAsFixed(0)} in'),
+                          '+ Rs ${session.totalIn.toStringAsFixed(0)} in'),
                   const SizedBox(width: 8),
                   _Chip(
                       label:
-                          '- NPR ${session.totalOut.toStringAsFixed(0)} out'),
+                          '- Rs ${session.totalOut.toStringAsFixed(0)} out'),
                 ],
               ),
             ],
@@ -379,7 +379,7 @@ class _MovementRow extends StatelessWidget {
             ),
           ),
           Text(
-            '${isIn ? '+' : '-'} NPR ${entry.amount.toStringAsFixed(0)}',
+            '${isIn ? '+' : '-'} Rs ${entry.amount.toStringAsFixed(0)}',
             style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w500,

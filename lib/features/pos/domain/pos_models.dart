@@ -49,11 +49,26 @@ class CartItem {
 
 // ─── Cart State ───────────────────────────────────────────────────────────────
 
+enum DiscountEntryScope { all, service }
+
 class DiscountEntry {
-  const DiscountEntry({required this.label, required this.amount, required this.isPercentage});
+  const DiscountEntry({
+    required this.label,
+    required this.amount,
+    required this.isPercentage,
+    this.discountId,
+    this.scope = DiscountEntryScope.all,
+    this.serviceId,
+  });
   final String label;
   final double amount; // if isPercentage: 10 = 10%
   final bool isPercentage;
+  // Set when applied from the saved Discount catalog (as opposed to a
+  // manually typed amount) — forwarded to the backend so it recalculates
+  // authoritatively instead of trusting the client's amount.
+  final String? discountId;
+  final DiscountEntryScope scope;
+  final String? serviceId; // set when scope == service
 }
 
 class CartState {
@@ -84,7 +99,17 @@ class CartState {
 
   double get discountAmount {
     if (discount == null) return 0;
-    return discount!.isPercentage ? subtotal * discount!.amount / 100 : discount!.amount;
+    // Scoped discounts only apply to the matching service's line items —
+    // mirrors the backend's scoped-discount calculation so the total shown
+    // to the cashier before payment matches what's actually charged.
+    final base = discount!.scope == DiscountEntryScope.service
+        ? items
+            .where((i) => i.service?.id == discount!.serviceId)
+            .fold(0.0, (s, i) => s + i.totalPrice)
+        : subtotal;
+    final amount =
+        discount!.isPercentage ? base * discount!.amount / 100 : discount!.amount;
+    return amount > base ? base : amount;
   }
 
   double get total => subtotal - discountAmount + tipAmount;

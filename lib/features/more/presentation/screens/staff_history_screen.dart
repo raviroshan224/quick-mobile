@@ -13,7 +13,7 @@ import '../../../../features/transactions/presentation/providers/transactions_pr
 
 final _nprFmt = NumberFormat('#,##0.00', 'en_IN');
 
-String _formatNpr(double amount) => 'NPR ${_nprFmt.format(amount)}';
+String _formatNpr(double amount) => 'Rs ${_nprFmt.format(amount)}';
 
 String _formatTime(DateTime dt) {
   final h = dt.hour % 12 == 0 ? 12 : dt.hour % 12;

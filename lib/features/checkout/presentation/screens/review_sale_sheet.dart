@@ -6,11 +6,11 @@ import '../../../../core/network/api_client.dart';
 import '../../../../features/customers/domain/customer_models.dart';
 import '../../../../features/customers/presentation/providers/customers_provider.dart';
 import '../../../../features/dashboard/presentation/providers/dashboard_provider.dart';
+import '../../../../features/discounts/widgets/discount_picker_sheet.dart';
 import '../../../../features/pos/domain/pos_models.dart';
 import '../../../../features/pos/presentation/providers/cart_provider.dart';
 import '../../../../features/transactions/data/transactions_repository.dart';
 import '../../../../features/transactions/presentation/providers/transactions_provider.dart';
-import '../widgets/manual_discount_sheet.dart';
 import '../../../../core/theme/app_theme.dart';
 
 enum _Step { pick, cash, qr, split, success }
@@ -43,17 +43,7 @@ class ReviewSaleSheet extends HookConsumerWidget {
       if (isProcessing.value) return;
       isProcessing.value = true;
 
-      final manualDiscount = ref.read(manualDiscountProvider);
-      var checkoutCart = ref.read(cartProvider);
-      if (manualDiscount != null && checkoutCart.discount == null) {
-        checkoutCart = checkoutCart.copyWith(
-          discount: DiscountEntry(
-            label: manualDiscount.label,
-            amount: manualDiscount.value,
-            isPercentage: manualDiscount.type == ManualDiscountType.percentage,
-          ),
-        );
-      }
+      final checkoutCart = ref.read(cartProvider);
 
       final splitCash = method.value == PaymentMethod.split
           ? double.tryParse(cashInput.value)
@@ -69,11 +59,11 @@ class ReviewSaleSheet extends HookConsumerWidget {
             paymentMethod: method.value,
             splitCash: splitCash,
             splitFonepay: splitFonepay,
+            discountId: checkoutCart.discount?.discountId,
             keypadAmount: checkoutCart.items.isEmpty ? keypadAmount : null,
           )
           .then((_) {
             ref.read(cartProvider.notifier).clear();
-            ref.read(manualDiscountProvider.notifier).state = null;
             ref.read(transactionListProvider.notifier).refresh();
             ref.invalidate(dashboardProvider);
             ref.invalidate(todayRevenueProvider);
@@ -398,7 +388,7 @@ class _PickStep extends HookConsumerWidget {
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
                           Text(
-                            'NPR ${total.toStringAsFixed(2)}',
+                            'Rs ${total.toStringAsFixed(2)}',
                             style: const TextStyle(
                               fontSize: 34,
                               fontWeight: FontWeight.w600,
@@ -465,7 +455,7 @@ class _PickStep extends HookConsumerWidget {
                                     ),
                                     const SizedBox(width: 12),
                                     Text(
-                                      'NPR ${item.totalPrice.toStringAsFixed(0)}',
+                                      'Rs ${item.totalPrice.toStringAsFixed(0)}',
                                       style: const TextStyle(fontSize: 13),
                                     ),
                                     const SizedBox(width: 8),
@@ -504,7 +494,7 @@ class _PickStep extends HookConsumerWidget {
                 ),
                 const Divider(height: 1, color: AppColors.divider),
                 // Discount row
-                _DiscountRow(subtotal: total),
+                _DiscountRow(cart: cart),
                 const Divider(height: 1, color: AppColors.divider),
                 const SizedBox(height: 12),
                 // Payment method label
@@ -710,16 +700,16 @@ class _CustomerRow extends StatelessWidget {
 // ─── Discount Row ─────────────────────────────────────────────────────────────
 
 class _DiscountRow extends ConsumerWidget {
-  const _DiscountRow({required this.subtotal});
-  final double subtotal;
+  const _DiscountRow({required this.cart});
+  final CartState cart;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final discount = ref.watch(manualDiscountProvider);
+    final discount = cart.discount;
 
     if (discount == null) {
       return GestureDetector(
-        onTap: () => ManualDiscountSheet.show(context, subtotal: subtotal),
+        onTap: () => DiscountPickerSheet.show(context, subtotal: cart.subtotal),
         child: const Padding(
           padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
           child: Row(
@@ -740,56 +730,59 @@ class _DiscountRow extends ConsumerWidget {
       );
     }
 
-    final discountAmt = discount.apply(subtotal);
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-      child: Row(
-        children: [
-          Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              color: const Color(0xFF10B981).withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(8),
+    final discountAmt = cart.discountAmount;
+    return GestureDetector(
+      onTap: () => DiscountPickerSheet.show(context, subtotal: cart.subtotal),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        child: Row(
+          children: [
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: const Color(0xFF10B981).withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(
+                Icons.local_offer,
+                size: 16,
+                color: Color(0xFF10B981),
+              ),
             ),
-            child: const Icon(
-              Icons.local_offer,
-              size: 16,
-              color: Color(0xFF10B981),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  discount.label,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: Color(0xFF10B981),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    discount.label,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: Color(0xFF10B981),
+                    ),
                   ),
-                ),
-                Text(
-                  '- NPR ${discountAmt.toStringAsFixed(0)}',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: AppColors.textSecondary,
+                  Text(
+                    '- Rs ${discountAmt.toStringAsFixed(0)}',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textSecondary,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          GestureDetector(
-            onTap: () => ref.read(manualDiscountProvider.notifier).state = null,
-            child: const Icon(
-              Icons.close,
-              size: 16,
-              color: AppColors.textTertiary,
+            GestureDetector(
+              onTap: () => ref.read(cartProvider.notifier).clearDiscount(),
+              child: const Icon(
+                Icons.close,
+                size: 16,
+                color: AppColors.textTertiary,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1022,7 +1015,7 @@ class _CashStep extends HookWidget {
                   child: AnimatedSwitcher(
                     duration: const Duration(milliseconds: 120),
                     child: Text(
-                      'NPR ${cashInput.value}',
+                      'Rs ${cashInput.value}',
                       key: ValueKey(cashInput.value),
                       style: TextStyle(
                         fontSize: 48,
@@ -1040,7 +1033,7 @@ class _CashStep extends HookWidget {
                 child: ok && change > 0
                     ? Text(
                         key: const ValueKey('ch'),
-                        'Change: NPR ${change.toStringAsFixed(2)}',
+                        'Change: Rs ${change.toStringAsFixed(2)}',
                         style: const TextStyle(
                           fontSize: 14,
                           color: Color(0xFF16A34A),
@@ -1050,7 +1043,7 @@ class _CashStep extends HookWidget {
                     : !ok && t > 0
                     ? Text(
                         key: const ValueKey('sh'),
-                        'Short: NPR ${(-change).toStringAsFixed(2)}',
+                        'Short: Rs ${(-change).toStringAsFixed(2)}',
                         style: const TextStyle(
                           fontSize: 14,
                           color: AppColors.danger,
@@ -1072,7 +1065,7 @@ class _CashStep extends HookWidget {
                 final isSelected = cashInput.value == amt.toStringAsFixed(0);
                 final lbl = amt == total
                     ? 'Exact'
-                    : 'NPR ${amt.toStringAsFixed(0)}';
+                    : 'Rs ${amt.toStringAsFixed(0)}';
                 return _Chip(
                   label: lbl,
                   selected: isSelected,
@@ -1094,7 +1087,7 @@ class _CashStep extends HookWidget {
         _BigBtn(
           label: ok
               ? (change > 0
-                    ? 'Confirm — Change NPR ${change.toStringAsFixed(2)}'
+                    ? 'Confirm — Change Rs ${change.toStringAsFixed(2)}'
                     : 'Confirm Payment')
               : 'Enter Amount',
           onTap: onConfirm,
@@ -1123,15 +1116,18 @@ class _Chip extends StatelessWidget {
       margin: const EdgeInsets.only(right: 8),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
-        color: selected ? const Color(0xFF16A34A) : Colors.black,
+        color: selected ? Colors.white : Colors.black,
         borderRadius: BorderRadius.circular(20),
+        border: selected
+            ? Border.all(color: const Color(0xFF16A34A), width: 1.5)
+            : null,
       ),
       child: Text(
         label,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 13,
-          color: Colors.white,
-          fontWeight: FontWeight.w500,
+          color: selected ? const Color(0xFF16A34A) : Colors.white,
+          fontWeight: FontWeight.w600,
         ),
       ),
     ),
@@ -1234,7 +1230,7 @@ class _QRStep extends HookWidget {
                       ),
                       const SizedBox(height: 20),
                       Text(
-                        'NPR ${total.toStringAsFixed(2)}',
+                        'Rs ${total.toStringAsFixed(2)}',
                         style: const TextStyle(
                           fontSize: 30,
                           fontWeight: FontWeight.w700,
@@ -1288,7 +1284,7 @@ class _QRStep extends HookWidget {
                 ...[
                   ('1', 'Open Fonepay app'),
                   ('2', 'Tap "Scan QR" and point camera here'),
-                  ('3', 'Confirm NPR ${total.toStringAsFixed(2)} in the app'),
+                  ('3', 'Confirm Rs ${total.toStringAsFixed(2)} in the app'),
                 ].map(
                   (s) => Padding(
                     padding: const EdgeInsets.only(bottom: 8),
@@ -1369,7 +1365,7 @@ class _SplitStep extends HookWidget {
           title: 'Split Payment',
           onBack: onBack,
           right: Text(
-            'NPR ${total.toStringAsFixed(2)}',
+            'Rs ${total.toStringAsFixed(2)}',
             style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
           ),
         ),
@@ -1385,7 +1381,7 @@ class _SplitStep extends HookWidget {
                   label: 'Cash',
                   valueText: cashInput.value == '0'
                       ? '—'
-                      : 'NPR ${cashInput.value}',
+                      : 'Rs ${cashInput.value}',
                   isActive: true,
                   color: Colors.black,
                 ),
@@ -1395,7 +1391,7 @@ class _SplitStep extends HookWidget {
                   icon: Icons.qr_code_rounded,
                   label: 'Fonepay QR',
                   valueText: cash > 0
-                      ? 'NPR ${fonepay.toStringAsFixed(2)}'
+                      ? 'Rs ${fonepay.toStringAsFixed(2)}'
                       : '—',
                   isActive: false,
                   color: const Color(0xFF6BBD44),
@@ -1585,7 +1581,7 @@ class _SuccessStep extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              'NPR ${total.toStringAsFixed(2)}',
+              'Rs ${total.toStringAsFixed(2)}',
               style: const TextStyle(
                 fontSize: 34,
                 fontWeight: FontWeight.w200,
@@ -1617,9 +1613,9 @@ class _SuccessStep extends StatelessWidget {
                       cashPaid != null &&
                       fonepayPaid != null) ...[
                     const SizedBox(height: 10),
-                    _Row('Cash', 'NPR ${cashPaid!.toStringAsFixed(2)}'),
+                    _Row('Cash', 'Rs ${cashPaid!.toStringAsFixed(2)}'),
                     const SizedBox(height: 6),
-                    _Row('Fonepay', 'NPR ${fonepayPaid!.toStringAsFixed(2)}'),
+                    _Row('Fonepay', 'Rs ${fonepayPaid!.toStringAsFixed(2)}'),
                   ],
                   if (change != null && change! > 0) ...[
                     const Divider(height: 20, color: AppColors.divider),
@@ -1635,7 +1631,7 @@ class _SuccessStep extends StatelessWidget {
                         ),
                         const Spacer(),
                         Text(
-                          'NPR ${change!.toStringAsFixed(2)}',
+                          'Rs ${change!.toStringAsFixed(2)}',
                           style: const TextStyle(
                             fontSize: 17,
                             fontWeight: FontWeight.w700,

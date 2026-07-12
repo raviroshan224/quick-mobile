@@ -5,6 +5,7 @@ import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../features/staff/domain/staff_models.dart';
 import '../../../../features/staff/presentation/providers/staff_provider.dart';
+import 'settings_screen.dart' show salonSettingsProvider;
 
 // ─── Avatar colors (cycle by index) ───────────────────────────────────────────
 
@@ -37,6 +38,8 @@ class _StaffScreenState extends ConsumerState<StaffScreen> {
   @override
   Widget build(BuildContext context) {
     final staffAsync = ref.watch(staffListProvider);
+    final commissionEnabled =
+        ref.watch(salonSettingsProvider).commissionEnabled;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -113,6 +116,7 @@ class _StaffScreenState extends ConsumerState<StaffScreen> {
                         staff: s,
                         avatarColor: _avatarColor(
                             allStaff.indexOf(s)),
+                        showCommission: commissionEnabled,
                         onTap: () =>
                             context.push('/more/staff/${s.id}'),
                       );
@@ -253,10 +257,12 @@ class _StaffTile extends StatelessWidget {
     required this.staff,
     required this.avatarColor,
     required this.onTap,
+    this.showCommission = true,
   });
   final StaffModel staff;
   final Color avatarColor;
   final VoidCallback onTap;
+  final bool showCommission;
 
   @override
   Widget build(BuildContext context) {
@@ -336,7 +342,7 @@ class _StaffTile extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             // Commission rate badge
-            if (staff.commissionRate != null)
+            if (showCommission && staff.commissionRate != null)
               _CommissionBadge(rate: staff.commissionRate!),
             const Icon(Icons.chevron_right,
                 size: 18, color: AppColors.border),

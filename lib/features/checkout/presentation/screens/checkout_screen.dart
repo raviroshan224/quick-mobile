@@ -172,7 +172,7 @@ class _KeypadView extends HookConsumerWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text(
-                'NPR ${display.value}',
+                'Rs ${display.value}',
                 style: const TextStyle(
                   fontSize: 48,
                   fontWeight: FontWeight.w300,
@@ -456,8 +456,8 @@ class _ChargeButton extends StatelessWidget {
         child: Center(
           child: Text(
             amount > 0
-                ? 'Charge NPR ${amount.toStringAsFixed(2)}'
-                : 'Charge NPR 0.00',
+                ? 'Charge Rs ${amount.toStringAsFixed(2)}'
+                : 'Charge Rs 0.00',
             style: TextStyle(
               color: enabled ? Colors.white : AppColors.textTertiary,
               fontSize: 16,
@@ -516,14 +516,27 @@ class _ReviewSaleButton extends StatelessWidget {
 
 // ─── Services View (3rd tab) ──────────────────────────────────────────────────
 
+// Deliberately more vivid than the app's default restrained olive/grey
+// palette — used only for this eye-catching service selection grid.
+// Each (background, accent) pair is picked by hashing the category id so
+// the same category always lands on the same color.
+const List<(Color, Color)> _servicePalette = [
+  (Color(0xFFFFE1E1), Color(0xFFDC5A5F)), // coral
+  (Color(0xFFFFEACC), Color(0xFFDB8B2A)), // peach
+  (Color(0xFFFFF6C4), Color(0xFFC79A0A)), // yellow
+  (Color(0xFFD9F5E3), Color(0xFF119A62)), // mint
+  (Color(0xFFD3F1F1), Color(0xFF0E9A9A)), // teal
+  (Color(0xFFDCEAFF), Color(0xFF3A78C2)), // sky blue
+  (Color(0xFFE9E1FF), Color(0xFF7C5FD1)), // lavender
+  (Color(0xFFFCE1EE), Color(0xFFC94989)), // rose
+];
+
+(Color, Color) _paletteFor(String key) {
+  final seed = key.codeUnits.fold(0, (s, c) => s + c);
+  return _servicePalette[seed % _servicePalette.length];
+}
+
 class _ServicesView extends HookConsumerWidget {
-  static const _catColors = {
-    'cat-1': Color(0xFFE8EDD6), // olive-50
-    'cat-2': Color(0xFFEEEEEB), // warm grey
-    'cat-3': Color(0xFFD1FAE5), // green (keep semantic)
-    'cat-4': Color(0xFFDCE0C8), // deeper olive
-    'cat-5': Color(0xFFFFEDD5), // orange (keep warm)
-  };
   static const _catIcons = {
     'cat-1': Icons.content_cut_rounded,
     'cat-2': Icons.back_hand_outlined,
@@ -622,21 +635,24 @@ class _ServicesView extends HookConsumerWidget {
                 );
               }
 
-              return ListView.separated(
-                padding: EdgeInsets.zero,
-                itemCount: filtered.length,
-                separatorBuilder: (_, _) => const Divider(
-                  height: 1,
-                  indent: 62,
-                  color: AppColors.surfaceVariant,
+              return GridView.builder(
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 3,
+                  crossAxisSpacing: 10,
+                  mainAxisSpacing: 10,
+                  childAspectRatio: 0.8,
                 ),
+                itemCount: filtered.length,
                 itemBuilder: (_, i) {
                   final s = filtered[i];
-                  final catId = s.category?.id ?? '';
-                  return _ServiceListTile(
+                  final catId = s.category?.id ?? s.id;
+                  final palette = _paletteFor(catId);
+                  return _ServiceGridCard(
                     service: s,
-                    iconBg: _catColors[catId] ?? AppColors.surfaceVariant,
-                    icon: _catIcons[catId] ?? Icons.spa_outlined,
+                    bg: palette.$1,
+                    accent: palette.$2,
+                    icon: _catIcons[s.category?.id ?? ''] ?? Icons.spa_outlined,
                   );
                 },
               );
@@ -689,14 +705,16 @@ class _CatChip extends StatelessWidget {
   }
 }
 
-class _ServiceListTile extends ConsumerWidget {
-  const _ServiceListTile({
+class _ServiceGridCard extends ConsumerWidget {
+  const _ServiceGridCard({
     required this.service,
-    required this.iconBg,
+    required this.bg,
+    required this.accent,
     required this.icon,
   });
   final ServiceModel service;
-  final Color iconBg;
+  final Color bg;
+  final Color accent;
   final IconData icon;
 
   @override
@@ -733,102 +751,105 @@ class _ServiceListTile extends ConsumerWidget {
       showToast('${service.name} removed');
     }
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Row(
-        children: [
-          // Tapping the icon/name/duration area always adds another
-          // instance — this is how you add the same service multiple times.
-          Expanded(
-            child: InkWell(
-              borderRadius: BorderRadius.circular(8),
-              onTap: addOne,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 38,
-                      height: 38,
+    return GestureDetector(
+      // Tapping the whole card always adds another instance — this is how
+      // you add the same service multiple times. Removing one uses the
+      // distinct badge below so it never conflicts with adding more.
+      onTap: addOne,
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(18),
+          border: inCart ? Border.all(color: accent, width: 2) : null,
+          boxShadow: [
+            BoxShadow(
+              color: accent.withValues(alpha: 0.16),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.65),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(icon, size: 16, color: accent),
+                ),
+                const Spacer(),
+                if (inCart)
+                  GestureDetector(
+                    onTap: removeOne,
+                    behavior: HitTestBehavior.opaque,
+                    child: Container(
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                       decoration: BoxDecoration(
-                        color: inCart ? AppColors.primary : iconBg,
-                        borderRadius: BorderRadius.circular(8),
+                        color: accent,
+                        borderRadius: BorderRadius.circular(10),
                       ),
-                      child: Icon(
-                        inCart ? Icons.check_rounded : icon,
-                        size: 18,
-                        color: inCart ? Colors.white : Colors.black54,
-                      ),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            service.name,
+                            '$inCartCount',
                             style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w400,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
                             ),
                           ),
-                          if (service.durationLabel.isNotEmpty)
-                            Text(
-                              service.durationLabel,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: AppColors.textTertiary,
-                              ),
-                            ),
+                          const SizedBox(width: 2),
+                          const Icon(Icons.check_rounded,
+                              size: 12, color: Colors.white),
                         ],
                       ),
                     ),
-                  ],
-                ),
+                  ),
+              ],
+            ),
+            const Spacer(),
+            Text(
+              service.name,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary,
+                height: 1.15,
               ),
             ),
-          ),
-          // Separate remove control — tapping this (not the row) takes one
-          // instance out, so it never conflicts with adding more.
-          if (inCart) ...[
-            GestureDetector(
-              onTap: removeOne,
-              behavior: HitTestBehavior.opaque,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: AppColors.primaryLight,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      '×$inCartCount',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.primaryDark,
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    const Icon(Icons.remove_circle_outline,
-                        size: 16, color: AppColors.primaryDark),
-                  ],
+            if (service.durationLabel.isNotEmpty) ...[
+              const SizedBox(height: 2),
+              Text(
+                service.durationLabel,
+                style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w600,
+                  color: accent,
                 ),
               ),
+            ],
+            const SizedBox(height: 6),
+            Text(
+              'Rs ${service.price.toStringAsFixed(0)}',
+              style: const TextStyle(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w800,
+                color: AppColors.textPrimary,
+              ),
             ),
-            const SizedBox(width: 10),
           ],
-          Text(
-            'NPR ${service.price.toStringAsFixed(0)}',
-            style: const TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w500,
-              color: Colors.black,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

@@ -7,11 +7,12 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../features/auth/presentation/providers/auth_provider.dart';
 import '../../../../features/reports/domain/reports_models.dart';
 import '../../../../features/reports/presentation/providers/reports_provider.dart';
+import 'settings_screen.dart' show salonSettingsProvider;
 
 // ─── Formatting ───────────────────────────────────────────────────────────────
 
 String _npr(double v) {
-  if (v == 0) return 'NPR 0';
+  if (v == 0) return 'Rs 0';
   final whole = v.abs().toInt();
   final str = whole.toString();
   final buf = StringBuffer();
@@ -21,7 +22,7 @@ String _npr(double v) {
     buf.write(str[i]);
     count++;
   }
-  return 'NPR ${v < 0 ? '-' : ''}${buf.toString().split('').reversed.join()}';
+  return 'Rs ${v < 0 ? '-' : ''}${buf.toString().split('').reversed.join()}';
 }
 
 String _pct(double part, double total) {
@@ -52,6 +53,8 @@ class ReportsScreen extends HookConsumerWidget {
 
     if (!isOwner) return const SizedBox.shrink();
 
+    final commissionEnabled =
+        ref.watch(salonSettingsProvider).commissionEnabled;
     final state = ref.watch(reportsProvider);
     final notifier = ref.read(reportsProvider.notifier);
     final tabIndex = useState(state.activeTab.index);
@@ -147,6 +150,7 @@ class ReportsScreen extends HookConsumerWidget {
                 tabIndex: tabIndex.value,
                 state: state,
                 onRetry: notifier.retry,
+                commissionEnabled: commissionEnabled,
               ),
             ),
           ],
@@ -190,11 +194,13 @@ class _TabBody extends StatelessWidget {
     required this.tabIndex,
     required this.state,
     required this.onRetry,
+    required this.commissionEnabled,
   });
 
   final int tabIndex;
   final ReportsState state;
   final VoidCallback onRetry;
+  final bool commissionEnabled;
 
   @override
   Widget build(BuildContext context) {
@@ -206,7 +212,8 @@ class _TabBody extends StatelessWidget {
     }
     return switch (tabIndex) {
       0 => _SalesTab(summary: state.salesSummary),
-      1 => _StaffTab(rows: state.staffPerformance),
+      1 => _StaffTab(
+          rows: state.staffPerformance, commissionEnabled: commissionEnabled),
       2 => _ServicesTab(rows: state.servicePopularity),
       _ => _InventoryTab(report: state.inventoryReport),
     };
@@ -631,8 +638,9 @@ class _MethodBar extends StatelessWidget {
 enum _StaffSort { revenue, services, hours, commission }
 
 class _StaffTab extends HookWidget {
-  const _StaffTab({required this.rows});
+  const _StaffTab({required this.rows, required this.commissionEnabled});
   final List<StaffPerformance>? rows;
+  final bool commissionEnabled;
 
   @override
   Widget build(BuildContext context) {
@@ -698,20 +706,24 @@ class _StaffTab extends HookWidget {
                       onTap: () => tap(_StaffSort.revenue),
                       width: 72,
                     ),
-                    const SizedBox(width: 6),
-                    _SortHeader(
-                      label: 'Comm.',
-                      active: sortBy.value == _StaffSort.commission,
-                      asc: sortAsc.value,
-                      onTap: () => tap(_StaffSort.commission),
-                      width: 60,
-                    ),
+                    if (commissionEnabled) ...[
+                      const SizedBox(width: 6),
+                      _SortHeader(
+                        label: 'Comm.',
+                        active: sortBy.value == _StaffSort.commission,
+                        asc: sortAsc.value,
+                        onTap: () => tap(_StaffSort.commission),
+                        width: 60,
+                      ),
+                    ],
                   ],
                 ),
               ),
               const Divider(height: 1, color: AppColors.divider),
-              ...sorted.asMap().entries.map((entry) =>
-                  _StaffRow(rank: entry.key + 1, data: entry.value)),
+              ...sorted.asMap().entries.map((entry) => _StaffRow(
+                  rank: entry.key + 1,
+                  data: entry.value,
+                  showCommission: commissionEnabled)),
             ],
           ),
         ),
@@ -772,9 +784,14 @@ class _SortHeader extends StatelessWidget {
 }
 
 class _StaffRow extends StatelessWidget {
-  const _StaffRow({required this.rank, required this.data});
+  const _StaffRow({
+    required this.rank,
+    required this.data,
+    this.showCommission = true,
+  });
   final int rank;
   final StaffPerformance data;
+  final bool showCommission;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -828,16 +845,18 @@ class _StaffRow extends StatelessWidget {
                   style: const TextStyle(
                       fontSize: 12, fontWeight: FontWeight.w600)),
             ),
-            const SizedBox(width: 6),
-            SizedBox(
-              width: 60,
-              child: Text(_npr(data.commission),
-                  textAlign: TextAlign.right,
-                  style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.success)),
-            ),
+            if (showCommission) ...[
+              const SizedBox(width: 6),
+              SizedBox(
+                width: 60,
+                child: Text(_npr(data.commission),
+                    textAlign: TextAlign.right,
+                    style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.success)),
+              ),
+            ],
           ],
         ),
       );

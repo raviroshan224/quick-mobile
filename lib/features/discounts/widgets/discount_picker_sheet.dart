@@ -2,32 +2,45 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../checkout/presentation/widgets/manual_discount_sheet.dart';
+import '../../pos/domain/pos_models.dart' show DiscountEntry, DiscountEntryScope;
 import '../models/discount_model.dart';
 import '../providers/discounts_provider.dart';
 import '../../pos/presentation/providers/cart_provider.dart';
 
-/// Bottom sheet shown in the checkout Library tab when staff taps "Discounts".
-/// Lists all active discounts as tappable cards. Tapping applies the discount
-/// to the current checkout (sets [checkoutDiscountProvider]).
+/// Bottom sheet shown from checkout when staff taps "Add discount". Lists
+/// active discounts as tappable cards, applying the tapped one straight to
+/// the cart (the single source of truth is `cartProvider`'s `CartState.discount`
+/// — there's no separate "applied" tracking state to drift out of sync).
 class DiscountPickerSheet extends ConsumerWidget {
-  const DiscountPickerSheet({super.key});
+  const DiscountPickerSheet({super.key, required this.subtotal});
+  final double subtotal;
 
-  static Future<void> show(BuildContext context) {
+  static Future<void> show(BuildContext context, {required double subtotal}) {
     return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-      builder: (_) => const DiscountPickerSheet(),
+      builder: (_) => DiscountPickerSheet(subtotal: subtotal),
     );
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final discountsAsync = ref.watch(discountsProvider);
-    final active = discountsAsync.value?.where((d) => d.isActive).toList() ?? const [];
-    final applied = ref.watch(checkoutDiscountProvider);
+    final cart = ref.watch(cartProvider);
+    // Hide discounts scoped to a service that isn't in the cart — applying
+    // one would silently compute to Rs 0 with no explanation.
+    final active = discountsAsync.value
+            ?.where((d) => d.isActive)
+            .where((d) =>
+                d.scope == DiscountScope.all ||
+                cart.items.any((i) => i.service?.id == d.serviceId))
+            .toList() ??
+        const [];
+    final applied = cart.discount;
 
     return SafeArea(
       top: false,
@@ -67,14 +80,26 @@ class DiscountPickerSheet extends ConsumerWidget {
           const Divider(height: 1),
 
           // ── Applied banner ────────────────────────────────────────────
-          if (applied != null)
+          if (applied != null && applied.discountId != null)
             _AppliedBanner(
               discount: applied,
               onRemove: () {
-                ref.read(checkoutDiscountProvider.notifier).state = null;
+                ref.read(cartProvider.notifier).clearDiscount();
                 Navigator.pop(context);
               },
             ),
+
+          // ── Manual entry ──────────────────────────────────────────────
+          ListTile(
+            leading: const Icon(Icons.edit_outlined, color: AppColors.textSecondary),
+            title: const Text('Enter a manual discount',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+            onTap: () {
+              Navigator.pop(context);
+              ManualDiscountSheet.show(context, subtotal: subtotal);
+            },
+          ),
+          const Divider(height: 1, indent: 16),
 
           // ── Discount list ─────────────────────────────────────────────
           if (active.isEmpty)
@@ -85,7 +110,7 @@ class DiscountPickerSheet extends ConsumerWidget {
                   Icon(Icons.local_offer_outlined,
                       size: 36, color: AppColors.textTertiary),
                   SizedBox(height: 10),
-                  Text('No active discounts',
+                  Text('No active discounts for this cart',
                       style: TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w500,
@@ -106,21 +131,23 @@ class DiscountPickerSheet extends ConsumerWidget {
                   const Divider(height: 1, indent: 16),
               itemBuilder: (_, i) {
                 final d = active[i];
-                final isApplied = applied?.id == d.id;
+                final isApplied = applied?.discountId == d.id;
                 return _DiscountTile(
                   discount: d,
                   isApplied: isApplied,
                   onTap: () {
                     if (isApplied) {
-                      ref.read(checkoutDiscountProvider.notifier).state = null;
                       ref.read(cartProvider.notifier).clearDiscount();
                     } else {
-                      ref.read(checkoutDiscountProvider.notifier).state = d;
                       ref.read(cartProvider.notifier).applyDiscount(
                             d.name,
                             d.value,
-                            isPercentage:
-                                d.type == DiscountType.percentage,
+                            isPercentage: d.type == DiscountType.percentage,
+                            discountId: d.id,
+                            scope: d.scope == DiscountScope.service
+                                ? DiscountEntryScope.service
+                                : DiscountEntryScope.all,
+                            serviceId: d.serviceId,
                           );
                     }
                     Navigator.pop(context);
@@ -139,7 +166,7 @@ class DiscountPickerSheet extends ConsumerWidget {
 // ── Applied banner ────────────────────────────────────────────────────────────
 
 class _AppliedBanner extends StatelessWidget {
-  final Discount discount;
+  final DiscountEntry discount;
   final VoidCallback onRemove;
 
   const _AppliedBanner({required this.discount, required this.onRemove});
@@ -161,7 +188,7 @@ class _AppliedBanner extends StatelessWidget {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              '${discount.name} applied',
+              '${discount.label} applied',
               style: const TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w500,

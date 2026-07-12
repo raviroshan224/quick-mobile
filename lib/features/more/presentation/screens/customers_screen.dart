@@ -322,7 +322,7 @@ class _CustomerTile extends StatelessWidget {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        'NPR ${_formatAmount(customer.totalSpent)}',
+                        'Rs ${_formatAmount(customer.totalSpent)}',
                         style: const TextStyle(
                             fontSize: 11,
                             color: AppColors.textSecondary),

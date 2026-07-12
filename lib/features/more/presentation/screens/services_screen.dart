@@ -236,7 +236,7 @@ class _ServiceTile extends StatelessWidget {
               style: const TextStyle(
                   fontSize: 11, color: AppColors.textTertiary)),
       trailing: Text(
-        'NPR ${service.price.toStringAsFixed(0)}',
+        'Rs ${service.price.toStringAsFixed(0)}',
         style: const TextStyle(
             fontSize: 14, fontWeight: FontWeight.w500),
       ),

@@ -90,13 +90,13 @@ class _ReceiptBody extends StatelessWidget {
                 _row('Payment', _paymentLabel(tx.paymentMethod)),
                 if (tx.subtotal != null && tx.subtotal != tx.total)
                   _row('Subtotal',
-                      'NPR ${tx.subtotal!.toStringAsFixed(2)}'),
+                      'Rs ${tx.subtotal!.toStringAsFixed(2)}'),
                 if ((tx.discountAmount ?? 0) > 0)
                   _row('Discount',
-                      '- NPR ${tx.discountAmount!.toStringAsFixed(2)}'),
+                      '- Rs ${tx.discountAmount!.toStringAsFixed(2)}'),
                 if ((tx.tipAmount ?? 0) > 0)
-                  _row('Tip', 'NPR ${tx.tipAmount!.toStringAsFixed(2)}'),
-                _row('Total', 'NPR ${tx.total.toStringAsFixed(2)}',
+                  _row('Tip', 'Rs ${tx.tipAmount!.toStringAsFixed(2)}'),
+                _row('Total', 'Rs ${tx.total.toStringAsFixed(2)}',
                     bold: true),
                 _row('Status', 'Completed'),
                 const SizedBox(height: AppSpacing.xxxl),

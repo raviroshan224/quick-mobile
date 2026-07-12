@@ -1,152 +1,91 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:uuid/uuid.dart';
+import '../../../../core/models/app_exception.dart';
+import '../../../../core/network/api_client.dart';
+import '../../../../core/network/network_status.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../features/auth/presentation/providers/auth_provider.dart';
+import '../../../more/presentation/screens/settings_screen.dart' show salonSettingsProvider;
+import '../../data/bookings_repository.dart';
+import '../../domain/booking_models.dart';
 
-const _uuid = Uuid();
+String _dateKey(DateTime d) =>
+    '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
-// ─── Booking Model ────────────────────────────────────────────────────────────
+// ─── Bookings provider (per selected day) ─────────────────────────────────────
 
-enum BookingStatus { scheduled, completed, cancelled }
-
-class Booking {
-  final String id;
-  final String customerName;
-  final String phone;
-  final String service;
-  final String? staff;
-  final DateTime date;
-  final TimeOfDay time;
-  final String? notes;
-  final BookingStatus status;
-
-  const Booking({
-    required this.id,
-    required this.customerName,
-    required this.phone,
-    required this.service,
-    this.staff,
-    required this.date,
-    required this.time,
-    this.notes,
-    this.status = BookingStatus.scheduled,
-  });
-
-  Booking copyWith({
-    String? customerName,
-    String? phone,
-    String? service,
-    String? staff,
-    DateTime? date,
-    TimeOfDay? time,
-    String? notes,
-    BookingStatus? status,
-  }) {
-    return Booking(
-      id: id,
-      customerName: customerName ?? this.customerName,
-      phone: phone ?? this.phone,
-      service: service ?? this.service,
-      staff: staff ?? this.staff,
-      date: date ?? this.date,
-      time: time ?? this.time,
-      notes: notes ?? this.notes,
-      status: status ?? this.status,
-    );
-  }
-
-  String get timeLabel {
-    final h = time.hourOfPeriod == 0 ? 12 : time.hourOfPeriod;
-    final m = time.minute.toString().padLeft(2, '0');
-    final period = time.period == DayPeriod.am ? 'AM' : 'PM';
-    return '$h:$m $period';
-  }
-
-  String get statusLabel {
-    switch (status) {
-      case BookingStatus.scheduled:
-        return 'Scheduled';
-      case BookingStatus.completed:
-        return 'Completed';
-      case BookingStatus.cancelled:
-        return 'Cancelled';
-    }
-  }
-
-  Color get statusColor {
-    switch (status) {
-      case BookingStatus.scheduled:
-        return AppColors.primary;
-      case BookingStatus.completed:
-        return const Color(0xFF10B981);
-      case BookingStatus.cancelled:
-        return AppColors.danger;
-    }
-  }
-}
-
-// ─── Bookings Provider ────────────────────────────────────────────────────────
-
-class BookingsNotifier extends StateNotifier<List<Booking>> {
-  BookingsNotifier() : super(_mockBookings);
-
-  void add(Booking b) => state = [...state, b];
-
-  void update(Booking updated) {
-    state = [
-      for (final b in state)
-        if (b.id == updated.id) updated else b,
-    ];
-  }
-
-  void delete(String id) => state = state.where((b) => b.id != id).toList();
-
-  void updateStatus(String id, BookingStatus status) {
-    state = [
-      for (final b in state)
-        if (b.id == id) b.copyWith(status: status) else b,
-    ];
-  }
-}
-
-final bookingsProvider = StateNotifierProvider<BookingsNotifier, List<Booking>>(
-  (_) => BookingsNotifier(),
+final _bookingsRepoProvider = Provider<BookingsRepository>(
+  (ref) => BookingsRepository(ref.read(apiClientProvider)),
 );
 
-// Mock data for today
-final _mockBookings = [
-  Booking(
-    id: _uuid.v4(),
-    customerName: 'Priya Sharma',
-    phone: '9841123456',
-    service: 'Haircut & Blow Dry',
-    staff: 'Sita Gurung',
-    date: DateTime.now(),
-    time: const TimeOfDay(hour: 10, minute: 0),
-    status: BookingStatus.completed,
-  ),
-  Booking(
-    id: _uuid.v4(),
-    customerName: 'Anita Rai',
-    phone: '9812345678',
-    service: 'Facial',
-    staff: 'Priya Thapa',
-    date: DateTime.now(),
-    time: const TimeOfDay(hour: 11, minute: 30),
-    status: BookingStatus.scheduled,
-  ),
-  Booking(
-    id: _uuid.v4(),
-    customerName: 'Maya KC',
-    phone: '9801234567',
-    service: 'Manicure & Pedicure',
-    date: DateTime.now(),
-    time: const TimeOfDay(hour: 14, minute: 0),
-    notes: 'Prefers gel nails',
-    status: BookingStatus.scheduled,
-  ),
-];
+class BookingsState {
+  const BookingsState({
+    this.items = const [],
+    this.isLoading = true,
+    this.error,
+  });
+
+  final List<Booking> items;
+  final bool isLoading;
+  final String? error;
+
+  BookingsState copyWith({
+    List<Booking>? items,
+    bool? isLoading,
+    String? error,
+    bool clearError = false,
+  }) =>
+      BookingsState(
+        items: items ?? this.items,
+        isLoading: isLoading ?? this.isLoading,
+        error: clearError ? null : (error ?? this.error),
+      );
+}
+
+class BookingsNotifier extends StateNotifier<BookingsState> {
+  BookingsNotifier(this._repo, this.dateKey) : super(const BookingsState()) {
+    refresh();
+  }
+
+  final BookingsRepository _repo;
+  final String dateKey;
+
+  Future<void> refresh() async {
+    state = state.copyWith(isLoading: true, clearError: true);
+    try {
+      final result = await _repo.getAll(date: dateKey, limit: 100);
+      state = state.copyWith(items: result.items, isLoading: false);
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: e.toString());
+    }
+  }
+
+  Future<void> create(BookingRequest req) async {
+    await _repo.create(req);
+    await refresh();
+  }
+
+  Future<void> updateBooking(String id, BookingRequest req) async {
+    await _repo.update(id, req);
+    await refresh();
+  }
+
+  Future<void> updateStatus(String id, BookingStatus status) async {
+    await _repo.updateStatus(id, status);
+    await refresh();
+  }
+
+  Future<void> delete(String id) async {
+    await _repo.delete(id);
+    await refresh();
+  }
+}
+
+final bookingsProvider =
+    StateNotifierProvider.family<BookingsNotifier, BookingsState, String>(
+  (ref, dateKey) => BookingsNotifier(ref.read(_bookingsRepoProvider), dateKey),
+);
 
 // ─── Calendar Tab ─────────────────────────────────────────────────────────────
 
@@ -156,19 +95,12 @@ class CalendarTab extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final selectedDate = useState(DateTime.now());
-    final bookings = ref.watch(bookingsProvider);
+    final dateKey = _dateKey(selectedDate.value);
+    final bookingsState = ref.watch(bookingsProvider(dateKey));
 
-    // Filter bookings for selected date
-    final todayBookings =
-        bookings.where((b) {
-          return b.date.year == selectedDate.value.year &&
-              b.date.month == selectedDate.value.month &&
-              b.date.day == selectedDate.value.day;
-        }).toList()..sort((a, b) {
-          final aMin = a.time.hour * 60 + a.time.minute;
-          final bMin = b.time.hour * 60 + b.time.minute;
-          return aMin.compareTo(bMin);
-        });
+    final todayBookings = [...bookingsState.items]..sort((a, b) {
+        return a.time.compareTo(b.time);
+      });
 
     return Column(
       children: [
@@ -181,32 +113,40 @@ class CalendarTab extends HookConsumerWidget {
 
         // ── Bookings list or empty state ────────────────────────────────
         Expanded(
-          child: todayBookings.isEmpty
-              ? _EmptyBookings(
-                  onAdd: () =>
-                      _showBookingForm(context, ref, selectedDate.value),
-                )
-              : ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 80),
-                  itemCount: todayBookings.length,
-                  separatorBuilder: (_, _) => const SizedBox(height: 10),
-                  itemBuilder: (_, i) => _BookingCard(
-                    booking: todayBookings[i],
-                    onEdit: () => _showBookingForm(
-                      context,
-                      ref,
-                      selectedDate.value,
-                      existing: todayBookings[i],
-                    ),
-                    onDelete: () =>
-                        _confirmDelete(context, ref, todayBookings[i]),
-                    onStatusChange: (status) {
-                      ref
-                          .read(bookingsProvider.notifier)
-                          .updateStatus(todayBookings[i].id, status);
-                    },
-                  ),
-                ),
+          child: bookingsState.isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : bookingsState.error != null
+                  ? _ErrorState(
+                      message: bookingsState.error!,
+                      onRetry: () =>
+                          ref.read(bookingsProvider(dateKey).notifier).refresh(),
+                    )
+                  : todayBookings.isEmpty
+                      ? _EmptyBookings(
+                          onAdd: () =>
+                              _showBookingForm(context, ref, selectedDate.value),
+                        )
+                      : ListView.separated(
+                          padding: const EdgeInsets.fromLTRB(16, 12, 16, 80),
+                          itemCount: todayBookings.length,
+                          separatorBuilder: (_, _) => const SizedBox(height: 10),
+                          itemBuilder: (_, i) => _BookingCard(
+                            booking: todayBookings[i],
+                            onEdit: () => _showBookingForm(
+                              context,
+                              ref,
+                              selectedDate.value,
+                              existing: todayBookings[i],
+                            ),
+                            onDelete: () =>
+                                _confirmDelete(context, ref, dateKey, todayBookings[i]),
+                            onStatusChange: (status) {
+                              ref
+                                  .read(bookingsProvider(dateKey).notifier)
+                                  .updateStatus(todayBookings[i].id, status);
+                            },
+                          ),
+                        ),
         ),
 
         // ── Create booking button ───────────────────────────────────────
@@ -252,7 +192,12 @@ class CalendarTab extends HookConsumerWidget {
     );
   }
 
-  void _confirmDelete(BuildContext context, WidgetRef ref, Booking booking) {
+  void _confirmDelete(
+    BuildContext context,
+    WidgetRef ref,
+    String dateKey,
+    Booking booking,
+  ) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -272,7 +217,7 @@ class CalendarTab extends HookConsumerWidget {
           ),
           TextButton(
             onPressed: () {
-              ref.read(bookingsProvider.notifier).delete(booking.id);
+              ref.read(bookingsProvider(dateKey).notifier).delete(booking.id);
               Navigator.pop(ctx);
             },
             child: const Text(
@@ -284,6 +229,47 @@ class CalendarTab extends HookConsumerWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ─── Error state ──────────────────────────────────────────────────────────────
+
+class _ErrorState extends StatelessWidget {
+  const _ErrorState({required this.message, required this.onRetry});
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.wifi_off_rounded, size: 40, color: AppColors.textTertiary),
+            const SizedBox(height: 12),
+            const Text('Failed to load bookings',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 6),
+            Text(message,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 12, color: AppColors.textTertiary)),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: onRetry,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.black,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              child: const Text('Retry'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -479,6 +465,12 @@ class _BookingCard extends StatelessWidget {
   final VoidCallback onDelete;
   final ValueChanged<BookingStatus> onStatusChange;
 
+  Color get _statusColor => switch (booking.status) {
+        BookingStatus.scheduled => AppColors.primary,
+        BookingStatus.completed => const Color(0xFF10B981),
+        BookingStatus.cancelled => AppColors.danger,
+      };
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -513,7 +505,7 @@ class _BookingCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: booking.statusColor.withValues(alpha: 0.1),
+                  color: _statusColor.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
@@ -521,7 +513,7 @@ class _BookingCard extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
-                    color: booking.statusColor,
+                    color: _statusColor,
                   ),
                 ),
               ),
@@ -594,12 +586,12 @@ class _BookingCard extends StatelessWidget {
               ),
               const SizedBox(width: 6),
               Text(
-                booking.service,
+                booking.serviceName,
                 style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
               ),
             ],
           ),
-          if (booking.staff != null) ...[
+          if (booking.staffName != null) ...[
             const SizedBox(height: 3),
             Row(
               children: [
@@ -610,7 +602,27 @@ class _BookingCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  booking.staff!,
+                  booking.staffName!,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ],
+          if (booking.customerEmail != null && booking.customerEmail!.isNotEmpty) ...[
+            const SizedBox(height: 3),
+            Row(
+              children: [
+                const Icon(
+                  Icons.mail_outline_rounded,
+                  size: 14,
+                  color: AppColors.textSecondary,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  booking.customerEmail!,
                   style: const TextStyle(
                     fontSize: 13,
                     color: AppColors.textSecondary,
@@ -669,16 +681,60 @@ class BookingFormSheet extends HookConsumerWidget {
     final nameCtrl = useTextEditingController(
       text: existing?.customerName ?? '',
     );
-    final phoneCtrl = useTextEditingController(text: existing?.phone ?? '');
-    final serviceCtrl = useTextEditingController(text: existing?.service ?? '');
-    final staffCtrl = useTextEditingController(text: existing?.staff ?? '');
-    final notesCtrl = useTextEditingController(text: existing?.notes ?? '');
-    final selectedTime = useState(
-      existing?.time ?? const TimeOfDay(hour: 10, minute: 0),
+    final phoneCtrl =
+        useTextEditingController(text: existing?.customerPhone ?? '');
+    final emailCtrl =
+        useTextEditingController(text: existing?.customerEmail ?? '');
+    final serviceCtrl =
+        useTextEditingController(text: existing?.serviceName ?? '');
+    final staffCtrl = useTextEditingController(text: existing?.staffName ?? '');
+    final durationCtrl = useTextEditingController(
+      text: (existing?.duration ?? 30).toString(),
     );
+    final notesCtrl = useTextEditingController(text: existing?.notes ?? '');
+    final selectedTime = useState(_parseTime(existing?.time));
     final selectedDate = useState(existing?.date ?? date);
+    final isSubmitting = useState(false);
+    final errorText = useState<String?>(null);
+    final isOffline = ref.watch(isOfflineProvider);
 
     final isEditing = existing != null;
+    final dateKey = _dateKey(selectedDate.value);
+    final canSubmit = !isSubmitting.value && !isOffline;
+    final contactFieldsHidden = isEditing &&
+        !ref.watch(isOwnerProvider) &&
+        !ref.watch(salonSettingsProvider).staffCanViewCustomerDetails;
+
+    Future<void> submit() async {
+      if (!formKey.currentState!.validate()) return;
+      isSubmitting.value = true;
+      errorText.value = null;
+      final req = BookingRequest(
+        customerName: nameCtrl.text.trim(),
+        customerPhone: phoneCtrl.text.trim(),
+        customerEmail:
+            emailCtrl.text.trim().isEmpty ? null : emailCtrl.text.trim(),
+        serviceName: serviceCtrl.text.trim(),
+        staffName:
+            staffCtrl.text.trim().isEmpty ? null : staffCtrl.text.trim(),
+        duration: int.tryParse(durationCtrl.text.trim()) ?? 30,
+        date: selectedDate.value,
+        time: _formatTime(selectedTime.value),
+        notes: notesCtrl.text.trim().isEmpty ? null : notesCtrl.text.trim(),
+      );
+      try {
+        final notifier = ref.read(bookingsProvider(dateKey).notifier);
+        if (isEditing) {
+          await notifier.updateBooking(existing!.id, req);
+        } else {
+          await notifier.create(req);
+        }
+        if (context.mounted) Navigator.pop(context);
+      } catch (e) {
+        isSubmitting.value = false;
+        errorText.value = e is AppException ? e.message : 'Failed to save booking';
+      }
+    }
 
     return Container(
       decoration: const BoxDecoration(
@@ -720,37 +776,23 @@ class BookingFormSheet extends HookConsumerWidget {
                 ),
                 const Spacer(),
                 GestureDetector(
-                  onTap: () {
-                    if (!formKey.currentState!.validate()) return;
-                    final booking = Booking(
-                      id: existing?.id ?? _uuid.v4(),
-                      customerName: nameCtrl.text.trim(),
-                      phone: phoneCtrl.text.trim(),
-                      service: serviceCtrl.text.trim(),
-                      staff: staffCtrl.text.trim().isEmpty
-                          ? null
-                          : staffCtrl.text.trim(),
-                      date: selectedDate.value,
-                      time: selectedTime.value,
-                      notes: notesCtrl.text.trim().isEmpty
-                          ? null
-                          : notesCtrl.text.trim(),
-                      status: existing?.status ?? BookingStatus.scheduled,
-                    );
-                    if (isEditing) {
-                      ref.read(bookingsProvider.notifier).update(booking);
-                    } else {
-                      ref.read(bookingsProvider.notifier).add(booking);
-                    }
-                    Navigator.pop(context);
-                  },
-                  child: Text(
-                    isEditing ? 'Save' : 'Create',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 15,
-                    ),
-                  ),
+                  onTap: canSubmit ? submit : null,
+                  child: isSubmitting.value
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Text(
+                          isEditing ? 'Save' : 'Create',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 15,
+                            color: isOffline
+                                ? AppColors.textTertiary
+                                : AppColors.textPrimary,
+                          ),
+                        ),
                 ),
               ],
             ),
@@ -765,6 +807,48 @@ class BookingFormSheet extends HookConsumerWidget {
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
                 shrinkWrap: true,
                 children: [
+                  if (isOffline) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: AppColors.surfaceVariant,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.wifi_off_rounded,
+                              size: 16, color: AppColors.textSecondary),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              "You're offline — reconnect to save this booking.",
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: AppColors.textSecondary,
+                                  fontWeight: FontWeight.w500),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ] else if (errorText.value != null) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: AppColors.dangerLight,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        errorText.value!,
+                        style: const TextStyle(
+                            fontSize: 12, color: AppColors.danger),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                   _FormLabel('Customer Name *'),
                   const SizedBox(height: 6),
                   TextFormField(
@@ -782,13 +866,37 @@ class BookingFormSheet extends HookConsumerWidget {
                   TextFormField(
                     controller: phoneCtrl,
                     keyboardType: TextInputType.phone,
-                    decoration: const InputDecoration(
-                      hintText: 'e.g. 9841123456',
+                    enabled: !contactFieldsHidden,
+                    decoration: InputDecoration(
+                      hintText: contactFieldsHidden
+                          ? 'Hidden — ask the owner'
+                          : 'e.g. 9841123456',
                     ),
                     validator: (v) {
+                      if (contactFieldsHidden) return null;
                       if (v == null || v.trim().isEmpty) return 'Required';
                       if (v.trim().length < 7) return 'Enter a valid number';
                       return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  _FormLabel('Email (optional — for booking confirmation)'),
+                  const SizedBox(height: 6),
+                  TextFormField(
+                    controller: emailCtrl,
+                    keyboardType: TextInputType.emailAddress,
+                    enabled: !contactFieldsHidden,
+                    decoration: InputDecoration(
+                      hintText: contactFieldsHidden
+                          ? 'Hidden — ask the owner'
+                          : 'e.g. priya@example.com',
+                    ),
+                    validator: (v) {
+                      if (contactFieldsHidden) return null;
+                      if (v == null || v.trim().isEmpty) return null;
+                      final ok = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
+                          .hasMatch(v.trim());
+                      return ok ? null : 'Enter a valid email';
                     },
                   ),
                   const SizedBox(height: 16),
@@ -804,14 +912,48 @@ class BookingFormSheet extends HookConsumerWidget {
                         (v == null || v.trim().isEmpty) ? 'Required' : null,
                   ),
                   const SizedBox(height: 16),
-                  _FormLabel('Staff'),
-                  const SizedBox(height: 6),
-                  TextFormField(
-                    controller: staffCtrl,
-                    textCapitalization: TextCapitalization.words,
-                    decoration: const InputDecoration(
-                      hintText: 'e.g. Sita Gurung',
-                    ),
+                  Row(
+                    children: [
+                      Expanded(
+                        flex: 2,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _FormLabel('Staff'),
+                            const SizedBox(height: 6),
+                            TextFormField(
+                              controller: staffCtrl,
+                              textCapitalization: TextCapitalization.words,
+                              decoration: const InputDecoration(
+                                hintText: 'e.g. Sita Gurung',
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _FormLabel('Duration (min) *'),
+                            const SizedBox(height: 6),
+                            TextFormField(
+                              controller: durationCtrl,
+                              keyboardType: TextInputType.number,
+                              decoration: const InputDecoration(
+                                hintText: '30',
+                              ),
+                              validator: (v) {
+                                final n = int.tryParse((v ?? '').trim());
+                                if (n == null || n < 5) return 'Min 5';
+                                return null;
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 16),
                   // Date & Time row
@@ -937,6 +1079,18 @@ class BookingFormSheet extends HookConsumerWidget {
     );
   }
 }
+
+TimeOfDay _parseTime(String? time) {
+  if (time == null) return const TimeOfDay(hour: 10, minute: 0);
+  final parts = time.split(':');
+  return TimeOfDay(
+    hour: int.tryParse(parts[0]) ?? 10,
+    minute: parts.length > 1 ? int.tryParse(parts[1]) ?? 0 : 0,
+  );
+}
+
+String _formatTime(TimeOfDay t) =>
+    '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 
 class _FormLabel extends StatelessWidget {
   const _FormLabel(this.text);

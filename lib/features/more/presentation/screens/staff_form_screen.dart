@@ -10,6 +10,7 @@ import '../../../../shared/widgets/image_picker_sheet.dart';
 import '../../../../features/transactions/presentation/providers/transactions_provider.dart';
 import '../../../../features/auth/data/auth_repository.dart';
 import '../../../../core/storage/secure_storage_service.dart';
+import 'settings_screen.dart' show salonSettingsProvider;
 
 // ─── Avatar colors (must stay in sync with staff_screen.dart) ─────────────────
 
@@ -493,6 +494,8 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
         body: Center(child: CircularProgressIndicator()),
       );
     }
+    final commissionTrackingEnabled =
+        ref.watch(salonSettingsProvider).commissionEnabled;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -864,39 +867,41 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
                     ),
 
                     // ── Commission ────────────────────────────────────────
-                    const _SectionHeader(label: 'Commission'),
-                    _FormCard(
-                      children: [
-                        _Field(
-                          label: 'Commission Rate (%)',
-                          child: TextFormField(
-                            controller: _commissionCtrl,
-                            keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true,
-                            ),
-                            inputFormatters: [
-                              FilteringTextInputFormatter.allow(
-                                RegExp(r'^\d*\.?\d{0,2}'),
+                    if (commissionTrackingEnabled) ...[
+                      const _SectionHeader(label: 'Commission'),
+                      _FormCard(
+                        children: [
+                          _Field(
+                            label: 'Commission Rate (%)',
+                            child: TextFormField(
+                              controller: _commissionCtrl,
+                              keyboardType: const TextInputType.numberWithOptions(
+                                decimal: true,
                               ),
-                            ],
-                            decoration: const InputDecoration(
-                              hintText: 'e.g. 15',
-                              suffixText: '%',
+                              inputFormatters: [
+                                FilteringTextInputFormatter.allow(
+                                  RegExp(r'^\d*\.?\d{0,2}'),
+                                ),
+                              ],
+                              decoration: const InputDecoration(
+                                hintText: 'Leave blank for no commission',
+                                suffixText: '%',
+                              ),
+                              validator: (v) {
+                                if (v == null || v.trim().isEmpty) {
+                                  return null; // optional
+                                }
+                                final n = double.tryParse(v);
+                                if (n == null || n < 0 || n > 100) {
+                                  return 'Enter a value between 0 and 100';
+                                }
+                                return null;
+                              },
                             ),
-                            validator: (v) {
-                              if (v == null || v.trim().isEmpty) {
-                                return null; // optional
-                              }
-                              final n = double.tryParse(v);
-                              if (n == null || n < 0 || n > 100) {
-                                return 'Enter a value between 0 and 100';
-                              }
-                              return null;
-                            },
                           ),
-                        ),
-                      ],
-                    ),
+                        ],
+                      ),
+                    ],
 
                     // ── Specialties ───────────────────────────────────────
                     const _SectionHeader(label: 'Specialties'),
@@ -1043,6 +1048,7 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
                         staffId: widget.staffId!,
                         commissionRate:
                             double.tryParse(_commissionCtrl.text) ?? 0,
+                        showCommission: commissionTrackingEnabled,
                       ),
                     ],
 
@@ -1391,9 +1397,11 @@ class _ActivitySection extends ConsumerWidget {
   const _ActivitySection({
     required this.staffId,
     required this.commissionRate,
+    this.showCommission = true,
   });
   final String staffId;
   final double commissionRate;
+  final bool showCommission;
 
   String _dateLabel(DateTime dt) {
     final now = DateTime.now();
@@ -1429,20 +1437,22 @@ class _ActivitySection extends ConsumerWidget {
                   Expanded(
                     child: _StatBox(
                       label: 'Revenue',
-                      value: 'NPR ${totalSales.toStringAsFixed(0)}',
+                      value: 'Rs ${totalSales.toStringAsFixed(0)}',
                       icon: Icons.trending_up_rounded,
                       iconColor: const Color(0xFF10B981),
                     ),
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _StatBox(
-                      label: 'Commission',
-                      value: 'NPR ${totalComm.toStringAsFixed(0)}',
-                      icon: Icons.payments_outlined,
-                      iconColor: AppColors.primary,
+                  if (showCommission) ...[
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _StatBox(
+                        label: 'Commission',
+                        value: 'Rs ${totalComm.toStringAsFixed(0)}',
+                        icon: Icons.payments_outlined,
+                        iconColor: AppColors.primary,
+                      ),
                     ),
-                  ),
+                  ],
                   const SizedBox(width: 10),
                   Expanded(
                     child: _StatBox(
@@ -1484,7 +1494,8 @@ class _ActivitySection extends ConsumerWidget {
                     else
                       ...transactions.take(5).map((tx) {
                         final service = tx.items?.firstOrNull?.displayName ?? 'Service';
-                        final comm = tx.total * commissionRate / 100;
+                        final comm =
+                            showCommission ? tx.total * commissionRate / 100 : 0.0;
                         return _ActivityTile(
                           entry: _ActivityEntry(
                             date: _dateLabel(tx.createdAt),
@@ -1611,16 +1622,17 @@ class _ActivityTile extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                'NPR ${entry.amount.toStringAsFixed(0)}',
+                'Rs ${entry.amount.toStringAsFixed(0)}',
                 style: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
                 ),
               ),
-              Text(
-                '+NPR ${entry.commission.toStringAsFixed(0)} comm.',
-                style: const TextStyle(fontSize: 11, color: Color(0xFF10B981)),
-              ),
+              if (entry.commission > 0)
+                Text(
+                  '+Rs ${entry.commission.toStringAsFixed(0)} comm.',
+                  style: const TextStyle(fontSize: 11, color: Color(0xFF10B981)),
+                ),
             ],
           ),
         ],

@@ -77,13 +77,20 @@ class TransactionListState {
 }
 
 class TransactionListNotifier extends StateNotifier<TransactionListState> {
-  TransactionListNotifier(this._repo, {String? staffUserId, String? staffId})
+  TransactionListNotifier(this._repo,
+      {String? staffUserId, String? staffId, this.defaultFrom})
       : super(TransactionListState(staffUserId: staffUserId, staffId: staffId)) {
     _fetchPage1();
   }
 
   final TransactionsRepository _repo;
+  // Implicit lower date bound applied when the user hasn't picked an
+  // explicit date filter — e.g. the main list defaults to the last 4 days.
+  // Not stored in state so the Filters sheet doesn't show it as "active".
+  final DateTime? defaultFrom;
   int _page = 1;
+
+  DateTime? get _effectiveFrom => state.dateFrom ?? defaultFrom;
 
   Future<void> _fetchPage1() async {
     _page = 1;
@@ -93,7 +100,7 @@ class TransactionListNotifier extends StateNotifier<TransactionListState> {
         page: 1,
         status: state.statusFilter,
         paymentMethod: state.paymentFilter,
-        from: state.dateFrom == null ? null : _dateOnly(state.dateFrom!),
+        from: _effectiveFrom == null ? null : _dateOnly(_effectiveFrom!),
         to: state.dateTo == null ? null : _dateOnly(state.dateTo!),
         userId: state.staffUserId,
         staffId: state.staffId,
@@ -118,7 +125,7 @@ class TransactionListNotifier extends StateNotifier<TransactionListState> {
         page: _page + 1,
         status: state.statusFilter,
         paymentMethod: state.paymentFilter,
-        from: state.dateFrom == null ? null : _dateOnly(state.dateFrom!),
+        from: _effectiveFrom == null ? null : _dateOnly(_effectiveFrom!),
         to: state.dateTo == null ? null : _dateOnly(state.dateTo!),
         userId: state.staffUserId,
         staffId: state.staffId,
@@ -202,9 +209,13 @@ final transactionListProvider =
     StateNotifierProvider<TransactionListNotifier, TransactionListState>((ref) {
   final user = ref.watch(currentUserProvider);
   final staffUserId = (user != null && !user.isOwner) ? user.id : null;
+  final now = DateTime.now();
+  final last4DaysStart =
+      DateTime(now.year, now.month, now.day).subtract(const Duration(days: 3));
   return TransactionListNotifier(
     ref.read(_transactionsRepoProvider),
     staffUserId: staffUserId,
+    defaultFrom: last4DaysStart,
   );
 });
 

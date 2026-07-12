@@ -129,7 +129,7 @@ class DashboardScreen extends ConsumerWidget {
                         chips: [
                           '${summary.todayTransactionCount} transactions',
                           '${summary.customersServedToday} customers',
-                          'NPR ${_formatAmount(summary.todayTips)} tips',
+                          'Rs ${_formatAmount(summary.todayTips)} tips',
                         ],
                       ),
                       const SizedBox(height: 28),
@@ -346,7 +346,7 @@ class _HeroCard extends StatelessWidget {
                 style: const TextStyle(
                     color: AppColors.textTertiary, fontSize: 13)),
             const SizedBox(height: 8),
-            Text('NPR ${_formatAmount(amount)}',
+            Text('Rs ${_formatAmount(amount)}',
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 34,
@@ -412,7 +412,7 @@ class _CashDrawerCard extends StatelessWidget {
                               ? const Color(0xFF16A34A)
                               : Colors.black)),
                   if (open && balance != null)
-                    Text('Balance: NPR ${_formatAmount(balance!)}',
+                    Text('Balance: Rs ${_formatAmount(balance!)}',
                         style: const TextStyle(
                             fontSize: 13, color: AppColors.textSecondary))
                   else
@@ -622,7 +622,7 @@ class _StaffRow extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  'NPR ${_formatAmount(entry.totalSales)} sales',
+                  'Rs ${_formatAmount(entry.totalSales)} sales',
                   style: const TextStyle(
                     fontSize: 12,
                     color: AppColors.textSecondary,

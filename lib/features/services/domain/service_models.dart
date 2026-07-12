@@ -55,7 +55,7 @@ class ServiceModel {
         ? '${duration ~/ 60}h ${duration % 60 > 0 ? '${duration % 60}m' : ''}'
         : '${duration}m';
   }
-  String get priceLabel => 'NPR ${price.toStringAsFixed(0)}';
+  String get priceLabel => 'Rs ${price.toStringAsFixed(0)}';
 
   ServiceModel copyWith({
     String? name, double? price, int? duration,

@@ -7,6 +7,7 @@ import '../../../../features/staff/presentation/providers/staff_provider.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../features/transactions/domain/transaction_models.dart';
 import '../../../../features/transactions/presentation/providers/transactions_provider.dart';
+import 'settings_screen.dart' show salonSettingsProvider;
 
 // ─── Avatar colors (same cycle as staff_screen / staff_form) ─────────────────
 
@@ -85,7 +86,10 @@ class _DetailBody extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final txAsync = ref.watch(staffTransactionsProvider(staff.id));
     final transactions = txAsync.valueOrNull ?? [];
-    final commissionRate = staff.commissionRate ?? 0;
+    final commissionTrackingEnabled =
+        ref.watch(salonSettingsProvider).commissionEnabled;
+    final commissionRate =
+        commissionTrackingEnabled ? (staff.commissionRate ?? 0) : 0.0;
     final totalSales = transactions.fold(0.0, (s, t) => s + t.total);
     final totalComm = totalSales * commissionRate / 100;
     final email = staff.email;
@@ -210,7 +214,8 @@ class _DetailBody extends ConsumerWidget {
                               spacing: 8,
                               runSpacing: 6,
                               children: [
-                                if (staff.commissionRate != null)
+                                if (commissionTrackingEnabled &&
+                                    staff.commissionRate != null)
                                   _InfoChip(
                                     icon: Icons.percent_rounded,
                                     label:
@@ -245,20 +250,23 @@ class _DetailBody extends ConsumerWidget {
                     child: _StatCard(
                       label: 'Recent Sales',
                       value:
-                          'NPR ${_fmt(totalSales)}',
+                          'Rs ${_fmt(totalSales)}',
                       icon: Icons.trending_up_rounded,
                       iconColor: const Color(0xFF10B981),
                     ),
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _StatCard(
-                      label: 'Commission',
-                      value: 'NPR ${_fmt(totalComm)}',
-                      icon: Icons.payments_outlined,
-                      iconColor: AppColors.primary,
+                  if (commissionTrackingEnabled &&
+                      staff.commissionRate != null) ...[
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _StatCard(
+                        label: 'Commission',
+                        value: 'Rs ${_fmt(totalComm)}',
+                        icon: Icons.payments_outlined,
+                        iconColor: AppColors.primary,
+                      ),
                     ),
-                  ),
+                  ],
                   const SizedBox(width: 10),
                   Expanded(
                     child: _StatCard(
@@ -511,11 +519,11 @@ class _ActivityTile extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text('NPR ${transaction.total.toStringAsFixed(0)}',
+              Text('Rs ${transaction.total.toStringAsFixed(0)}',
                   style: const TextStyle(
                       fontSize: 13, fontWeight: FontWeight.w600)),
               if (commissionRate > 0)
-                Text('+NPR ${commission.toStringAsFixed(0)} comm.',
+                Text('+Rs ${commission.toStringAsFixed(0)} comm.',
                     style: const TextStyle(
                         fontSize: 11, color: Color(0xFF10B981))),
             ],

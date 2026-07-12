@@ -4,9 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../features/auth/presentation/providers/auth_provider.dart';
 import '../../../../features/customers/domain/customer_models.dart';
 import '../../../../features/customers/presentation/providers/customers_provider.dart';
 import '../../../../shared/widgets/image_picker_sheet.dart';
+import 'settings_screen.dart' show salonSettingsProvider;
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 
@@ -200,6 +202,13 @@ class _CustomerFormScreenState
     if (widget.isEditing) {
       ref.watch(customerDetailProvider(widget.customerId!)).whenData(_prefill);
     }
+    // The API already blanks these fields in the response for a restricted
+    // staff viewer — disable them here too so it reads as "hidden" rather
+    // than "empty", and so nobody tries to type a replacement value that
+    // the backend will silently discard anyway.
+    final contactFieldsHidden = widget.isEditing &&
+        !ref.watch(isOwnerProvider) &&
+        !ref.watch(salonSettingsProvider).staffCanViewCustomerDetails;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -308,12 +317,15 @@ class _CustomerFormScreenState
                           label: 'Phone',
                           child: TextFormField(
                             controller: _phoneCtrl,
+                            enabled: !contactFieldsHidden,
                             keyboardType: TextInputType.phone,
                             inputFormatters: [
                               FilteringTextInputFormatter.digitsOnly,
                             ],
-                            decoration: const InputDecoration(
-                                hintText: 'e.g. 9801234567'),
+                            decoration: InputDecoration(
+                                hintText: contactFieldsHidden
+                                    ? 'Hidden — ask the owner'
+                                    : 'e.g. 9801234567'),
                             onChanged: (_) => setState(() {}),
                           ),
                         ),
@@ -322,11 +334,13 @@ class _CustomerFormScreenState
                           label: 'Email',
                           child: TextFormField(
                             controller: _emailCtrl,
+                            enabled: !contactFieldsHidden,
                             keyboardType:
                                 TextInputType.emailAddress,
-                            decoration: const InputDecoration(
-                                hintText:
-                                    'e.g. anita@email.com'),
+                            decoration: InputDecoration(
+                                hintText: contactFieldsHidden
+                                    ? 'Hidden — ask the owner'
+                                    : 'e.g. anita@email.com'),
                             onChanged: (_) => setState(() {}),
                             validator: (v) {
                               if (v == null || v.trim().isEmpty) {
@@ -354,13 +368,15 @@ class _CustomerFormScreenState
                           label: 'Notes',
                           child: TextFormField(
                             controller: _notesCtrl,
+                            enabled: !contactFieldsHidden,
                             maxLines: 4,
                             minLines: 3,
                             textCapitalization:
                                 TextCapitalization.sentences,
-                            decoration: const InputDecoration(
-                              hintText:
-                                  'Preferences, allergies, special requests…',
+                            decoration: InputDecoration(
+                              hintText: contactFieldsHidden
+                                  ? 'Hidden — ask the owner'
+                                  : 'Preferences, allergies, special requests…',
                               alignLabelWithHint: true,
                             ),
                             onChanged: (_) => setState(() {}),

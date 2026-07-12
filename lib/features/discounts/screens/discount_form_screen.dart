@@ -4,8 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../services/models/service_model.dart';
-import '../../services/providers/services_provider.dart';
+import '../../pos/presentation/providers/cart_provider.dart';
+import '../../services/domain/service_models.dart';
+import '../../services/presentation/providers/services_provider.dart';
 import '../models/discount_model.dart';
 import '../providers/discounts_provider.dart';
 
@@ -94,6 +95,8 @@ class _DiscountFormScreenState extends ConsumerState<DiscountFormScreen> {
               type: _type,
               value: value,
               isActive: _isActive,
+              scope: _scope,
+              serviceId: _selectedServiceId,
             );
       } else {
         await ref.read(discountsProvider.notifier).createDiscount(
@@ -101,6 +104,8 @@ class _DiscountFormScreenState extends ConsumerState<DiscountFormScreen> {
               type: _type,
               value: value,
               isActive: _isActive,
+              scope: _scope,
+              serviceId: _selectedServiceId,
             );
       }
       if (mounted) context.pop();
@@ -131,9 +136,9 @@ class _DiscountFormScreenState extends ConsumerState<DiscountFormScreen> {
           TextButton(
             onPressed: () async {
               Navigator.pop(ctx);
-              final applied = ref.read(checkoutDiscountProvider);
-              if (applied?.id == widget.discountId) {
-                ref.read(checkoutDiscountProvider.notifier).state = null;
+              final applied = ref.read(cartProvider).discount;
+              if (applied?.discountId == widget.discountId) {
+                ref.read(cartProvider.notifier).clearDiscount();
               }
               try {
                 await ref
@@ -161,12 +166,6 @@ class _DiscountFormScreenState extends ConsumerState<DiscountFormScreen> {
   }
 
   void _pickService(BuildContext context) {
-    final services = ref
-        .read(servicesProvider)
-        .where((s) => s.isActive)
-        .toList()
-      ..sort((a, b) => a.name.compareTo(b.name));
-
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -174,7 +173,6 @@ class _DiscountFormScreenState extends ConsumerState<DiscountFormScreen> {
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (_) => _ServicePickerSheet(
-        services: services,
         selectedId: _selectedServiceId,
         onSelected: (s) {
           setState(() {
@@ -514,22 +512,21 @@ class _ServicePickerTile extends StatelessWidget {
 
 // ── Service picker bottom sheet ───────────────────────────────────────────────
 
-class _ServicePickerSheet extends StatefulWidget {
-  final List<Service> services;
+class _ServicePickerSheet extends ConsumerStatefulWidget {
   final String? selectedId;
-  final ValueChanged<Service> onSelected;
+  final ValueChanged<ServiceModel> onSelected;
 
   const _ServicePickerSheet({
-    required this.services,
     required this.selectedId,
     required this.onSelected,
   });
 
   @override
-  State<_ServicePickerSheet> createState() => _ServicePickerSheetState();
+  ConsumerState<_ServicePickerSheet> createState() =>
+      _ServicePickerSheetState();
 }
 
-class _ServicePickerSheetState extends State<_ServicePickerSheet> {
+class _ServicePickerSheetState extends ConsumerState<_ServicePickerSheet> {
   final _searchCtrl = TextEditingController();
   String _query = '';
 
@@ -541,11 +538,14 @@ class _ServicePickerSheetState extends State<_ServicePickerSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final filtered = widget.services
+    final servicesAsync = ref.watch(activeServicesProvider);
+    final services = [...servicesAsync.valueOrNull ?? []]
+      ..sort((a, b) => a.name.compareTo(b.name));
+    final filtered = services
         .where((s) =>
             _query.isEmpty ||
             s.name.toLowerCase().contains(_query) ||
-            s.category.toLowerCase().contains(_query))
+            (s.category?.name.toLowerCase().contains(_query) ?? false))
         .toList();
 
     return Padding(
@@ -598,43 +598,52 @@ class _ServicePickerSheetState extends State<_ServicePickerSheet> {
             constraints: BoxConstraints(
               maxHeight: MediaQuery.of(context).size.height * 0.45,
             ),
-            child: filtered.isEmpty
+            child: servicesAsync.isLoading
                 ? const Padding(
                     padding: EdgeInsets.all(24),
-                    child: Center(
-                      child: Text('No services found',
-                          style: TextStyle(color: AppColors.textSecondary)),
-                    ),
+                    child: Center(child: CircularProgressIndicator()),
                   )
-                : ListView.separated(
-                    shrinkWrap: true,
-                    itemCount: filtered.length,
-                    separatorBuilder: (context, i) =>
-                        const Divider(height: 1, indent: 16),
-                    itemBuilder: (_, i) {
-                      final s = filtered[i];
-                      final isSelected = s.id == widget.selectedId;
-                      return ListTile(
-                        contentPadding:
-                            const EdgeInsets.symmetric(horizontal: 16),
-                        title: Text(s.name,
-                            style: const TextStyle(fontSize: 15)),
-                        subtitle: Text(
-                            '${s.category} · ${s.durationLabel} · Rs ${s.price.toStringAsFixed(0)}',
-                            style: const TextStyle(
-                                fontSize: 12,
-                                color: AppColors.textSecondary)),
-                        trailing: isSelected
-                            ? const Icon(Icons.check_circle,
-                                color: AppColors.accent)
-                            : null,
-                        onTap: () {
-                          widget.onSelected(s);
-                          Navigator.pop(context);
+                : filtered.isEmpty
+                    ? const Padding(
+                        padding: EdgeInsets.all(24),
+                        child: Center(
+                          child: Text('No services found',
+                              style: TextStyle(color: AppColors.textSecondary)),
+                        ),
+                      )
+                    : ListView.separated(
+                        shrinkWrap: true,
+                        itemCount: filtered.length,
+                        separatorBuilder: (context, i) =>
+                            const Divider(height: 1, indent: 16),
+                        itemBuilder: (_, i) {
+                          final s = filtered[i];
+                          final isSelected = s.id == widget.selectedId;
+                          final details = [
+                            if (s.category != null) s.category!.name,
+                            if (s.durationLabel.isNotEmpty) s.durationLabel,
+                            s.priceLabel,
+                          ].join(' · ');
+                          return ListTile(
+                            contentPadding:
+                                const EdgeInsets.symmetric(horizontal: 16),
+                            title: Text(s.name,
+                                style: const TextStyle(fontSize: 15)),
+                            subtitle: Text(details,
+                                style: const TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.textSecondary)),
+                            trailing: isSelected
+                                ? const Icon(Icons.check_circle,
+                                    color: AppColors.accent)
+                                : null,
+                            onTap: () {
+                              widget.onSelected(s);
+                              Navigator.pop(context);
+                            },
+                          );
                         },
-                      );
-                    },
-                  ),
+                      ),
           ),
           const SizedBox(height: 16),
         ],

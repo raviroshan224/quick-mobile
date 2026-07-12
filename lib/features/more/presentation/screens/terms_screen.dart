@@ -77,7 +77,7 @@ class TermsScreen extends StatelessWidget {
                   body:
                       '5.1  Cash transactions are recorded by the App but are the sole responsibility of your business. Quick is not liable for discrepancies in cash handling.\n\n'
                       '5.2  Fonepay payments are processed through Fonepay\'s network. Your use of Fonepay is subject to Fonepay\'s own terms and conditions. Quick is not a payment processor and does not handle or store payment card details.\n\n'
-                      '5.3  All transaction amounts are in Nepalese Rupees (NPR) unless otherwise specified in your settings.',
+                      '5.3  All transaction amounts are in Nepalese Rupees (Rs) unless otherwise specified in your settings.',
                 ),
                 _Section(
                   title: '6. Customer Data Responsibility',

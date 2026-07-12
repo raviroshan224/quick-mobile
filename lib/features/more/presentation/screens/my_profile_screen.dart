@@ -9,6 +9,7 @@ import '../../../../core/constants/app_constants.dart';
 import '../../../../features/transactions/data/transactions_repository.dart';
 import '../../../../features/transactions/domain/transaction_models.dart';
 import '../../../../core/network/api_client.dart';
+import 'settings_screen.dart' show salonSettingsProvider;
 
 // UTC ISO string with ms precision — Dart's toIso8601String() produces 6-decimal
 // microseconds that JS's Date constructor rejects.
@@ -165,7 +166,10 @@ class _ProfileBody extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef innerRef) {
     final user = innerRef.watch(currentUserProvider)!;
     final email = user.email;
-    final commissionRate = staff?.commissionRate;
+    final commissionTrackingEnabled =
+        innerRef.watch(salonSettingsProvider).commissionEnabled;
+    final commissionRate =
+        commissionTrackingEnabled ? staff?.commissionRate : null;
     final weekStats = innerRef.watch(_myWeekStatsProvider).valueOrNull;
     final monthStats = innerRef.watch(_myMonthStatsProvider).valueOrNull;
     final recentTx = innerRef.watch(_myRecentTxProvider).valueOrNull ?? [];
@@ -279,13 +283,15 @@ class _ProfileBody extends ConsumerWidget {
                 label: 'This Month',
               ),
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _StatCard(
-                value: 'NPR $commissionEarned',
-                label: 'Commission',
+            if (commissionTrackingEnabled) ...[
+              const SizedBox(width: 10),
+              Expanded(
+                child: _StatCard(
+                  value: 'Rs $commissionEarned',
+                  label: 'Commission',
+                ),
               ),
-            ),
+            ],
           ],
         ),
         const SizedBox(height: 20),
@@ -587,7 +593,7 @@ class _TxRow extends StatelessWidget {
               ),
             ),
             Text(
-              'NPR ${tx.total.toStringAsFixed(2)}',
+              'Rs ${tx.total.toStringAsFixed(2)}',
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w700,

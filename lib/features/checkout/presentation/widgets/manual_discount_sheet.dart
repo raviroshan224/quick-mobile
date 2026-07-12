@@ -3,36 +3,20 @@ import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../features/pos/presentation/providers/cart_provider.dart';
 
 // ─── Manual Discount State ────────────────────────────────────────────────────
 
 enum ManualDiscountType { fixed, percentage }
 
-class ManualDiscount {
-  final ManualDiscountType type;
-  final double value;
-
-  const ManualDiscount({required this.type, required this.value});
-
-  /// Calculate the actual discount amount from a subtotal.
-  double apply(double subtotal) {
-    if (type == ManualDiscountType.percentage) {
-      final amount = subtotal * value / 100;
-      return amount > subtotal ? subtotal : amount;
-    }
-    return value > subtotal ? subtotal : value;
-  }
-
-  String get label {
-    if (type == ManualDiscountType.percentage) {
+extension ManualDiscountTypeLabel on ManualDiscountType {
+  String label(double value) {
+    if (this == ManualDiscountType.percentage) {
       return '${value.toStringAsFixed(value % 1 == 0 ? 0 : 1)}% off';
     }
     return 'Rs ${value.toStringAsFixed(0)} off';
   }
 }
-
-/// Provider for the manually applied discount on the checkout.
-final manualDiscountProvider = StateProvider<ManualDiscount?>((ref) => null);
 
 // ─── Manual Discount Bottom Sheet ─────────────────────────────────────────────
 
@@ -54,14 +38,20 @@ class ManualDiscountSheet extends HookConsumerWidget {
     final selectedType = useState(ManualDiscountType.fixed);
     final valueCtrl = useTextEditingController();
     final errorText = useState<String?>(null);
-    final current = ref.watch(manualDiscountProvider);
+    // Only prefill/offer "Remove" for a manually-entered discount — a
+    // catalog discount (discountId != null) isn't editable from here.
+    final cartDiscount = ref.watch(cartProvider).discount;
+    final current =
+        cartDiscount != null && cartDiscount.discountId == null ? cartDiscount : null;
 
     // Pre-fill if there's an existing discount
     useEffect(() {
       if (current != null) {
-        selectedType.value = current.type;
-        valueCtrl.text = current.value.toStringAsFixed(
-          current.value % 1 == 0 ? 0 : 2,
+        selectedType.value = current.isPercentage
+            ? ManualDiscountType.percentage
+            : ManualDiscountType.fixed;
+        valueCtrl.text = current.amount.toStringAsFixed(
+          current.amount % 1 == 0 ? 0 : 2,
         );
       }
       return null;
@@ -83,10 +73,11 @@ class ManualDiscountSheet extends HookConsumerWidget {
         return;
       }
       errorText.value = null;
-      ref.read(manualDiscountProvider.notifier).state = ManualDiscount(
-        type: selectedType.value,
-        value: val,
-      );
+      ref.read(cartProvider.notifier).applyDiscount(
+            selectedType.value.label(val),
+            val,
+            isPercentage: selectedType.value == ManualDiscountType.percentage,
+          );
       Navigator.pop(context);
     }
 
@@ -249,10 +240,12 @@ class ManualDiscountSheet extends HookConsumerWidget {
                   Builder(
                     builder: (_) {
                       final val = double.tryParse(valueCtrl.text) ?? 0;
-                      final discountAmt = ManualDiscount(
-                        type: selectedType.value,
-                        value: val,
-                      ).apply(subtotal);
+                      final rawAmt = selectedType.value ==
+                              ManualDiscountType.percentage
+                          ? subtotal * val / 100
+                          : val;
+                      final discountAmt =
+                          rawAmt > subtotal ? subtotal : rawAmt;
                       final finalTotal = (subtotal - discountAmt).clamp(
                         0.0,
                         double.infinity,
@@ -296,8 +289,7 @@ class ManualDiscountSheet extends HookConsumerWidget {
                       Expanded(
                         child: OutlinedButton(
                           onPressed: () {
-                            ref.read(manualDiscountProvider.notifier).state =
-                                null;
+                            ref.read(cartProvider.notifier).clearDiscount();
                             Navigator.pop(context);
                           },
                           style: OutlinedButton.styleFrom(

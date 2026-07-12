@@ -270,7 +270,7 @@ class _ItemTile extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          Text('NPR ${product.price.toStringAsFixed(0)}',
+          Text('Rs ${product.price.toStringAsFixed(0)}',
               style: const TextStyle(
                   fontSize: 14, fontWeight: FontWeight.w500)),
           Text('${product.stock} in stock',

@@ -15,7 +15,7 @@ import '../../../../core/theme/app_theme.dart';
 final _nprFmt = NumberFormat('#,##0.00', 'en_IN');
 final _dtFmt = DateFormat('dd MMM yyyy HH:mm');
 
-String _formatNpr(double amount) => 'NPR ${_nprFmt.format(amount)}';
+String _formatNpr(double amount) => 'Rs ${_nprFmt.format(amount)}';
 String _formatDateTime(DateTime dt) => _dtFmt.format(dt);
 
 final _detailRepoProvider = Provider<TransactionsRepository>(
@@ -674,7 +674,7 @@ class _RefundSheet extends HookConsumerWidget {
                             children: [
                               const Padding(
                                 padding: EdgeInsets.only(left: 14),
-                                child: Text('NPR',
+                                child: Text('Rs',
                                     style: TextStyle(
                                         fontSize: 15,
                                         fontWeight: FontWeight.w600,

@@ -71,8 +71,24 @@ class CartNotifier extends Notifier<CartState> {
 
   // ── Discount & Tip ────────────────────────────────────────────────────────
 
-  void applyDiscount(String label, double amount, {bool isPercentage = true}) {
-    state = state.copyWith(discount: DiscountEntry(label: label, amount: amount, isPercentage: isPercentage));
+  void applyDiscount(
+    String label,
+    double amount, {
+    bool isPercentage = true,
+    String? discountId,
+    DiscountEntryScope scope = DiscountEntryScope.all,
+    String? serviceId,
+  }) {
+    state = state.copyWith(
+      discount: DiscountEntry(
+        label: label,
+        amount: amount,
+        isPercentage: isPercentage,
+        discountId: discountId,
+        scope: scope,
+        serviceId: serviceId,
+      ),
+    );
   }
 
   void clearDiscount() {

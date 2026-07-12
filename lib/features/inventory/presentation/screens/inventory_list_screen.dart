@@ -118,7 +118,7 @@ class _ProductTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(product.name, style: AppTextStyles.titleMedium),
-                Text('NPR ${product.price.toStringAsFixed(0)}',
+                Text('Rs ${product.price.toStringAsFixed(0)}',
                     style: AppTextStyles.bodySmall),
               ],
             ),

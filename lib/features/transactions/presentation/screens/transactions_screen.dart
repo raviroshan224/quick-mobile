@@ -17,7 +17,7 @@ import '../../../../core/theme/app_theme.dart';
 
 final _nprFmt = NumberFormat('#,##0.00', 'en_IN');
 
-String _formatNpr(double amount) => 'NPR ${_nprFmt.format(amount)}';
+String _formatNpr(double amount) => 'Rs ${_nprFmt.format(amount)}';
 
 String _formatDate(DateTime dt) {
   final now = DateTime.now();
@@ -79,6 +79,8 @@ class TransactionsScreen extends HookConsumerWidget {
     final activeFilterCount = _activeFilterCount(txState);
 
     final scrollCtrl = useScrollController();
+    // Which non-"Today" day groups are expanded — collapsed by default.
+    final expandedDays = useState<Set<String>>(const {});
 
     // Infinite scroll trigger
     useEffect(() {
@@ -226,13 +228,15 @@ class TransactionsScreen extends HookConsumerWidget {
                               controller: scrollCtrl,
                               padding:
                                   const EdgeInsets.fromLTRB(20, 0, 20, 100),
-                              itemCount: _listItemCount(grouped, txState),
+                              itemCount: _listItemCount(
+                                  grouped, txState, expandedDays.value),
                               itemBuilder: (context, index) {
                                 return _buildListItem(
                                   context,
                                   index,
                                   grouped,
                                   txState,
+                                  expandedDays,
                                 );
                               },
                             ),
@@ -243,13 +247,18 @@ class TransactionsScreen extends HookConsumerWidget {
     );
   }
 
+  bool _isExpanded(String dayKey, Set<String> expandedDays) =>
+      dayKey == 'Today' || expandedDays.contains(dayKey);
+
   int _listItemCount(
     Map<String, List<Object>> grouped,
     TransactionListState state,
+    Set<String> expandedDays,
   ) {
     var count = 0;
-    for (final g in grouped.values) {
-      count += 1 + g.length; // header + items
+    for (final entry in grouped.entries) {
+      count += 1; // header
+      if (_isExpanded(entry.key, expandedDays)) count += entry.value.length;
     }
     if (state.isLoadingMore || state.hasMore) count++;
     return count;
@@ -260,11 +269,31 @@ class TransactionsScreen extends HookConsumerWidget {
     int index,
     Map<String, List<Object>> grouped,
     TransactionListState state,
+    ValueNotifier<Set<String>> expandedDays,
   ) {
     var i = 0;
     for (final entry in grouped.entries) {
-      if (index == i) return _DayHeader(label: entry.key);
+      final expanded = _isExpanded(entry.key, expandedDays.value);
+      if (index == i) {
+        return _DayHeader(
+          label: entry.key,
+          count: entry.value.length,
+          expanded: expanded,
+          onTap: entry.key == 'Today'
+              ? null
+              : () {
+                  final next = {...expandedDays.value};
+                  if (expanded) {
+                    next.remove(entry.key);
+                  } else {
+                    next.add(entry.key);
+                  }
+                  expandedDays.value = next;
+                },
+        );
+      }
       i++;
+      if (!expanded) continue;
       for (final item in entry.value) {
         if (index == i) {
           if (item is Transaction) {
@@ -346,7 +375,7 @@ class _VolumeCard extends ConsumerWidget {
             ),
             SizedBox(height: 6),
             Text(
-              'NPR —',
+              'Rs —',
               style: TextStyle(
                 color: Colors.white,
                 fontSize: 30,
@@ -897,20 +926,56 @@ class _DateRangeButton extends StatelessWidget {
 // ─── Day header ───────────────────────────────────────────────────────────────
 
 class _DayHeader extends StatelessWidget {
-  const _DayHeader({required this.label});
+  const _DayHeader({
+    required this.label,
+    required this.count,
+    required this.expanded,
+    this.onTap,
+  });
   final String label;
+  final int count;
+  final bool expanded;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final isToday = label == 'Today';
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(0, 12, 0, 6),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w700,
-          color: isToday ? AppColors.primaryDark : AppColors.textSecondary,
+    final color = isToday ? AppColors.primaryDark : AppColors.textSecondary;
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(0, 12, 0, 6),
+        child: Row(
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: color,
+              ),
+            ),
+            if (!isToday) ...[
+              const SizedBox(width: 6),
+              Text(
+                '($count)',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.textTertiary,
+                ),
+              ),
+              const Spacer(),
+              Icon(
+                expanded
+                    ? Icons.keyboard_arrow_up_rounded
+                    : Icons.keyboard_arrow_down_rounded,
+                size: 18,
+                color: AppColors.textTertiary,
+              ),
+            ],
+          ],
         ),
       ),
     );
@@ -940,8 +1005,6 @@ class _TransactionRow extends StatelessWidget {
         ),
         child: Row(
           children: [
-            _StatusDot(status: transaction.status),
-            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1044,15 +1107,6 @@ class _RefundRow extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Container(
-              width: 10,
-              height: 10,
-              decoration: const BoxDecoration(
-                color: AppColors.danger,
-                shape: BoxShape.circle,
-              ),
-            ),
-            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1116,29 +1170,6 @@ class _RefundRow extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-// ─── Status dot ───────────────────────────────────────────────────────────────
-
-class _StatusDot extends StatelessWidget {
-  const _StatusDot({required this.status});
-  final TransactionStatus status;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = switch (status) {
-      TransactionStatus.completed => const Color(0xFF10B981),
-      TransactionStatus.partiallyRefunded => const Color(0xFFF59E0B),
-      TransactionStatus.refunded => AppColors.danger,
-      TransactionStatus.voided => AppColors.textTertiary,
-      _ => AppColors.textSecondary,
-    };
-    return Container(
-      width: 10,
-      height: 10,
-      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
     );
   }
 }

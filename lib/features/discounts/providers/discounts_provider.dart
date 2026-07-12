@@ -18,12 +18,16 @@ class DiscountsNotifier extends AsyncNotifier<List<Discount>> {
     required DiscountType type,
     required double value,
     bool isActive = true,
+    DiscountScope scope = DiscountScope.all,
+    String? serviceId,
   }) async {
     await ref.read(discountsRepoProvider).create(
           name: name,
           type: type,
           value: value,
           isActive: isActive,
+          scope: scope,
+          serviceId: serviceId,
         );
     ref.invalidateSelf();
   }
@@ -34,6 +38,8 @@ class DiscountsNotifier extends AsyncNotifier<List<Discount>> {
     DiscountType? type,
     double? value,
     bool? isActive,
+    DiscountScope? scope,
+    String? serviceId,
   }) async {
     await ref.read(discountsRepoProvider).update(
           id,
@@ -41,6 +47,8 @@ class DiscountsNotifier extends AsyncNotifier<List<Discount>> {
           type: type,
           value: value,
           isActive: isActive,
+          scope: scope,
+          serviceId: serviceId,
         );
     ref.invalidateSelf();
   }
@@ -55,7 +63,3 @@ final discountsProvider =
     AsyncNotifierProvider<DiscountsNotifier, List<Discount>>(
   DiscountsNotifier.new,
 );
-
-/// The discount currently applied to the active checkout.
-/// Reset to null when the cart is cleared.
-final checkoutDiscountProvider = StateProvider<Discount?>((ref) => null);

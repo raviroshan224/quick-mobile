@@ -188,7 +188,7 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
             const _SectionLabel(text: 'Pricing'),
             _FormCard(children: [
               _Field(
-                label: 'Selling Price (NPR) *',
+                label: 'Selling Price (Rs) *',
                 child: TextFormField(
                   controller: _priceCtrl,
                   keyboardType:
@@ -208,7 +208,7 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
               ),
               const _FieldDivider(),
               _Field(
-                label: 'Cost Price (NPR)',
+                label: 'Cost Price (Rs)',
                 child: TextFormField(
                   controller: _costCtrl,
                   keyboardType:

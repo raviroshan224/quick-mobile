@@ -104,9 +104,13 @@ class ApiClient {
     }
   }
 
-  Future<dynamic> post(String path, {dynamic data}) async {
+  Future<dynamic> post(String path, {dynamic data, Map<String, dynamic>? headers}) async {
     try {
-      final res = await _dio.post(path, data: data);
+      final res = await _dio.post(
+        path,
+        data: data,
+        options: headers != null ? Options(headers: headers) : null,
+      );
       return _unwrap(res);
     } on DioException catch (e) {
       throw _toAppException(e);

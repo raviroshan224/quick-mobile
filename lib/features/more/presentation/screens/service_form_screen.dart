@@ -14,17 +14,6 @@ final _servicesRepoProvider = Provider<ServicesRepository>(
   (ref) => ServicesRepository(ref.read(apiClientProvider)),
 );
 
-// ─── Quick duration presets ───────────────────────────────────────────────────
-
-const _kDurations = [10, 15, 20, 30, 45, 60, 90, 120, 180, 240];
-
-String _durationLabel(int minutes) {
-  if (minutes < 60) return '${minutes}m';
-  final h = minutes ~/ 60;
-  final m = minutes % 60;
-  return m == 0 ? '${h}h' : '${h}h ${m}m';
-}
-
 // ─── Category colors ──────────────────────────────────────────────────────────
 
 const _kCatColors = {
@@ -58,7 +47,6 @@ class _ServiceFormScreenState extends ConsumerState<ServiceFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameCtrl = TextEditingController();
   final _priceCtrl = TextEditingController();
-  final _durationCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
 
   List<ServiceCategory> _categories = [];
@@ -88,7 +76,6 @@ class _ServiceFormScreenState extends ConsumerState<ServiceFormScreen> {
         _original = s;
         _nameCtrl.text = s.name;
         _priceCtrl.text = s.price.toStringAsFixed(0);
-        _durationCtrl.text = s.duration.toString();
         _descCtrl.text = s.description ?? '';
         setState(() {
           _categories = cats;
@@ -116,7 +103,6 @@ class _ServiceFormScreenState extends ConsumerState<ServiceFormScreen> {
   void dispose() {
     _nameCtrl.dispose();
     _priceCtrl.dispose();
-    _durationCtrl.dispose();
     _descCtrl.dispose();
     super.dispose();
   }
@@ -186,7 +172,6 @@ class _ServiceFormScreenState extends ConsumerState<ServiceFormScreen> {
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     final price = double.tryParse(_priceCtrl.text.trim()) ?? 0;
-    final duration = int.tryParse(_durationCtrl.text.trim()) ?? 0;
     final description = _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim();
     final repo = ref.read(_servicesRepoProvider);
 
@@ -196,7 +181,6 @@ class _ServiceFormScreenState extends ConsumerState<ServiceFormScreen> {
           _original!.id,
           name: _nameCtrl.text.trim(),
           price: price,
-          duration: duration,
           description: description,
           categoryId: _selectedCategory?.id,
           isActive: _isActive,
@@ -205,7 +189,7 @@ class _ServiceFormScreenState extends ConsumerState<ServiceFormScreen> {
         await repo.create(
           name: _nameCtrl.text.trim(),
           price: price,
-          duration: duration,
+          duration: 0,
           description: description,
           categoryId: _selectedCategory?.id,
           isActive: _isActive,
@@ -406,7 +390,7 @@ class _ServiceFormScreenState extends ConsumerState<ServiceFormScreen> {
                             children: [
                               if (previewPrice != null)
                                 Text(
-                                  'NPR ${previewPrice.toStringAsFixed(0)}',
+                                  'Rs ${previewPrice.toStringAsFixed(0)}',
                                   style: const TextStyle(
                                       fontSize: 15,
                                       fontWeight: FontWeight.w700),
@@ -515,10 +499,10 @@ class _ServiceFormScreenState extends ConsumerState<ServiceFormScreen> {
                     ]),
 
                     // ── Pricing ────────────────────────────────────────────
-                    _SectionLabel(text: 'PRICING & DURATION'),
+                    _SectionLabel(text: 'PRICING'),
                     _Card(children: [
                       _Field(
-                        label: 'Price (NPR)',
+                        label: 'Price (Rs)',
                         child: TextFormField(
                           controller: _priceCtrl,
                           keyboardType: TextInputType.number,
@@ -527,7 +511,7 @@ class _ServiceFormScreenState extends ConsumerState<ServiceFormScreen> {
                           ],
                           decoration: const InputDecoration(
                             hintText: 'e.g. 500',
-                            prefixText: 'NPR ',
+                            prefixText: 'Rs ',
                           ),
                           validator: (v) {
                             if (v == null || v.trim().isEmpty) {
@@ -538,73 +522,6 @@ class _ServiceFormScreenState extends ConsumerState<ServiceFormScreen> {
                             }
                             return null;
                           },
-                        ),
-                      ),
-                      _Divider(),
-                      _Field(
-                        label: 'Duration',
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              children: _kDurations.map((d) {
-                                final selected =
-                                    _durationCtrl.text == d.toString();
-                                return GestureDetector(
-                                  onTap: () => setState(
-                                      () => _durationCtrl.text = d.toString()),
-                                  child: AnimatedContainer(
-                                    duration:
-                                        const Duration(milliseconds: 150),
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 12, vertical: 7),
-                                    decoration: BoxDecoration(
-                                      color: selected
-                                          ? Colors.black
-                                          : AppColors.surfaceVariant,
-                                      borderRadius: BorderRadius.circular(20),
-                                    ),
-                                    child: Text(
-                                      _durationLabel(d),
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: selected
-                                            ? FontWeight.w600
-                                            : FontWeight.w400,
-                                        color: selected
-                                            ? Colors.white
-                                            : AppColors.textSecondary,
-                                      ),
-                                    ),
-                                  ),
-                                );
-                              }).toList(),
-                            ),
-                            const SizedBox(height: 10),
-                            TextFormField(
-                              controller: _durationCtrl,
-                              keyboardType: TextInputType.number,
-                              inputFormatters: [
-                                FilteringTextInputFormatter.digitsOnly,
-                                LengthLimitingTextInputFormatter(3),
-                              ],
-                              decoration: const InputDecoration(
-                                hintText: 'Optional — e.g. 30',
-                                suffixText: 'min',
-                              ),
-                              validator: (v) {
-                                if (v == null || v.trim().isEmpty) {
-                                  return null;
-                                }
-                                if ((int.tryParse(v) ?? 0) <= 0) {
-                                  return 'Enter a valid duration';
-                                }
-                                return null;
-                              },
-                            ),
-                          ],
                         ),
                       ),
                     ]),

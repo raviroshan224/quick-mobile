@@ -68,13 +68,13 @@ class _DailySalesTab extends StatelessWidget {
         children: [
           Row(
             children: [
-              _KpiCard(label: 'Total Revenue', value: 'NPR 34,800'),
+              _KpiCard(label: 'Total Revenue', value: 'Rs 34,800'),
               const SizedBox(width: AppSpacing.md),
               _KpiCard(label: 'Transactions', value: '18'),
               const SizedBox(width: AppSpacing.md),
-              _KpiCard(label: 'Avg. Ticket', value: 'NPR 1,933'),
+              _KpiCard(label: 'Avg. Ticket', value: 'Rs 1,933'),
               const SizedBox(width: AppSpacing.md),
-              _KpiCard(label: 'Tips Collected', value: 'NPR 1,800'),
+              _KpiCard(label: 'Tips Collected', value: 'Rs 1,800'),
             ],
           ),
           const SizedBox(height: AppSpacing.lg),

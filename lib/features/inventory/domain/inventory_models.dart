@@ -42,7 +42,7 @@ class ProductModel {
       );
 
   bool get isLowStock => stock <= lowStockThreshold;
-  String get priceLabel => 'NPR ${price.toStringAsFixed(0)}';
+  String get priceLabel => 'Rs ${price.toStringAsFixed(0)}';
 
   ProductModel copyWith({
     String? name, double? price, int? stock, String? description,
