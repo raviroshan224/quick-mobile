@@ -31,19 +31,6 @@ class _ItemsScreenState extends ConsumerState<ItemsScreen> {
     'Massage': Color(0xFFD1FAE5),
   };
 
-  static const _categoryIcons = {
-    'Shampoo': Icons.water_drop_outlined,
-    'Conditioner': Icons.water_drop_outlined,
-    'Scissors': Icons.content_cut_rounded,
-    'Combs': Icons.horizontal_rule_rounded,
-    'Blades': Icons.spa_outlined,
-    'Hair Color': Icons.color_lens_outlined,
-    'Treatment': Icons.science_outlined,
-    'Skin Care': Icons.face_retouching_natural,
-    'Nails': Icons.back_hand_outlined,
-    'Massage': Icons.self_improvement,
-  };
-
   @override
   Widget build(BuildContext context) {
     final isOwner = ref.watch(isOwnerProvider);
@@ -154,21 +141,21 @@ class _ItemsScreenState extends ConsumerState<ItemsScreen> {
                   ),
                 ),
               ),
-              // List
+              // Grid
               Expanded(
-                child: ListView.separated(
-                  padding: EdgeInsets.zero,
+                child: GridView.builder(
+                  padding: const EdgeInsets.fromLTRB(14, 8, 14, 16),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 3,
+                    crossAxisSpacing: 10,
+                    mainAxisSpacing: 10,
+                    childAspectRatio: 1,
+                  ),
                   itemCount: filtered.length,
-                  separatorBuilder: (_, _) => const Divider(
-                      height: 1,
-                      indent: 62,
-                      color: AppColors.surfaceVariant),
-                  itemBuilder: (_, i) => _ItemTile(
+                  itemBuilder: (_, i) => _ItemGridCard(
                     product: filtered[i],
-                    iconBg: _categoryColors[filtered[i].category] ??
+                    bg: _categoryColors[filtered[i].category] ??
                         AppColors.surfaceVariant,
-                    icon: _categoryIcons[filtered[i].category] ??
-                        Icons.inventory_2_outlined,
                     onTap: isOwner
                         ? () => context.go('/more/items/${filtered[i].id}/edit')
                         : null,
@@ -215,68 +202,66 @@ class _CategoryChip extends StatelessWidget {
   }
 }
 
-class _ItemTile extends StatelessWidget {
-  const _ItemTile(
-      {required this.product,
-      required this.iconBg,
-      required this.icon,
-      this.onTap});
+class _ItemGridCard extends StatelessWidget {
+  const _ItemGridCard(
+      {required this.product, required this.bg, this.onTap});
   final ProductModel product;
-  final Color iconBg;
-  final IconData icon;
+  final Color bg;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
+    return GestureDetector(
       onTap: onTap,
-      contentPadding:
-          const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      leading: Container(
-        width: 38,
-        height: 38,
+      child: Container(
         decoration: BoxDecoration(
-          color: iconBg,
-          borderRadius: BorderRadius.circular(8),
+          color: bg,
+          borderRadius: BorderRadius.circular(18),
         ),
-        child: Icon(icon, size: 18, color: Colors.black54),
-      ),
-      title: Text(product.name,
-          style: const TextStyle(fontSize: 14)),
-      subtitle: Row(
-        children: [
-          Text(product.category ?? '',
-              style: const TextStyle(
-                  fontSize: 11, color: AppColors.textTertiary)),
-          if (product.isLowStock) ...[
-            const SizedBox(width: 6),
-            Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 6, vertical: 1),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFEE2E2),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: const Text('Low stock',
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  product.name,
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textPrimary,
+                    height: 1.2,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Rs ${product.price.toStringAsFixed(0)}',
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  product.isLowStock
+                      ? 'Low stock · ${product.stock}'
+                      : '${product.stock} in stock',
                   style: TextStyle(
-                      fontSize: 10,
-                      color: AppColors.danger,
-                      fontWeight: FontWeight.w500)),
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w600,
+                    color: product.isLowStock
+                        ? AppColors.danger
+                        : AppColors.textTertiary,
+                  ),
+                ),
+              ],
             ),
-          ],
-        ],
-      ),
-      trailing: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          Text('Rs ${product.price.toStringAsFixed(0)}',
-              style: const TextStyle(
-                  fontSize: 14, fontWeight: FontWeight.w500)),
-          Text('${product.stock} in stock',
-              style: const TextStyle(
-                  fontSize: 11, color: AppColors.textTertiary)),
-        ],
+          ),
+        ),
       ),
     );
   }

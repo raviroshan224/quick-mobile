@@ -6,13 +6,16 @@ import '../../../../features/pos/domain/pos_models.dart';
 import '../../../../features/pos/presentation/providers/cart_provider.dart';
 import '../../../../features/services/domain/service_models.dart';
 import '../../../../features/services/presentation/providers/services_provider.dart';
+import '../../../../features/inventory/domain/inventory_models.dart';
+import '../../../../features/inventory/presentation/providers/inventory_provider.dart';
 import '../../../../core/theme/app_theme.dart';
 import 'review_sale_sheet.dart';
 import 'calendar_tab.dart';
 
-// Aliases so _ServicesView doesn't need to know real provider names.
+// Aliases so _ServicesView/_ItemsView don't need to know real provider names.
 final _checkoutServicesProvider = activeServicesProvider;
 final _checkoutCategoriesProvider = serviceCategoriesListProvider;
+final _checkoutProductsProvider = productsProvider;
 
 // ─── Root screen ─────────────────────────────────────────────────────────────
 
@@ -21,7 +24,7 @@ class CheckoutScreen extends HookConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final tabIndex = useState(0); // 0=Keypad 1=Calendar 2=Services
+    final tabIndex = useState(0); // 0=Keypad 1=Calendar 2=Services 3=Items
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -36,7 +39,8 @@ class CheckoutScreen extends HookConsumerWidget {
               child: switch (tabIndex.value) {
                 0 => _KeypadView(),
                 1 => const CalendarTab(),
-                _ => _ServicesView(),
+                2 => _ServicesView(),
+                _ => _ItemsView(),
               },
             ),
           ],
@@ -85,6 +89,14 @@ class _SegmentedHeader extends StatelessWidget {
               label: 'Services',
               active: selected == 2,
               onTap: () => onChanged(2),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: _SegTab(
+              label: 'Items',
+              active: selected == 3,
+              onTap: () => onChanged(3),
             ),
           ),
         ],
@@ -537,14 +549,6 @@ const List<(Color, Color)> _servicePalette = [
 }
 
 class _ServicesView extends HookConsumerWidget {
-  static const _catIcons = {
-    'cat-1': Icons.content_cut_rounded,
-    'cat-2': Icons.back_hand_outlined,
-    'cat-3': Icons.face_retouching_natural,
-    'cat-4': Icons.auto_awesome,
-    'cat-5': Icons.self_improvement,
-  };
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final servicesAsync = ref.watch(_checkoutServicesProvider);
@@ -641,7 +645,7 @@ class _ServicesView extends HookConsumerWidget {
                   crossAxisCount: 3,
                   crossAxisSpacing: 10,
                   mainAxisSpacing: 10,
-                  childAspectRatio: 0.8,
+                  childAspectRatio: 1,
                 ),
                 itemCount: filtered.length,
                 itemBuilder: (_, i) {
@@ -652,9 +656,133 @@ class _ServicesView extends HookConsumerWidget {
                     service: s,
                     bg: palette.$1,
                     accent: palette.$2,
-                    icon: _catIcons[s.category?.id ?? ''] ?? Icons.spa_outlined,
                   );
                 },
+              );
+            },
+          ),
+        ),
+        // Charge / Review button
+        if (cart.items.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+            child: _ReviewSaleButton(cart: cart),
+          ),
+      ],
+    );
+  }
+}
+
+// ─── Items View (4th tab, sells retail products from inventory) ──────────────
+
+class _ItemsView extends HookConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final productsAsync = ref.watch(_checkoutProductsProvider);
+    final searchQ = useState('');
+    final searchCtrl = useTextEditingController();
+    final selectedCat = useState<String?>(null);
+    final cart = ref.watch(cartProvider);
+
+    return Column(
+      children: [
+        // Search
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          child: TextField(
+            controller: searchCtrl,
+            onChanged: (v) => searchQ.value = v,
+            decoration: InputDecoration(
+              hintText: 'Search items',
+              hintStyle: const TextStyle(
+                color: AppColors.textTertiary,
+                fontSize: 15,
+              ),
+              prefixIcon: const Icon(
+                Icons.search,
+                size: 18,
+                color: AppColors.textTertiary,
+              ),
+              filled: true,
+              fillColor: AppColors.surfaceVariant,
+              border: OutlineInputBorder(
+                borderSide: BorderSide.none,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              contentPadding: const EdgeInsets.symmetric(vertical: 10),
+            ),
+          ),
+        ),
+        Expanded(
+          child: productsAsync.when(
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (e, _) => Center(child: Text('$e')),
+            data: (products) {
+              final categories = (products.map((p) => p.category).whereType<String>().toSet().toList()..sort());
+
+              final filtered = products.where((p) {
+                final matchCat = selectedCat.value == null || p.category == selectedCat.value;
+                final matchSearch =
+                    searchQ.value.isEmpty ||
+                    p.name.toLowerCase().contains(searchQ.value.toLowerCase());
+                return matchCat && matchSearch;
+              }).toList();
+
+              return Column(
+                children: [
+                  if (categories.isNotEmpty)
+                    SizedBox(
+                      height: 44,
+                      child: ListView(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                        children: [
+                          _CatChip(
+                            label: 'All',
+                            selected: selectedCat.value == null,
+                            onTap: () => selectedCat.value = null,
+                          ),
+                          ...categories.map(
+                            (c) => _CatChip(
+                              label: c,
+                              selected: selectedCat.value == c,
+                              onTap: () => selectedCat.value = c,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  if (categories.isNotEmpty)
+                    const Divider(height: 1, color: AppColors.surfaceVariant),
+                  Expanded(
+                    child: filtered.isEmpty
+                        ? const Center(
+                            child: Text(
+                              'No items found',
+                              style: TextStyle(color: AppColors.textTertiary, fontSize: 14),
+                            ),
+                          )
+                        : GridView.builder(
+                            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 3,
+                              crossAxisSpacing: 10,
+                              mainAxisSpacing: 10,
+                              childAspectRatio: 1,
+                            ),
+                            itemCount: filtered.length,
+                            itemBuilder: (_, i) {
+                              final p = filtered[i];
+                              final palette = _paletteFor(p.category ?? p.id);
+                              return _ProductGridCard(
+                                product: p,
+                                bg: palette.$1,
+                                accent: palette.$2,
+                              );
+                            },
+                          ),
+                  ),
+                ],
               );
             },
           ),
@@ -710,12 +838,10 @@ class _ServiceGridCard extends ConsumerWidget {
     required this.service,
     required this.bg,
     required this.accent,
-    required this.icon,
   });
   final ServiceModel service;
   final Color bg;
   final Color accent;
-  final IconData icon;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -757,41 +883,190 @@ class _ServiceGridCard extends ConsumerWidget {
       // distinct badge below so it never conflicts with adding more.
       onTap: addOne,
       child: Container(
-        padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: bg,
           borderRadius: BorderRadius.circular(18),
           border: inCart ? Border.all(color: accent, width: 2) : null,
-          boxShadow: [
-            BoxShadow(
-              color: accent.withValues(alpha: 0.16),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
+        ),
+        child: Stack(
+          children: [
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      service.name,
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.textPrimary,
+                        height: 1.2,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Rs ${service.price.toStringAsFixed(0)}',
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
+            if (inCart)
+              Positioned(
+                top: 8,
+                right: 8,
+                child: GestureDetector(
+                  onTap: removeOne,
+                  behavior: HitTestBehavior.opaque,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: accent,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '$inCartCount',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(width: 2),
+                        const Icon(Icons.check_rounded,
+                            size: 12, color: Colors.white),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.65),
-                    shape: BoxShape.circle,
+      ),
+    );
+  }
+}
+
+class _ProductGridCard extends ConsumerWidget {
+  const _ProductGridCard({
+    required this.product,
+    required this.bg,
+    required this.accent,
+  });
+  final ProductModel product;
+  final Color bg;
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cart = ref.watch(cartProvider);
+    final matching = cart.items.where((i) => i.product?.id == product.id).toList();
+    final inCartCount = matching.length;
+    final inCart = inCartCount > 0;
+    final outOfStock = product.stock - inCartCount <= 0;
+
+    void showToast(String message) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          duration: const Duration(milliseconds: 1200),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: Colors.black,
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 80),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+      );
+    }
+
+    void addOne() {
+      if (outOfStock) {
+        showToast('${product.name} is out of stock');
+        return;
+      }
+      HapticFeedback.selectionClick();
+      ref.read(cartProvider.notifier).addProduct(product);
+      showToast('${product.name} added');
+    }
+
+    void removeOne() {
+      HapticFeedback.selectionClick();
+      ref.read(cartProvider.notifier).removeItem(matching.last.id);
+      showToast('${product.name} removed');
+    }
+
+    return GestureDetector(
+      onTap: addOne,
+      child: Opacity(
+        opacity: outOfStock ? 0.45 : 1,
+        child: Container(
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(18),
+            border: inCart ? Border.all(color: accent, width: 2) : null,
+          ),
+          child: Stack(
+            children: [
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        product.name,
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.textPrimary,
+                          height: 1.2,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        outOfStock
+                            ? 'Out of stock'
+                            : 'Rs ${product.price.toStringAsFixed(0)}',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          color: outOfStock
+                              ? AppColors.textTertiary
+                              : AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
                   ),
-                  child: Icon(icon, size: 16, color: accent),
                 ),
-                const Spacer(),
-                if (inCart)
-                  GestureDetector(
+              ),
+              if (inCart)
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: GestureDetector(
                     onTap: removeOne,
                     behavior: HitTestBehavior.opaque,
                     child: Container(
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 3),
                       decoration: BoxDecoration(
                         color: accent,
                         borderRadius: BorderRadius.circular(10),
@@ -814,41 +1089,9 @@ class _ServiceGridCard extends ConsumerWidget {
                       ),
                     ),
                   ),
-              ],
-            ),
-            const Spacer(),
-            Text(
-              service.name,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textPrimary,
-                height: 1.15,
-              ),
-            ),
-            if (service.durationLabel.isNotEmpty) ...[
-              const SizedBox(height: 2),
-              Text(
-                service.durationLabel,
-                style: TextStyle(
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.w600,
-                  color: accent,
                 ),
-              ),
             ],
-            const SizedBox(height: 6),
-            Text(
-              'Rs ${service.price.toStringAsFixed(0)}',
-              style: const TextStyle(
-                fontSize: 13.5,
-                fontWeight: FontWeight.w800,
-                color: AppColors.textPrimary,
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );

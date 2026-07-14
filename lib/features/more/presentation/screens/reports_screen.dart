@@ -466,6 +466,12 @@ class _SalesTab extends StatelessWidget {
                   child: _SummaryMetric(
                       label: 'Refunds', value: _npr(s.refundTotal)),
                 ),
+                Container(
+                    width: 1, height: 32, color: AppColors.textSecondary),
+                Expanded(
+                  child: _SummaryMetric(
+                      label: 'Discounts', value: _npr(s.totalDiscounts)),
+                ),
               ]),
             ],
           ),

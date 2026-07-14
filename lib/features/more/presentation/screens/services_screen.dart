@@ -25,14 +25,6 @@ class _ServicesScreenState extends ConsumerState<ServicesScreen> {
     'cat-4': Color(0xFFDCE0C8), // Makeup — deeper olive
     'cat-5': Color(0xFFFFEDD5), // Massage — orange (keep warm)
   };
-  static const _catIcons = {
-    'cat-1': Icons.content_cut_rounded,
-    'cat-2': Icons.back_hand_outlined,
-    'cat-3': Icons.face_retouching_natural,
-    'cat-4': Icons.auto_awesome,
-    'cat-5': Icons.self_improvement,
-  };
-
   @override
   Widget build(BuildContext context) {
     final isOwner = ref.watch(isOwnerProvider);
@@ -137,22 +129,23 @@ class _ServicesScreenState extends ConsumerState<ServicesScreen> {
                   ),
                 ),
               ),
-              // List grouped by category
+              // Grid grouped by category
               Expanded(
-                child: ListView.separated(
-                  padding: EdgeInsets.zero,
+                child: GridView.builder(
+                  padding: const EdgeInsets.fromLTRB(14, 8, 14, 16),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 3,
+                    crossAxisSpacing: 10,
+                    mainAxisSpacing: 10,
+                    childAspectRatio: 1,
+                  ),
                   itemCount: filtered.length,
-                  separatorBuilder: (_, _) => const Divider(
-                      height: 1,
-                      indent: 62,
-                      color: AppColors.surfaceVariant),
                   itemBuilder: (_, i) {
                     final s = filtered[i];
                     final catId = s.category?.id ?? '';
-                    return _ServiceTile(
+                    return _ServiceGridCard(
                       service: s,
-                      iconBg: _catColors[catId] ?? AppColors.surfaceVariant,
-                      icon: _catIcons[catId] ?? Icons.spa_outlined,
+                      bg: _catColors[catId] ?? AppColors.surfaceVariant,
                       onTap: isOwner ? () => context.push(
                           AppRoutes.serviceEdit(s.id)) : null,
                     );
@@ -202,43 +195,53 @@ class _Chip extends StatelessWidget {
   }
 }
 
-class _ServiceTile extends StatelessWidget {
-  const _ServiceTile(
-      {required this.service,
-      required this.iconBg,
-      required this.icon,
-      this.onTap});
+class _ServiceGridCard extends StatelessWidget {
+  const _ServiceGridCard(
+      {required this.service, required this.bg, this.onTap});
   final ServiceModel service;
-  final Color iconBg;
-  final IconData icon;
+  final Color bg;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
+    return GestureDetector(
       onTap: onTap,
-      contentPadding:
-          const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      leading: Container(
-        width: 38,
-        height: 38,
+      child: Container(
         decoration: BoxDecoration(
-          color: iconBg,
-          borderRadius: BorderRadius.circular(8),
+          color: bg,
+          borderRadius: BorderRadius.circular(18),
         ),
-        child: Icon(icon, size: 18, color: Colors.black54),
-      ),
-      title: Text(service.name,
-          style: const TextStyle(fontSize: 14)),
-      subtitle: service.durationLabel.isEmpty
-          ? null
-          : Text(service.durationLabel,
-              style: const TextStyle(
-                  fontSize: 11, color: AppColors.textTertiary)),
-      trailing: Text(
-        'Rs ${service.price.toStringAsFixed(0)}',
-        style: const TextStyle(
-            fontSize: 14, fontWeight: FontWeight.w500),
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  service.name,
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textPrimary,
+                    height: 1.2,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Rs ${service.price.toStringAsFixed(0)}',
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

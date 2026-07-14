@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import '../../../pos/domain/pos_models.dart';
 import '../../../services/domain/service_models.dart';
+import '../../../inventory/domain/inventory_models.dart';
 import '../../../customers/domain/customer_models.dart';
 
 const _uuid = Uuid();
@@ -19,6 +20,15 @@ class CartNotifier extends Notifier<CartState> {
       service: service,
       unitPrice: service.price,
       assignedStaff: staff,
+    );
+    state = state.copyWith(items: [...state.items, item]);
+  }
+
+  void addProduct(ProductModel product) {
+    final item = CartItem(
+      id: _uuid.v4(),
+      product: product,
+      unitPrice: product.price,
     );
     state = state.copyWith(items: [...state.items, item]);
   }

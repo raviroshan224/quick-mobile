@@ -4,6 +4,7 @@ class SalesSummary {
     required this.transactionCount,
     required this.avgTicket,
     required this.refundTotal,
+    required this.totalDiscounts,
     required this.byPaymentMethod,
   });
 
@@ -11,6 +12,7 @@ class SalesSummary {
   final int transactionCount;
   final double avgTicket;
   final double refundTotal;
+  final double totalDiscounts;
   final Map<String, double> byPaymentMethod; // keys: CASH, FONEPAY, SPLIT
 
   factory SalesSummary.fromJson(Map<String, dynamic> j) {
@@ -33,6 +35,7 @@ class SalesSummary {
       transactionCount: (j['totalTransactions'] as num? ?? j['transactionCount'] as num? ?? 0).toInt(),
       avgTicket: (j['averageTransaction'] as num? ?? j['avgTicket'] as num? ?? 0).toDouble(),
       refundTotal: (j['refundTotal'] as num? ?? 0).toDouble(),
+      totalDiscounts: (j['totalDiscounts'] as num? ?? 0).toDouble(),
       byPaymentMethod: byMethod,
     );
   }
@@ -114,13 +117,19 @@ class InventoryProduct {
   final int lowStockThreshold;
   final String status; // 'ok' | 'low' | 'critical'
 
-  factory InventoryProduct.fromJson(Map<String, dynamic> j) => InventoryProduct(
-        id: j['id'] as String? ?? '',
-        name: j['name'] as String? ?? '',
-        stock: j['stock'] as int? ?? 0,
-        lowStockThreshold: j['lowStockThreshold'] as int? ?? 0,
-        status: j['status'] as String? ?? 'ok',
-      );
+  factory InventoryProduct.fromJson(Map<String, dynamic> j) {
+    final stock = (j['stock'] as num?)?.toInt() ?? 0;
+    final threshold = (j['lowStockThreshold'] as num?)?.toInt() ?? 0;
+    // Backend doesn't send a `status` field — derive it from stock vs threshold.
+    final derivedStatus = stock <= 0 ? 'critical' : (stock <= threshold ? 'low' : 'ok');
+    return InventoryProduct(
+      id: j['id'] as String? ?? '',
+      name: j['name'] as String? ?? '',
+      stock: stock,
+      lowStockThreshold: threshold,
+      status: j['status'] as String? ?? derivedStatus,
+    );
+  }
 }
 
 class InventoryMovement {
@@ -138,13 +147,30 @@ class InventoryMovement {
   final String note;
   final String date;
 
-  factory InventoryMovement.fromJson(Map<String, dynamic> j) => InventoryMovement(
-        item: j['item'] as String? ?? j['productName'] as String? ?? '',
-        type: j['type'] as String? ?? 'out',
-        qty: (j['qty'] as num?)?.toInt() ?? (j['quantity'] as num?)?.toInt() ?? 0,
-        note: j['note'] as String? ?? '',
-        date: j['date'] as String? ?? j['createdAt'] as String? ?? '',
-      );
+  factory InventoryMovement.fromJson(Map<String, dynamic> j) {
+    // Backend sends the log's `product: {name}` relation and a
+    // STOCK_IN/STOCK_OUT/ADJUSTMENT `type` enum, not the flat
+    // item/type('in'|'out')/note shape this model exposes to the UI.
+    final product = j['product'] as Map<String, dynamic>?;
+    final rawType = j['type'] as String?;
+    final stockBefore = (j['stockBefore'] as num?)?.toInt();
+    final stockAfter = (j['stockAfter'] as num?)?.toInt();
+    final isIn = rawType == 'STOCK_IN' ||
+        (rawType != 'STOCK_OUT' &&
+            stockBefore != null &&
+            stockAfter != null &&
+            stockAfter >= stockBefore);
+    return InventoryMovement(
+      item: product?['name'] as String? ??
+          j['item'] as String? ??
+          j['productName'] as String? ??
+          '',
+      type: isIn ? 'in' : 'out',
+      qty: (j['quantity'] as num?)?.toInt() ?? (j['qty'] as num?)?.toInt() ?? 0,
+      note: j['reason'] as String? ?? j['note'] as String? ?? '',
+      date: j['createdAt'] as String? ?? j['date'] as String? ?? '',
+    );
+  }
 }
 
 class InventoryReport {
@@ -160,7 +186,10 @@ class InventoryReport {
         products: (j['products'] as List<dynamic>? ?? [])
             .map((e) => InventoryProduct.fromJson(e as Map<String, dynamic>))
             .toList(),
-        recentMovements: (j['recentMovements'] as List<dynamic>? ?? [])
+        // Backend field is `recentLogs`, not `recentMovements`.
+        recentMovements: (j['recentLogs'] as List<dynamic>? ??
+                j['recentMovements'] as List<dynamic>? ??
+                [])
             .map((e) => InventoryMovement.fromJson(e as Map<String, dynamic>))
             .toList(),
       );
