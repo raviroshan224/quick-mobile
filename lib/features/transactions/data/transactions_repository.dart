@@ -105,12 +105,6 @@ class TransactionsRepository {
     return await _api.get('/transactions/$id/receipt') as Map<String, dynamic>;
   }
 
-  Future<void> emailReceipt(String transactionId, {String? email}) async {
-    await _api.post('/transactions/$transactionId/receipt/email', data: {
-      'email': ?email,
-    });
-  }
-
   Future<void> createRefund(
     String transactionId,
     CreateRefundDto dto,

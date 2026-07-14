@@ -13,7 +13,7 @@ import '../../../../features/transactions/data/transactions_repository.dart';
 import '../../../../features/transactions/presentation/providers/transactions_provider.dart';
 import '../../../../core/theme/app_theme.dart';
 
-enum _Step { pick, cash, qr, split, success }
+enum _Step { details, pick, cash, qr, split, success }
 
 final _reviewRepoProvider = Provider.autoDispose<TransactionsRepository>(
   (ref) => TransactionsRepository(ref.read(apiClientProvider)),
@@ -27,7 +27,7 @@ class ReviewSaleSheet extends HookConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final step = useState(_Step.pick);
+    final step = useState(_Step.details);
     final method = useState(PaymentMethod.cash);
     final customer = useState<CustomerModel?>(null);
     final cashInput = useState('0');
@@ -36,7 +36,9 @@ class ReviewSaleSheet extends HookConsumerWidget {
     useEffect(() => null, const []);
 
     final cart = ref.watch(cartProvider);
-    final total = cart.items.isEmpty ? keypadAmount : cart.total;
+    final total = cart.items.isEmpty
+        ? keypadAmount - _discountAmountFor(cart, keypadAmount)
+        : cart.total;
     final tendered = double.tryParse(cashInput.value) ?? 0;
 
     void done() {
@@ -100,15 +102,26 @@ class ReviewSaleSheet extends HookConsumerWidget {
     }
 
     return Container(
-      height: MediaQuery.of(context).size.height * 0.92,
+      height: step.value == _Step.details
+          ? null
+          : MediaQuery.of(context).size.height * 0.92,
       decoration: const BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       child: switch (step.value) {
+        _Step.details => _DetailsStep(
+          cart: cart,
+          keypadAmount: keypadAmount,
+          customer: customer.value,
+          onCustomerChanged: (c) => customer.value = c,
+          onContinue: () => step.value = _Step.pick,
+          onClose: () => Navigator.pop(context),
+        ),
         _Step.pick => _PickStep(
           total: total,
           cart: cart,
+          keypadAmount: keypadAmount,
           customer: customer.value,
           onCustomerChanged: (c) => customer.value = c,
           onPick: go,
@@ -155,6 +168,21 @@ class ReviewSaleSheet extends HookConsumerWidget {
 }
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
+
+// Keypad-only checkouts (no cart items) have no real `cart.subtotal` to
+// discount against — the typed amount stands in for it instead.
+double _subtotalFor(CartState cart, double keypadAmount) =>
+    cart.items.isEmpty ? keypadAmount : cart.subtotal;
+
+double _discountAmountFor(CartState cart, double keypadAmount) {
+  if (cart.items.isNotEmpty) return cart.discountAmount;
+  final discount = cart.discount;
+  if (discount == null) return 0;
+  final raw = discount.isPercentage
+      ? keypadAmount * discount.amount / 100
+      : discount.amount;
+  return raw.clamp(0.0, keypadAmount);
+}
 
 String _applyKey(String cur, String k) {
   if (k == 'C') return '0';
@@ -351,12 +379,213 @@ class _FlexNumpad extends StatelessWidget {
   );
 }
 
+void _showCustomerPicker(
+  BuildContext context,
+  ValueChanged<CustomerModel?> onSelected,
+) {
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (_) => _CustomerPicker(onSelected: onSelected),
+  );
+}
+
+// ─── Step 0: Customer & Discount ──────────────────────────────────────────────
+
+class _DetailsStep extends ConsumerWidget {
+  const _DetailsStep({
+    required this.cart,
+    required this.keypadAmount,
+    required this.customer,
+    required this.onCustomerChanged,
+    required this.onContinue,
+    required this.onClose,
+  });
+  final CartState cart;
+  final double keypadAmount;
+  final CustomerModel? customer;
+  final ValueChanged<CustomerModel?> onCustomerChanged;
+  final VoidCallback onContinue;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final discount = cart.discount;
+    return SafeArea(
+      top: false,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const _Handle(),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 4),
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: IconButton(
+                onPressed: onClose,
+                icon: const Icon(
+                  Icons.close,
+                  size: 20,
+                  color: AppColors.textTertiary,
+                ),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+            child: Container(
+              decoration: BoxDecoration(
+                border: Border.all(color: AppColors.divider),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Column(
+                children: [
+                  _DetailsActionRow(
+                    icon: customer == null
+                        ? Icons.person_add_outlined
+                        : Icons.person,
+                    label: customer?.fullName ?? 'Add customer',
+                    subtitle: customer == null ? 'Optional' : null,
+                    color: AppColors.primary,
+                    onTap: () => _showCustomerPicker(context, onCustomerChanged),
+                    trailing: customer == null
+                        ? null
+                        : GestureDetector(
+                            onTap: () => onCustomerChanged(null),
+                            child: const Icon(
+                              Icons.close,
+                              size: 16,
+                              color: AppColors.textTertiary,
+                            ),
+                          ),
+                    showDivider: true,
+                  ),
+                  _DetailsActionRow(
+                    icon: discount == null
+                        ? Icons.local_offer_outlined
+                        : Icons.local_offer,
+                    label: discount?.label ?? 'Add discount',
+                    subtitle: discount == null
+                        ? 'Optional'
+                        : '- Rs ${_discountAmountFor(cart, keypadAmount).toStringAsFixed(0)}',
+                    color: const Color(0xFF10B981),
+                    onTap: () => DiscountPickerSheet.show(
+                      context,
+                      subtotal: _subtotalFor(cart, keypadAmount),
+                    ),
+                    trailing: discount == null
+                        ? null
+                        : GestureDetector(
+                            onTap: () =>
+                                ref.read(cartProvider.notifier).clearDiscount(),
+                            child: const Icon(
+                              Icons.close,
+                              size: 16,
+                              color: AppColors.textTertiary,
+                            ),
+                          ),
+                    showDivider: false,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          _BigBtn(label: 'Continue', onTap: onContinue),
+          const SizedBox(height: 16),
+        ],
+      ),
+    );
+  }
+}
+
+class _DetailsActionRow extends StatelessWidget {
+  const _DetailsActionRow({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+    required this.showDivider,
+    this.subtitle,
+    this.trailing,
+  });
+  final IconData icon;
+  final String label;
+  final String? subtitle;
+  final Color color;
+  final VoidCallback onTap;
+  final Widget? trailing;
+  final bool showDivider;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(14),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(icon, size: 18, color: color),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        label,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      if (subtitle != null)
+                        Text(
+                          subtitle!,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: subtitle == 'Optional'
+                                ? AppColors.textTertiary
+                                : AppColors.textSecondary,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                trailing ??
+                    Icon(
+                      Icons.arrow_forward_ios_rounded,
+                      size: 14,
+                      color: color.withValues(alpha: 0.6),
+                    ),
+              ],
+            ),
+          ),
+        ),
+        if (showDivider)
+          const Divider(height: 1, indent: 66, color: AppColors.surfaceVariant),
+      ],
+    );
+  }
+}
+
 // ─── Step 1: Pick Payment Method ──────────────────────────────────────────────
 
 class _PickStep extends HookConsumerWidget {
   const _PickStep({
     required this.total,
     required this.cart,
+    required this.keypadAmount,
     required this.customer,
     required this.onCustomerChanged,
     required this.onPick,
@@ -364,6 +593,7 @@ class _PickStep extends HookConsumerWidget {
   });
   final double total;
   final CartState cart;
+  final double keypadAmount;
   final CustomerModel? customer;
   final ValueChanged<CustomerModel?> onCustomerChanged;
   final ValueChanged<PaymentMethod> onPick;
@@ -489,12 +719,12 @@ class _PickStep extends HookConsumerWidget {
                 // Customer row
                 _CustomerRow(
                   customer: customer,
-                  onTap: () => _pickCustomer(context),
+                  onTap: () => _showCustomerPicker(context, onCustomerChanged),
                   onRemove: () => onCustomerChanged(null),
                 ),
                 const Divider(height: 1, color: AppColors.divider),
                 // Discount row
-                _DiscountRow(cart: cart),
+                _DiscountRow(cart: cart, keypadAmount: keypadAmount),
                 const Divider(height: 1, color: AppColors.divider),
                 const SizedBox(height: 12),
                 // Payment method label
@@ -554,15 +784,6 @@ class _PickStep extends HookConsumerWidget {
           ),
         ),
       ],
-    );
-  }
-
-  void _pickCustomer(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => _CustomerPicker(onSelected: onCustomerChanged),
     );
   }
 }
@@ -700,8 +921,9 @@ class _CustomerRow extends StatelessWidget {
 // ─── Discount Row ─────────────────────────────────────────────────────────────
 
 class _DiscountRow extends ConsumerWidget {
-  const _DiscountRow({required this.cart});
+  const _DiscountRow({required this.cart, required this.keypadAmount});
   final CartState cart;
+  final double keypadAmount;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -709,7 +931,10 @@ class _DiscountRow extends ConsumerWidget {
 
     if (discount == null) {
       return GestureDetector(
-        onTap: () => DiscountPickerSheet.show(context, subtotal: cart.subtotal),
+        onTap: () => DiscountPickerSheet.show(
+          context,
+          subtotal: _subtotalFor(cart, keypadAmount),
+        ),
         child: const Padding(
           padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
           child: Row(
@@ -730,9 +955,12 @@ class _DiscountRow extends ConsumerWidget {
       );
     }
 
-    final discountAmt = cart.discountAmount;
+    final discountAmt = _discountAmountFor(cart, keypadAmount);
     return GestureDetector(
-      onTap: () => DiscountPickerSheet.show(context, subtotal: cart.subtotal),
+      onTap: () => DiscountPickerSheet.show(
+        context,
+        subtotal: _subtotalFor(cart, keypadAmount),
+      ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
         child: Row(
@@ -802,6 +1030,7 @@ class _CustomerPicker extends HookConsumerWidget {
     final all = ref.watch(_cpProvider);
     final q = useState('');
     final ctrl = useTextEditingController();
+    final showAddForm = useState(false);
 
     return Container(
       height: MediaQuery.of(context).size.height * 0.72,
@@ -809,7 +1038,15 @@ class _CustomerPicker extends HookConsumerWidget {
         color: Colors.white,
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      child: Column(
+      child: showAddForm.value
+          ? _QuickAddCustomerForm(
+              onCancel: () => showAddForm.value = false,
+              onCreated: (c) {
+                onSelected(c);
+                Navigator.pop(context);
+              },
+            )
+          : Column(
         children: [
           const _Handle(),
           Padding(
@@ -862,6 +1099,38 @@ class _CustomerPicker extends HookConsumerWidget {
             ),
           ),
           const SizedBox(height: 4),
+          InkWell(
+            onTap: () => showAddForm.value = true,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              child: Row(
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    child: const Icon(
+                      Icons.person_add_alt_1,
+                      size: 18,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Text(
+                    'Add New Customer',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
           const Divider(height: 1, color: AppColors.divider),
           Expanded(
             child: all.when(
@@ -966,6 +1235,148 @@ class _CustomerPicker extends HookConsumerWidget {
   }
 }
 
+class _QuickAddCustomerForm extends HookConsumerWidget {
+  const _QuickAddCustomerForm({required this.onCancel, required this.onCreated});
+  final VoidCallback onCancel;
+  final ValueChanged<CustomerModel> onCreated;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final nameCtrl = useTextEditingController();
+    final phoneCtrl = useTextEditingController();
+    final saving = useState(false);
+    final error = useState<String?>(null);
+
+    Future<void> save() async {
+      final name = nameCtrl.text.trim();
+      if (name.isEmpty) {
+        error.value = 'Enter a name';
+        return;
+      }
+      if (saving.value) return;
+      saving.value = true;
+      error.value = null;
+      final parts = name.split(RegExp(r'\s+'));
+      try {
+        final created = await ref
+            .read(customersRepoProvider)
+            .create(
+              firstName: parts.first,
+              lastName: parts.length > 1 ? parts.sublist(1).join(' ') : '',
+              phone: phoneCtrl.text.trim().isEmpty ? null : phoneCtrl.text.trim(),
+            );
+        ref.invalidate(customersProvider);
+        onCreated(created);
+      } catch (e) {
+        error.value = 'Failed to add customer';
+      } finally {
+        saving.value = false;
+      }
+    }
+
+    return Column(
+      children: [
+        const _Handle(),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+          child: Row(
+            children: [
+              GestureDetector(
+                onTap: onCancel,
+                child: const Icon(
+                  Icons.arrow_back_ios_new_rounded,
+                  size: 18,
+                  color: Colors.black,
+                ),
+              ),
+              const Spacer(),
+              const Text(
+                'Add New Customer',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+              ),
+              const Spacer(),
+              const SizedBox(width: 18),
+            ],
+          ),
+        ),
+        const Divider(height: 1, color: AppColors.divider),
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Name',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textTertiary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: nameCtrl,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    hintText: 'Customer name',
+                    filled: true,
+                    fillColor: AppColors.surfaceVariant,
+                    border: OutlineInputBorder(
+                      borderSide: BorderSide.none,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Phone (optional)',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textTertiary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: phoneCtrl,
+                  keyboardType: TextInputType.phone,
+                  decoration: InputDecoration(
+                    hintText: 'Phone number',
+                    filled: true,
+                    fillColor: AppColors.surfaceVariant,
+                    border: OutlineInputBorder(
+                      borderSide: BorderSide.none,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
+                  ),
+                ),
+                if (error.value != null) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    error.value!,
+                    style: const TextStyle(fontSize: 12, color: AppColors.danger),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+        _BigBtn(label: 'Add Customer', onTap: save, isLoading: saving.value),
+        const SizedBox(height: 12),
+      ],
+    );
+  }
+}
+
 // ─── Step 2a: Cash ────────────────────────────────────────────────────────────
 
 class _CashStep extends HookWidget {
@@ -1021,7 +1432,7 @@ class _CashStep extends HookWidget {
                         fontSize: 48,
                         fontWeight: FontWeight.w700,
                         letterSpacing: -1,
-                        color: ok ? const Color(0xFF16A34A) : Colors.black,
+                        color: Colors.black,
                       ),
                     ),
                   ),
@@ -1119,14 +1530,14 @@ class _Chip extends StatelessWidget {
         color: selected ? Colors.white : Colors.black,
         borderRadius: BorderRadius.circular(20),
         border: selected
-            ? Border.all(color: const Color(0xFF16A34A), width: 1.5)
+            ? Border.all(color: Colors.black, width: 1.5)
             : null,
       ),
       child: Text(
         label,
         style: TextStyle(
           fontSize: 13,
-          color: selected ? const Color(0xFF16A34A) : Colors.white,
+          color: selected ? Colors.black : Colors.white,
           fontWeight: FontWeight.w600,
         ),
       ),

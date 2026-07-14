@@ -100,43 +100,6 @@ class _DetailBody extends HookConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final emailSent = useState(false);
-    final emailSending = useState(false);
-
-    Future<void> sendEmail() async {
-      if (emailSending.value) return;
-      emailSending.value = true;
-      try {
-        await ref.read(_detailRepoProvider).emailReceipt(transaction.id);
-        if (!context.mounted) return;
-        emailSent.value = true;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Receipt emailed successfully'),
-            backgroundColor: Colors.black,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10)),
-            margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          ),
-        );
-      } catch (e) {
-        if (!context.mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to send email: $e'),
-            backgroundColor: AppColors.danger,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10)),
-            margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          ),
-        );
-      } finally {
-        emailSending.value = false;
-      }
-    }
-
     return Column(
       children: [
         _Header(
@@ -282,56 +245,6 @@ class _DetailBody extends HookConsumerWidget {
                 ),
 
                 const SizedBox(height: 24),
-
-                // ── Action buttons ─────────────────────────────────────────
-                GestureDetector(
-                  onTap: emailSending.value ? null : sendEmail,
-                  child: Container(
-                    height: 50,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: AppColors.divider),
-                    ),
-                    alignment: Alignment.center,
-                    child: emailSending.value
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.black,
-                            ),
-                          )
-                        : Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                emailSent.value
-                                    ? Icons.check_rounded
-                                    : Icons.email_outlined,
-                                size: 18,
-                                color: emailSent.value
-                                    ? const Color(0xFF16A34A)
-                                    : Colors.black,
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                emailSent.value
-                                    ? 'Receipt Sent'
-                                    : 'Email Receipt',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: emailSent.value
-                                      ? const Color(0xFF16A34A)
-                                      : Colors.black,
-                                ),
-                              ),
-                            ],
-                          ),
-                  ),
-                ),
 
                 if (transaction.isRefundable) ...[
                   const SizedBox(height: 10),
