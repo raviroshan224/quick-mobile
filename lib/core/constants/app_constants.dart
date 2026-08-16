@@ -79,5 +79,4 @@ class AppRoutes {
   static const String inventoryMovement = '/more/items/movement';
 
   static const String cashDrawer = '/more/drawers';
-  static const String posReceipt = '/checkout/receipt';
 }

@@ -7,6 +7,7 @@ class UserModel {
     required this.firstName,
     required this.lastName,
     required this.role,
+    this.companyId,
   });
 
   final String id;
@@ -14,6 +15,9 @@ class UserModel {
   final String firstName;
   final String lastName;
   final UserRole role;
+  // Nullable only because a few auth responses (e.g. PIN login) may not
+  // echo it back — treat missing as "unknown", never as "no company".
+  final String? companyId;
 
   String get fullName => '$firstName $lastName';
   String get initials {
@@ -30,6 +34,7 @@ class UserModel {
         firstName: j['firstName'] as String,
         lastName: j['lastName'] as String,
         role: (j['role'] as String).toLowerCase() == 'owner' ? UserRole.owner : UserRole.staff,
+        companyId: j['companyId'] as String?,
       );
 
   UserModel copyWith({String? firstName, String? lastName, String? email}) => UserModel(
@@ -38,5 +43,6 @@ class UserModel {
         firstName: firstName ?? this.firstName,
         lastName: lastName ?? this.lastName,
         role: role,
+        companyId: companyId,
       );
 }

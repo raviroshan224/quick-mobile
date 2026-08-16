@@ -9,8 +9,15 @@ class AuthRepository {
   final ApiClient _api;
   final SecureStorageService _storage;
 
-  Future<void> signup(String firstName, String lastName, String email, String password) async {
+  Future<void> signup(
+    String companyName,
+    String firstName,
+    String lastName,
+    String email,
+    String password,
+  ) async {
     await _api.post('/auth/signup', data: {
+      'companyName': companyName,
       'firstName': firstName,
       'lastName': lastName,
       'email': email.trim(),
@@ -109,8 +116,15 @@ class AuthRepository {
   }
 
   Future<bool> hasOwnerSession() async {
-    final token = await _storage.getOwnerAccessToken();
-    return token != null;
+    try {
+      final token = await _storage.getOwnerAccessToken();
+      return token != null;
+    } catch (_) {
+      // A secure-storage read failure means we can't prove a session exists —
+      // treat it the same as "no session" rather than letting it propagate
+      // and hang the startup auth check (see checkStoredAuth above).
+      return false;
+    }
   }
 
   // Email verification OTP (after signup) — no tokens returned.
@@ -155,16 +169,45 @@ class AuthRepository {
     try {
       await _api.post('/auth/logout');
     } catch (_) {
-    } finally {
-      await _storage.clearAll();
+      // Best-effort — local storage is cleared regardless, below.
     }
+
+    // /auth/logout above only revokes whichever session is currently active
+    // (the bearer token it was called with). If a staff profile is active,
+    // the owner's persisted session is a *separate* server-side session that
+    // call never touches — revoke it too before wiping local storage, so a
+    // full sign-out really does end every session this device is holding.
+    try {
+      final activeAccess = await _storage.getAccessToken();
+      final ownerAccess = await _storage.getOwnerAccessToken();
+      final ownerRefresh = await _storage.getOwnerRefreshToken();
+      if (ownerAccess != null &&
+          ownerRefresh != null &&
+          ownerAccess != activeAccess) {
+        // Temporarily make the owner's tokens the active ones so the normal
+        // AuthInterceptor picks them up — clearAll() below wipes both sets
+        // immediately after, so this has no lasting effect on app state.
+        await _storage.saveTokens(
+          accessToken: ownerAccess,
+          refreshToken: ownerRefresh,
+        );
+        await _api.post('/auth/logout');
+      }
+    } catch (_) {
+      // Best-effort — local storage is cleared regardless, below.
+    }
+
+    await _storage.clearAll();
   }
 
-  // Checks if stored tokens are still valid. Returns null if not.
+  // Checks if stored tokens are still valid. Returns null if not — including
+  // when the secure-storage read itself throws (e.g. a corrupted/invalidated
+  // Keystore/Keychain after an OS restore to a new device), so a bad local
+  // state fails safe to "not signed in" instead of hanging the splash screen.
   Future<UserModel?> checkStoredAuth() async {
-    final token = await _storage.getAccessToken();
-    if (token == null) return null;
     try {
+      final token = await _storage.getAccessToken();
+      if (token == null) return null;
       final user = await getMe();
       // Keep owner tokens in sync whenever the owner is the active session.
       if (user.isOwner) {

@@ -1,5 +1,5 @@
-import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../../../core/network/api_client.dart';
 import '../../data/image_library_repository.dart';
 import '../../models/image_asset_model.dart';
@@ -35,7 +35,7 @@ class ImageLibraryNotifier extends StateNotifier<AsyncValue<List<ImageAsset>>> {
   }
 
   Future<void> upload({
-    required File file,
+    required XFile file,
     required String type,
     String? name,
   }) async {

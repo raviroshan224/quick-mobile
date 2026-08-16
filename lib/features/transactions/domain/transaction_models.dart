@@ -169,6 +169,8 @@ class Transaction {
     this.items,
     this.discountAmount,
     this.tipAmount,
+    this.manualAdjustment,
+    this.finalPayableAmount,
     this.refundAmount,
     this.notes,
     this.staffName,
@@ -189,6 +191,13 @@ class Transaction {
   final List<TransactionItem>? items;
   final double? discountAmount;
   final double? tipAmount;
+  // Salon checkout: the cashier-entered amount and its derived delta from
+  // subtotal. finalPayableAmount is the source of truth for cashier intent
+  // (set once, at checkout, never recomputed); manualAdjustment is derived
+  // server-side from it. Both null/0 for transactions that didn't use this
+  // flow (the existing discount/tip flow, or an older transaction).
+  final double? finalPayableAmount;
+  final double? manualAdjustment;
   final double? refundAmount;
   final String? notes;
   // Staff member who processed the sale (Transaction.staff on the backend).
@@ -226,6 +235,11 @@ class Transaction {
   bool get isRefundable =>
       status == TransactionStatus.completed ||
       status == TransactionStatus.partiallyRefunded;
+
+  // Salon checkout: whether a cashier-entered Final Payable adjustment was
+  // used on this sale — receipts/detail screens show the row only when true.
+  bool get hasManualAdjustment =>
+      manualAdjustment != null && manualAdjustment!.abs() >= 0.005;
 
   factory Transaction.fromJson(Map<String, dynamic> j) {
     final customer = j['customer'] as Map<String, dynamic>?;
@@ -271,6 +285,8 @@ class Transaction {
           .toList(),
       discountAmount: (j['discountAmount'] as num?)?.toDouble(),
       tipAmount: (j['tipAmount'] as num?)?.toDouble(),
+      manualAdjustment: (j['manualAdjustment'] as num?)?.toDouble(),
+      finalPayableAmount: (j['finalPayableAmount'] as num?)?.toDouble(),
       refundAmount: (j['refundAmount'] as num?)?.toDouble(),
       notes: j['notes'] as String?,
     );

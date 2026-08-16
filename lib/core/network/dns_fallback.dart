@@ -14,6 +14,13 @@ class DnsFallbackResolver {
   static const _cacheTtl = Duration(minutes: 5);
   static const _dohServers = ['8.8.8.8', '8.8.4.4', '1.1.1.1', '1.0.0.1'];
 
+  // Once HttpClient.connectionFactory is set, dart:io no longer enforces its
+  // own connectionTimeout around the connection attempt — the factory owns
+  // that entirely. Without an explicit bound here, a socket/TLS handshake
+  // that never completes (e.g. a non-routable address on a dual-stack
+  // network) hangs forever with no error, no retry, and no user feedback.
+  static const _connectTimeout = Duration(seconds: 10);
+
   Future<ConnectionTask<Socket>> connect(
     Uri uri,
     String? proxyHost,
@@ -32,18 +39,31 @@ class DnsFallbackResolver {
       return SecureSocket.secure(socket, host: host);
     }
 
-    Future<Socket> connectTo(InternetAddress address) async {
-      final socket = await Socket.connect(address, port);
-      return secureIfNeeded(socket);
+    Future<Socket> connectTo(InternetAddress address) {
+      return Socket.connect(address, port)
+          .then(secureIfNeeded)
+          .timeout(_connectTimeout);
     }
 
     try {
-      final addresses = await InternetAddress.lookup(host);
-      if (addresses.isNotEmpty) {
-        return ConnectionTask.fromSocket(connectTo(addresses.first), () {});
+      // The OS resolver call itself has no built-in timeout here — on some
+      // Android setups a stalled AAAA (IPv6) query can hang getaddrinfo
+      // indefinitely rather than erroring, so this needs its own bound or
+      // the DoH fallback below never gets a chance to run.
+      final addresses =
+          await InternetAddress.lookup(host).timeout(_connectTimeout);
+      // IPv4 first: on dual-stack emulator/VPN networks the resolver can
+      // return an IPv6 address that isn't actually routable, and this app
+      // only ever talks to one IPv4-hosted API — prefer what's known to work
+      // rather than gambling on whichever family the OS lists first.
+      final sorted = [...addresses]..sort((a, b) =>
+          (a.type == InternetAddressType.IPv4 ? 0 : 1) -
+          (b.type == InternetAddressType.IPv4 ? 0 : 1));
+      if (sorted.isNotEmpty) {
+        return ConnectionTask.fromSocket(connectTo(sorted.first), () {});
       }
     } catch (_) {
-      // OS resolver failed — fall back to DNS-over-HTTPS below.
+      // OS resolver failed or timed out — fall back to DNS-over-HTTPS below.
     }
 
     final ip = await _resolveViaDoH(host);
@@ -54,9 +74,11 @@ class DnsFallbackResolver {
       );
     }
 
-    // No fallback available either — let the normal lookup throw its
-    // standard SocketException so existing error handling takes over.
-    final addresses = await InternetAddress.lookup(host);
+    // No fallback available either — let the lookup throw (its standard
+    // SocketException, or the TimeoutException below) so existing error
+    // handling takes over.
+    final addresses =
+        await InternetAddress.lookup(host).timeout(_connectTimeout);
     return ConnectionTask.fromSocket(connectTo(addresses.first), () {});
   }
 

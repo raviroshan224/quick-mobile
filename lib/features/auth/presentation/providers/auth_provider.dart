@@ -1,9 +1,17 @@
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../core/models/app_exception.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../core/storage/secure_storage_service.dart';
 import '../../data/auth_repository.dart';
 import '../../domain/user_model.dart';
 import '../../domain/profile_model.dart';
+
+// Must match AuthService.login()'s exact message on the backend for the
+// not-verified case — see auth.service.ts. Not a great coupling, but the
+// backend has no distinct error code for this, only a shared 401 with
+// different messages depending on why login failed.
+const _kEmailNotVerifiedMessage = 'Email not verified. Please verify OTP first.';
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
@@ -119,10 +127,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
     state = const AuthState(status: AuthStatus.unauthenticated);
   }
 
-  Future<void> signup(String firstName, String lastName, String email, String password) async {
+  Future<void> signup(
+    String companyName,
+    String firstName,
+    String lastName,
+    String email,
+    String password,
+  ) async {
     state = state.copyWith(status: AuthStatus.loading, error: null);
     try {
-      await _repo.signup(firstName, lastName, email, password);
+      await _repo.signup(companyName, firstName, lastName, email, password);
       state = AuthState(status: AuthStatus.pendingOtp, pendingEmail: email.trim());
     } catch (e) {
       state = AuthState(status: AuthStatus.error, error: e.toString());
@@ -145,6 +159,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
         state = AuthState(status: AuthStatus.authenticated, user: user);
       }
     } catch (e) {
+      if (e is AppException && e.message == _kEmailNotVerifiedMessage) {
+        // Same dead end an abandoned signup leaves behind — route straight
+        // into OTP verification instead of stranding the user on a login
+        // error with no way forward. Fire off a fresh OTP so the code
+        // waiting in their inbox is guaranteed current.
+        final trimmedEmail = email.trim();
+        state = AuthState(status: AuthStatus.pendingOtp, pendingEmail: trimmedEmail);
+        unawaited(resendOtp());
+        return;
+      }
       state = AuthState(status: AuthStatus.error, error: e.toString());
     }
   }
@@ -242,6 +266,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
       status: state.pendingEmail != null ? AuthStatus.pendingOtp : AuthStatus.unauthenticated,
       error: null,
     );
+  }
+
+  // Fully abandons an in-progress OTP verification (e.g. the user taps back
+  // from the OTP screen) — clearError() alone isn't enough here, since it
+  // preserves AuthStatus.pendingOtp as long as pendingEmail is still set,
+  // and the router unconditionally redirects any navigation back to
+  // /verify-otp while that status holds. This resets to a clean
+  // unauthenticated state so leaving the OTP screen actually leaves it.
+  void cancelPendingOtp() {
+    state = const AuthState(status: AuthStatus.unauthenticated);
   }
 
   void _onTokenExpired() {

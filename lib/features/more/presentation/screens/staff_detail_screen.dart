@@ -8,6 +8,7 @@ import '../../../../core/constants/app_constants.dart';
 import '../../../../features/transactions/domain/transaction_models.dart';
 import '../../../../features/transactions/presentation/providers/transactions_provider.dart';
 import 'settings_screen.dart' show salonSettingsProvider;
+import '../../../../shared/widgets/pull_to_refresh.dart';
 
 // ─── Avatar colors (same cycle as staff_screen / staff_form) ─────────────────
 
@@ -51,7 +52,12 @@ class StaffDetailScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: staffAsync.when(
+      body: PullToRefresh(
+        onRefresh: () => Future.wait([
+          ref.refresh(staffDetailProvider(staffId).future),
+          ref.refresh(staffTransactionsProvider(staffId).future),
+        ]),
+        child: staffAsync.when(
         loading: () => const SafeArea(
           child: Center(child: CircularProgressIndicator()),
         ),
@@ -71,6 +77,7 @@ class StaffDetailScreen extends ConsumerWidget {
           ),
         ),
         data: (staff) => _DetailBody(staff: staff),
+        ),
       ),
     );
   }
@@ -137,6 +144,7 @@ class _DetailBody extends ConsumerWidget {
           // ── Scrollable content ───────────────────────────────────────────
           Expanded(
             child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
               children: [
                 // ── Profile card ─────────────────────────────────────────

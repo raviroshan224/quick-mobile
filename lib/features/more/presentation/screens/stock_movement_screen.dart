@@ -12,6 +12,7 @@ import '../../../../core/network/api_client.dart';
 import '../../../../features/inventory/data/inventory_repository.dart';
 import '../../../../features/inventory/domain/inventory_models.dart';
 import '../../../../features/inventory/presentation/providers/inventory_provider.dart';
+import '../../../../shared/widgets/pull_to_refresh.dart';
 
 // ─── Local repo provider ──────────────────────────────────────────────────────
 
@@ -553,13 +554,16 @@ class _HistoryTab extends HookConsumerWidget {
         const SizedBox(height: 10),
 
         Expanded(
-          child: logState.isLoading
+          child: PullToRefresh(
+            onRefresh: notifier.refresh,
+            child: logState.isLoading
               ? const _HistorySkeleton()
               : logState.error != null && logState.items.isEmpty
                   ? _HistoryError(onRetry: notifier.refresh)
                   : logState.items.isEmpty
                       ? const _HistoryEmpty()
                       : ListView.builder(
+                          physics: const AlwaysScrollableScrollPhysics(),
                           controller: scrollCtrl,
                           padding:
                               const EdgeInsets.fromLTRB(20, 0, 20, 32),
@@ -586,6 +590,7 @@ class _HistoryTab extends HookConsumerWidget {
                             );
                           },
                         ),
+          ),
         ),
       ],
     );

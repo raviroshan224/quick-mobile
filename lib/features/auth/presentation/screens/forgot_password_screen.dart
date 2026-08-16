@@ -161,7 +161,10 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
           const SizedBox(height: 24),
           Center(
             child: GestureDetector(
-              onTap: () => context.go(AppRoutes.login),
+              onTap: () {
+                ref.read(authProvider.notifier).clearError();
+                context.go(AppRoutes.login);
+              },
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [

@@ -4,6 +4,8 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../../../features/pos/domain/pos_models.dart';
 import '../../../../features/pos/presentation/providers/cart_provider.dart';
+import '../../../../features/pos/presentation/providers/salon_sessions_provider.dart';
+import '../../../../features/services/domain/service_colors.dart';
 import '../../../../features/services/domain/service_models.dart';
 import '../../../../features/services/presentation/providers/services_provider.dart';
 import '../../../../features/inventory/domain/inventory_models.dart';
@@ -11,6 +13,8 @@ import '../../../../features/inventory/presentation/providers/inventory_provider
 import '../../../../core/theme/app_theme.dart';
 import 'review_sale_sheet.dart';
 import 'calendar_tab.dart';
+import '../widgets/session_strip.dart';
+import '../../../../shared/widgets/pull_to_refresh.dart';
 
 // Aliases so _ServicesView/_ItemsView don't need to know real provider names.
 final _checkoutServicesProvider = activeServicesProvider;
@@ -31,6 +35,7 @@ class CheckoutScreen extends HookConsumerWidget {
       body: SafeArea(
         child: Column(
           children: [
+            const SessionStrip(),
             _SegmentedHeader(
               selected: tabIndex.value,
               onChanged: (i) => tabIndex.value = i,
@@ -147,7 +152,7 @@ class _KeypadView extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final display = useState('0');
-    final cart = ref.watch(cartProvider);
+    final cart = ref.watch(activeCartProvider);
 
     void press(String key) {
       HapticFeedback.lightImpact();
@@ -246,6 +251,12 @@ class _KeypadView extends HookConsumerWidget {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
+      // A swipe-down or backdrop tap must not be able to dismiss this sheet
+      // mid-payment — ReviewSaleSheet has its own explicit close buttons for
+      // normal dismissal, and additionally blocks the system back gesture
+      // specifically while a payment is in flight (see its PopScope).
+      isDismissible: false,
+      enableDrag: false,
       builder: (_) => ReviewSaleSheet(keypadAmount: amount),
     );
   }
@@ -362,7 +373,7 @@ class _NoteSheet extends HookConsumerWidget {
                     const Spacer(),
                     GestureDetector(
                       onTap: () {
-                        ref.read(cartProvider.notifier).setNotes(ctrl.text);
+                        ref.read(activeCartNotifierProvider).setNotes(ctrl.text);
                         Navigator.pop(context);
                       },
                       child: const Text(
@@ -493,6 +504,9 @@ class _ReviewSaleButton extends StatelessWidget {
         context: context,
         isScrollControlled: true,
         backgroundColor: Colors.transparent,
+        // See _showReviewSale above for why these are false.
+        isDismissible: false,
+        enableDrag: false,
         builder: (_) => const ReviewSaleSheet(keypadAmount: 0),
       ),
       child: Container(
@@ -532,22 +546,6 @@ class _ReviewSaleButton extends StatelessWidget {
 // palette — used only for this eye-catching service selection grid.
 // Each (background, accent) pair is picked by hashing the category id so
 // the same category always lands on the same color.
-const List<(Color, Color)> _servicePalette = [
-  (Color(0xFFFFE1E1), Color(0xFFDC5A5F)), // coral
-  (Color(0xFFFFEACC), Color(0xFFDB8B2A)), // peach
-  (Color(0xFFFFF6C4), Color(0xFFC79A0A)), // yellow
-  (Color(0xFFD9F5E3), Color(0xFF119A62)), // mint
-  (Color(0xFFD3F1F1), Color(0xFF0E9A9A)), // teal
-  (Color(0xFFDCEAFF), Color(0xFF3A78C2)), // sky blue
-  (Color(0xFFE9E1FF), Color(0xFF7C5FD1)), // lavender
-  (Color(0xFFFCE1EE), Color(0xFFC94989)), // rose
-];
-
-(Color, Color) _paletteFor(String key) {
-  final seed = key.codeUnits.fold(0, (s, c) => s + c);
-  return _servicePalette[seed % _servicePalette.length];
-}
-
 class _ServicesView extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -556,7 +554,7 @@ class _ServicesView extends HookConsumerWidget {
     final searchQ = useState('');
     final searchCtrl = useTextEditingController();
     final selectedCat = useState<String?>(null);
-    final cart = ref.watch(cartProvider);
+    final cart = ref.watch(activeCartProvider);
 
     return Column(
       children: [
@@ -616,7 +614,12 @@ class _ServicesView extends HookConsumerWidget {
         const Divider(height: 1, color: AppColors.surfaceVariant),
         // Service list
         Expanded(
-          child: servicesAsync.when(
+          child: PullToRefresh(
+            onRefresh: () => Future.wait([
+              ref.refresh(_checkoutServicesProvider.future),
+              ref.refresh(_checkoutCategoriesProvider.future),
+            ]),
+            child: servicesAsync.when(
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) => Center(child: Text('$e')),
             data: (services) {
@@ -640,6 +643,7 @@ class _ServicesView extends HookConsumerWidget {
               }
 
               return GridView.builder(
+                physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 3,
@@ -650,16 +654,16 @@ class _ServicesView extends HookConsumerWidget {
                 itemCount: filtered.length,
                 itemBuilder: (_, i) {
                   final s = filtered[i];
-                  final catId = s.category?.id ?? s.id;
-                  final palette = _paletteFor(catId);
+                  final swatch = resolveServiceColor(s);
                   return _ServiceGridCard(
                     service: s,
-                    bg: palette.$1,
-                    accent: palette.$2,
+                    bg: swatch.bg,
+                    accent: swatch.accent,
                   );
                 },
               );
             },
+            ),
           ),
         ),
         // Charge / Review button
@@ -682,7 +686,7 @@ class _ItemsView extends HookConsumerWidget {
     final searchQ = useState('');
     final searchCtrl = useTextEditingController();
     final selectedCat = useState<String?>(null);
-    final cart = ref.watch(cartProvider);
+    final cart = ref.watch(activeCartProvider);
 
     return Column(
       children: [
@@ -714,7 +718,9 @@ class _ItemsView extends HookConsumerWidget {
           ),
         ),
         Expanded(
-          child: productsAsync.when(
+          child: PullToRefresh(
+            onRefresh: () => ref.refresh(_checkoutProductsProvider.future),
+            child: productsAsync.when(
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) => Center(child: Text('$e')),
             data: (products) {
@@ -763,6 +769,7 @@ class _ItemsView extends HookConsumerWidget {
                             ),
                           )
                         : GridView.builder(
+                            physics: const AlwaysScrollableScrollPhysics(),
                             padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
                             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                               crossAxisCount: 3,
@@ -773,11 +780,14 @@ class _ItemsView extends HookConsumerWidget {
                             itemCount: filtered.length,
                             itemBuilder: (_, i) {
                               final p = filtered[i];
-                              final palette = _paletteFor(p.category ?? p.id);
+                              // Products have no owner-chosen color (only
+                              // services do) — always the deterministic
+                              // auto-assigned swatch.
+                              final swatch = autoServiceColorFor(p.category ?? p.id);
                               return _ProductGridCard(
                                 product: p,
-                                bg: palette.$1,
-                                accent: palette.$2,
+                                bg: swatch.bg,
+                                accent: swatch.accent,
                               );
                             },
                           ),
@@ -785,6 +795,7 @@ class _ItemsView extends HookConsumerWidget {
                 ],
               );
             },
+            ),
           ),
         ),
         // Charge / Review button
@@ -845,7 +856,7 @@ class _ServiceGridCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final cart = ref.watch(cartProvider);
+    final cart = ref.watch(activeCartProvider);
     final matching = cart.items.where((i) => i.service?.id == service.id).toList();
     final inCartCount = matching.length;
     final inCart = inCartCount > 0;
@@ -866,14 +877,18 @@ class _ServiceGridCard extends ConsumerWidget {
     }
 
     void addOne() {
+      if (ref.read(selectedSessionIdProvider).isEmpty) {
+        showToast('No session assigned — ask the front desk to start one for you');
+        return;
+      }
       HapticFeedback.selectionClick();
-      ref.read(cartProvider.notifier).addService(service);
+      ref.read(activeCartNotifierProvider).addService(service);
       showToast('${service.name} added');
     }
 
     void removeOne() {
       HapticFeedback.selectionClick();
-      ref.read(cartProvider.notifier).removeItem(matching.last.id);
+      ref.read(activeCartNotifierProvider).removeItem(matching.last.id);
       showToast('${service.name} removed');
     }
 
@@ -947,7 +962,11 @@ class _ServiceGridCard extends ConsumerWidget {
                           ),
                         ),
                         const SizedBox(width: 2),
-                        const Icon(Icons.check_rounded,
+                        // Minus, not a checkmark — this pill is the remove
+                        // control (tap the card body to add instead), and a
+                        // checkmark read as "added" rather than "tap to
+                        // remove one".
+                        const Icon(Icons.remove_rounded,
                             size: 12, color: Colors.white),
                       ],
                     ),
@@ -973,7 +992,7 @@ class _ProductGridCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final cart = ref.watch(cartProvider);
+    final cart = ref.watch(activeCartProvider);
     final matching = cart.items.where((i) => i.product?.id == product.id).toList();
     final inCartCount = matching.length;
     final inCart = inCartCount > 0;
@@ -999,14 +1018,18 @@ class _ProductGridCard extends ConsumerWidget {
         showToast('${product.name} is out of stock');
         return;
       }
+      if (ref.read(selectedSessionIdProvider).isEmpty) {
+        showToast('No session assigned — ask the front desk to start one for you');
+        return;
+      }
       HapticFeedback.selectionClick();
-      ref.read(cartProvider.notifier).addProduct(product);
+      ref.read(activeCartNotifierProvider).addProduct(product);
       showToast('${product.name} added');
     }
 
     void removeOne() {
       HapticFeedback.selectionClick();
-      ref.read(cartProvider.notifier).removeItem(matching.last.id);
+      ref.read(activeCartNotifierProvider).removeItem(matching.last.id);
       showToast('${product.name} removed');
     }
 
@@ -1083,7 +1106,7 @@ class _ProductGridCard extends ConsumerWidget {
                             ),
                           ),
                           const SizedBox(width: 2),
-                          const Icon(Icons.check_rounded,
+                          const Icon(Icons.remove_rounded,
                               size: 12, color: Colors.white),
                         ],
                       ),

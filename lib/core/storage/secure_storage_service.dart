@@ -17,10 +17,13 @@ class SecureStorageService {
     required String accessToken,
     required String refreshToken,
   }) async {
-    await Future.wait([
-      _storage.write(key: _kAccessToken, value: accessToken),
-      _storage.write(key: _kRefreshToken, value: refreshToken),
-    ]);
+    // Sequential, not Future.wait — on the web backend the first write
+    // lazily creates the encryption key in localStorage. Two writes racing
+    // to create it in parallel can each generate a different key, leaving
+    // whichever value was encrypted with the losing key undecryptable
+    // (throws OperationError on read).
+    await _storage.write(key: _kAccessToken, value: accessToken);
+    await _storage.write(key: _kRefreshToken, value: refreshToken);
   }
 
   Future<String?> getAccessToken() => _storage.read(key: _kAccessToken);
@@ -31,10 +34,8 @@ class SecureStorageService {
     required String accessToken,
     required String refreshToken,
   }) async {
-    await Future.wait([
-      _storage.write(key: _kOwnerAccessToken, value: accessToken),
-      _storage.write(key: _kOwnerRefreshToken, value: refreshToken),
-    ]);
+    await _storage.write(key: _kOwnerAccessToken, value: accessToken);
+    await _storage.write(key: _kOwnerRefreshToken, value: refreshToken);
   }
 
   Future<String?> getOwnerAccessToken() => _storage.read(key: _kOwnerAccessToken);
@@ -63,10 +64,8 @@ class SecureStorageService {
   }
 
   Future<void> saveUser(String id, String role) async {
-    await Future.wait([
-      _storage.write(key: _kUserId, value: id),
-      _storage.write(key: _kUserRole, value: role),
-    ]);
+    await _storage.write(key: _kUserId, value: id);
+    await _storage.write(key: _kUserRole, value: role);
   }
 
   Future<String?> getUserId() => _storage.read(key: _kUserId);

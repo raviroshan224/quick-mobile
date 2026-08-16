@@ -1,0 +1,42 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "quick-mobile (dev, Debug)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "args": ["--flavor", "dev"]
+    },
+    {
+      "name": "quick-mobile (staging, Debug)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "args": ["--flavor", "staging"]
+    },
+    {
+      "name": "quick-mobile (prod, Debug)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "args": ["--flavor", "prod"]
+    },
+    {
+      "name": "quick-mobile (dev, Profile)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "flutterMode": "profile",
+      "args": ["--flavor", "dev"]
+    },
+    {
+      "name": "quick-mobile (dev, Release)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "flutterMode": "release",
+      "args": ["--flavor", "dev"]
+    }
+  ]
+}

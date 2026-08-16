@@ -14,6 +14,10 @@ class SalonSettings {
   final String address;
   final String phone;
   final String fonepayId;
+  // Never the real secret — the backend never returns it (write-only). This
+  // only reflects whether one has been configured, so the UI can show
+  // "Configured" / "Not set" without ever handling the actual value.
+  final bool fonepaySecretKeySet;
   final String receiptFooter;
   final bool autoPrintReceipt;
   final bool requireCustomer;
@@ -28,6 +32,7 @@ class SalonSettings {
     this.address = 'Kathmandu, Nepal',
     this.phone = '+977-9800000000',
     this.fonepayId = '',
+    this.fonepaySecretKeySet = false,
     this.receiptFooter = 'Thank you for visiting!',
     this.autoPrintReceipt = false,
     this.requireCustomer = false,
@@ -43,6 +48,7 @@ class SalonSettings {
     String? address,
     String? phone,
     String? fonepayId,
+    bool? fonepaySecretKeySet,
     String? receiptFooter,
     bool? autoPrintReceipt,
     bool? requireCustomer,
@@ -56,6 +62,7 @@ class SalonSettings {
     address: address ?? this.address,
     phone: phone ?? this.phone,
     fonepayId: fonepayId ?? this.fonepayId,
+    fonepaySecretKeySet: fonepaySecretKeySet ?? this.fonepaySecretKeySet,
     receiptFooter: receiptFooter ?? this.receiptFooter,
     autoPrintReceipt: autoPrintReceipt ?? this.autoPrintReceipt,
     requireCustomer: requireCustomer ?? this.requireCustomer,
@@ -78,19 +85,26 @@ class _SettingsNotifier extends StateNotifier<SalonSettings> {
   }
   final SettingsRepository _repo;
 
+  /// True once the initial GET has completed (successfully or not) — lets
+  /// the screen distinguish "still loading" from "loaded, showing defaults".
+  bool loaded = false;
+  String? loadError;
+
   Future<void> _load() async {
     try {
       final j = await _repo.get();
       state = SalonSettings(
         salonName: j['salonName'] as String? ?? state.salonName,
-        // The backend has no fields for address/phone/fonepayId under those
-        // names (it's salonAddress/salonPhone/fonePayMerchantId), and has no
+        // The backend has no fields for address/fonepayId under those names
+        // (it's salonAddress/fonePayMerchantId), and has no
         // autoPrintReceipt/requireCustomer/lowStockAlerts/dailySummary at
         // all yet — those four stay local-only until the backend supports
         // them, so they intentionally aren't read from the response here.
         address: j['salonAddress'] as String? ?? state.address,
         phone: j['salonPhone'] as String? ?? state.phone,
         fonepayId: j['fonePayMerchantId'] as String? ?? state.fonepayId,
+        fonepaySecretKeySet:
+            j['fonePaySecretKeySet'] as bool? ?? state.fonepaySecretKeySet,
         receiptFooter: j['receiptFooter'] as String? ?? state.receiptFooter,
         autoPrintReceipt: state.autoPrintReceipt,
         requireCustomer: state.requireCustomer,
@@ -103,15 +117,29 @@ class _SettingsNotifier extends StateNotifier<SalonSettings> {
             j['staffCanViewCustomerDetails'] as bool? ??
                 state.staffCanViewCustomerDetails,
       );
-    } catch (_) {
-      // keep defaults on error
+      loadError = null;
+    } catch (e) {
+      // Keep defaults, but remember the failure so the screen can tell the
+      // owner their settings may be stale rather than pretending these are
+      // the real saved values.
+      loadError = e.toString();
+    } finally {
+      loaded = true;
     }
   }
 
+  Future<void> retryLoad() => _load();
+
+  /// Persists [s]. Applies optimistically, but reverts to the prior state
+  /// and rethrows on failure — the caller is responsible for surfacing the
+  /// error (see `_saveSetting` in the screen below), so a rejected save can
+  /// never silently leave the UI showing a value that isn't actually
+  /// persisted server-side.
   Future<void> update(SalonSettings s) async {
+    final previous = state;
     state = s;
     try {
-      await _repo.update({
+      final response = await _repo.update({
         'salonName': s.salonName,
         // See the comment in _load() — these four have no backend field yet,
         // so sending them would make the whole request fail (the API
@@ -124,8 +152,32 @@ class _SettingsNotifier extends StateNotifier<SalonSettings> {
         'commissionEnabled': s.commissionEnabled,
         'staffCanViewCustomerDetails': s.staffCanViewCustomerDetails,
       });
-    } catch (_) {
-      // ignore save errors silently; state already updated locally
+      // Reconcile fonepaySecretKeySet from the real server response rather
+      // than assuming the write succeeded exactly as requested.
+      state = s.copyWith(
+        fonepaySecretKeySet:
+            response['fonePaySecretKeySet'] as bool? ?? s.fonepaySecretKeySet,
+      );
+    } catch (e) {
+      state = previous;
+      rethrow;
+    }
+  }
+
+  /// Sets the Fonepay secret key specifically — kept separate from update()
+  /// since it's the one field the client only ever sends, never reads back
+  /// as a real value (the backend never returns it).
+  Future<void> updateFonepaySecretKey(String secretKey) async {
+    final previous = state;
+    try {
+      final response = await _repo.update({'fonePaySecretKey': secretKey});
+      state = state.copyWith(
+        fonepaySecretKeySet:
+            response['fonePaySecretKeySet'] as bool? ?? secretKey.isNotEmpty,
+      );
+    } catch (e) {
+      state = previous;
+      rethrow;
     }
   }
 }
@@ -145,6 +197,93 @@ class SettingsScreen extends ConsumerWidget {
     final user = ref.watch(currentUserProvider);
     final settings = ref.watch(salonSettingsProvider);
     final notifier = ref.read(salonSettingsProvider.notifier);
+
+    // Every save on this screen routes through here — on failure the field
+    // has already been reverted by _SettingsNotifier.update() itself; this
+    // is just responsible for making sure the owner actually finds out,
+    // instead of the change silently not sticking.
+    Future<void> saveSetting(Future<void> Function() save) async {
+      try {
+        await save();
+      } catch (e) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not save — $e'),
+            backgroundColor: AppColors.danger,
+            behavior: SnackBarBehavior.floating,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          ),
+        );
+      }
+    }
+
+    void editFonepaySecretKey() {
+      final ctrl = TextEditingController();
+      final error = ValueNotifier<String?>(null);
+      showDialog(
+        context: context,
+        builder: (ctx) => StatefulBuilder(
+          builder: (ctx, setDialogState) => AlertDialog(
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14)),
+            title: const Text('Fonepay Secret Key',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  settings.fonepaySecretKeySet
+                      ? 'A secret key is already configured. Enter a new one to replace it.'
+                      : 'Required to generate real Fonepay QR codes at checkout.',
+                  style: const TextStyle(
+                      fontSize: 12, color: AppColors.textSecondary),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: ctrl,
+                  autofocus: true,
+                  obscureText: true,
+                  decoration: InputDecoration(
+                    filled: true,
+                    fillColor: AppColors.background,
+                    errorText: error.value,
+                    border: OutlineInputBorder(
+                      borderSide: BorderSide.none,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel',
+                    style: TextStyle(color: AppColors.textSecondary)),
+              ),
+              TextButton(
+                onPressed: () async {
+                  final value = ctrl.text.trim();
+                  if (value.isEmpty) {
+                    setDialogState(() => error.value = 'Secret key cannot be empty');
+                    return;
+                  }
+                  Navigator.pop(ctx);
+                  await saveSetting(() => notifier.updateFonepaySecretKey(value));
+                },
+                child: const Text('Save',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w700, color: Colors.black)),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     void edit(String title, String current, void Function(String) onSave,
         {TextInputType keyboard = TextInputType.text}) {
@@ -227,21 +366,24 @@ class SettingsScreen extends ConsumerWidget {
                     label: 'Salon Name',
                     value: settings.salonName,
                     onTap: () => edit('Salon Name', settings.salonName,
-                        (v) => notifier.update(settings.copyWith(salonName: v))),
+                        (v) => saveSetting(() =>
+                            notifier.update(settings.copyWith(salonName: v)))),
                   ),
                   _EditTile(
                     icon: Icons.location_on_outlined,
                     label: 'Address',
                     value: settings.address,
                     onTap: () => edit('Address', settings.address,
-                        (v) => notifier.update(settings.copyWith(address: v))),
+                        (v) => saveSetting(() =>
+                            notifier.update(settings.copyWith(address: v)))),
                   ),
                   _EditTile(
                     icon: Icons.phone_outlined,
                     label: 'Phone',
                     value: settings.phone,
                     onTap: () => edit('Phone', settings.phone,
-                        (v) => notifier.update(settings.copyWith(phone: v)),
+                        (v) => saveSetting(
+                            () => notifier.update(settings.copyWith(phone: v))),
                         keyboard: TextInputType.phone),
                   ),
                   _EditTile(
@@ -249,7 +391,8 @@ class SettingsScreen extends ConsumerWidget {
                     label: 'Currency',
                     value: settings.currency,
                     onTap: () => edit('Currency', settings.currency,
-                        (v) => notifier.update(settings.copyWith(currency: v))),
+                        (v) => saveSetting(() =>
+                            notifier.update(settings.copyWith(currency: v)))),
                   ),
                 ]),
                 const SizedBox(height: 16),
@@ -268,11 +411,46 @@ class SettingsScreen extends ConsumerWidget {
                     onTap: () => edit(
                       'Fonepay Merchant ID',
                       settings.fonepayId,
-                      (v) => notifier.update(settings.copyWith(fonepayId: v)),
+                      (v) {
+                        if (v.isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Merchant ID cannot be empty'),
+                              backgroundColor: AppColors.danger,
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                          return;
+                        }
+                        saveSetting(() =>
+                            notifier.update(settings.copyWith(fonepayId: v)));
+                      },
                       keyboard: TextInputType.number,
                     ),
                   ),
+                  _EditTile(
+                    icon: Icons.key_outlined,
+                    label: 'Fonepay Secret Key',
+                    value: settings.fonepaySecretKeySet
+                        ? 'Configured'
+                        : 'Not configured',
+                    valueColor: settings.fonepaySecretKeySet
+                        ? AppColors.success
+                        : AppColors.danger,
+                    onTap: editFonepaySecretKey,
+                  ),
                 ]),
+                if (settings.fonepayId.isNotEmpty &&
+                    !settings.fonepaySecretKeySet)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
+                    child: Text(
+                      'Both a Merchant ID and Secret Key are required before '
+                      'Fonepay QR checkout will work.',
+                      style: const TextStyle(
+                          fontSize: 12, color: AppColors.danger),
+                    ),
+                  ),
                 const SizedBox(height: 16),
 
                 // ── Receipt ────────────────────────────────────────────────
@@ -282,16 +460,16 @@ class SettingsScreen extends ConsumerWidget {
                     label: 'Auto-print Receipt',
                     subtitle: 'Print receipt after every completed sale',
                     value: settings.autoPrintReceipt,
-                    onChanged: (v) => notifier
-                        .update(settings.copyWith(autoPrintReceipt: v)),
+                    onChanged: (v) => saveSetting(() => notifier
+                        .update(settings.copyWith(autoPrintReceipt: v))),
                   ),
                   _EditTile(
                     icon: Icons.notes_rounded,
                     label: 'Receipt Footer',
                     value: settings.receiptFooter,
                     onTap: () => edit('Receipt Footer', settings.receiptFooter,
-                        (v) =>
-                            notifier.update(settings.copyWith(receiptFooter: v))),
+                        (v) => saveSetting(() =>
+                            notifier.update(settings.copyWith(receiptFooter: v)))),
                   ),
                 ]),
                 const SizedBox(height: 16),
@@ -305,8 +483,8 @@ class SettingsScreen extends ConsumerWidget {
                         ? 'Staff earn commission per their set rate'
                         : 'Commission is off for everyone, business-wide',
                     value: settings.commissionEnabled,
-                    onChanged: (v) => notifier
-                        .update(settings.copyWith(commissionEnabled: v)),
+                    onChanged: (v) => saveSetting(() => notifier
+                        .update(settings.copyWith(commissionEnabled: v))),
                   ),
                   _ToggleTile(
                     icon: Icons.visibility_outlined,
@@ -315,8 +493,8 @@ class SettingsScreen extends ConsumerWidget {
                         ? 'Staff can see customer phone, email, and history'
                         : 'Customer contact info is hidden from staff',
                     value: settings.staffCanViewCustomerDetails,
-                    onChanged: (v) => notifier.update(
-                        settings.copyWith(staffCanViewCustomerDetails: v)),
+                    onChanged: (v) => saveSetting(() => notifier.update(
+                        settings.copyWith(staffCanViewCustomerDetails: v))),
                   ),
                 ]),
                 const SizedBox(height: 16),
@@ -328,8 +506,8 @@ class SettingsScreen extends ConsumerWidget {
                     label: 'Required Customer Details',
                     subtitle: 'Prompt to add customer before every sale',
                     value: settings.requireCustomer,
-                    onChanged: (v) => notifier
-                        .update(settings.copyWith(requireCustomer: v)),
+                    onChanged: (v) => saveSetting(() => notifier
+                        .update(settings.copyWith(requireCustomer: v))),
                   ),
                 ]),
                 const SizedBox(height: 16),
@@ -341,16 +519,16 @@ class SettingsScreen extends ConsumerWidget {
                     label: 'Low Stock Alerts',
                     subtitle: 'Alert when item stock falls below threshold',
                     value: settings.lowStockAlerts,
-                    onChanged: (v) =>
-                        notifier.update(settings.copyWith(lowStockAlerts: v)),
+                    onChanged: (v) => saveSetting(() =>
+                        notifier.update(settings.copyWith(lowStockAlerts: v))),
                   ),
                   _ToggleTile(
                     icon: Icons.bar_chart_rounded,
                     label: 'Daily Summary',
                     subtitle: "Get today's sales summary at end of day",
                     value: settings.dailySummary,
-                    onChanged: (v) =>
-                        notifier.update(settings.copyWith(dailySummary: v)),
+                    onChanged: (v) => saveSetting(() =>
+                        notifier.update(settings.copyWith(dailySummary: v))),
                   ),
                 ]),
                 const SizedBox(height: 16),

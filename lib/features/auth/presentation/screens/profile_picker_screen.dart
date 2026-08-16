@@ -8,6 +8,7 @@ import '../providers/auth_provider.dart';
 import '../../data/auth_repository.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../core/storage/secure_storage_service.dart';
+import '../../../../core/utils/pin_validator.dart';
 import '../../../../shared/widgets/quick_logo.dart';
 
 class ProfilePickerScreen extends ConsumerWidget {
@@ -489,6 +490,13 @@ class _CreatePinSheet extends HookConsumerWidget {
 
       if (next.length == 4) {
         if (step.value == 0) {
+          final weakness = weakPinError(next);
+          if (weakness != null) {
+            pin.value = '';
+            error.value = weakness;
+            HapticFeedback.heavyImpact();
+            return;
+          }
           firstPin.value = next;
           pin.value = '';
           step.value = 1;

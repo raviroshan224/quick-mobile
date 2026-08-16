@@ -9,6 +9,7 @@ import '../../../../features/auth/presentation/providers/auth_provider.dart';
 import '../../../more/presentation/screens/settings_screen.dart' show salonSettingsProvider;
 import '../../data/bookings_repository.dart';
 import '../../domain/booking_models.dart';
+import '../../../../shared/widgets/pull_to_refresh.dart';
 
 String _dateKey(DateTime d) =>
     '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
@@ -113,7 +114,10 @@ class CalendarTab extends HookConsumerWidget {
 
         // ── Bookings list or empty state ────────────────────────────────
         Expanded(
-          child: bookingsState.isLoading
+          child: PullToRefresh(
+            onRefresh: () =>
+                ref.read(bookingsProvider(dateKey).notifier).refresh(),
+            child: bookingsState.isLoading
               ? const Center(child: CircularProgressIndicator())
               : bookingsState.error != null
                   ? _ErrorState(
@@ -127,6 +131,7 @@ class CalendarTab extends HookConsumerWidget {
                               _showBookingForm(context, ref, selectedDate.value),
                         )
                       : ListView.separated(
+                          physics: const AlwaysScrollableScrollPhysics(),
                           padding: const EdgeInsets.fromLTRB(16, 12, 16, 80),
                           itemCount: todayBookings.length,
                           separatorBuilder: (_, _) => const SizedBox(height: 10),
@@ -147,6 +152,7 @@ class CalendarTab extends HookConsumerWidget {
                             },
                           ),
                         ),
+          ),
         ),
 
         // ── Create booking button ───────────────────────────────────────

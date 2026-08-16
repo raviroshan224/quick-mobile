@@ -35,18 +35,22 @@ class ServicesRepository {
 
   Future<ServiceModel> create({
     required String name,
-    required double price,
-    required int duration,
+    double? price,
+    int duration = 0,
     String? description,
     String? categoryId,
+    String? color,
     bool isActive = true,
   }) async {
     final data = await _api.post('/services', data: {
       'name': name,
-      'price': price,
+      // Omitted entirely when not set — the backend defaults it to 0
+      // (ServicesService.create()), the same way duration already does.
+      'price': ?price,
       'duration': duration,
       'description': ?description,
       'categoryId': ?categoryId,
+      'color': ?color,
       'isActive': isActive,
     }) as Map<String, dynamic>;
     return ServiceModel.fromJson(data);
@@ -59,6 +63,8 @@ class ServicesRepository {
     int? duration,
     String? description,
     String? categoryId,
+    String? color,
+    bool clearColor = false,
     bool? isActive,
   }) async {
     final data = await _api.patch('/services/$id', data: {
@@ -67,6 +73,10 @@ class ServicesRepository {
       'duration': ?duration,
       'description': ?description,
       'categoryId': ?categoryId,
+      // clearColor lets the form explicitly reset back to "auto" — sending
+      // null (rather than omitting the key) so the backend actually clears
+      // a previously-chosen color instead of leaving the old one in place.
+      if (clearColor) 'color': null else 'color': ?color,
       'isActive': ?isActive,
     }) as Map<String, dynamic>;
     return ServiceModel.fromJson(data);

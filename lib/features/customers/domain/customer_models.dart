@@ -42,6 +42,19 @@ class CustomerModel {
         totalSpent: (j['totalSpent'] as num?)?.toDouble() ?? 0.0,
       );
 
+  // Local-only round-trip (session persistence), not sent to the backend.
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'firstName': firstName,
+        'lastName': lastName,
+        'email': email,
+        'phone': phone,
+        'notes': notes,
+        'photoUrl': photoUrl,
+        'visitCount': visitCount,
+        'totalSpent': totalSpent,
+      };
+
   String get lastVisitLabel {
     if (lastVisitDate == null) return 'Never';
     final diff = DateTime.now().difference(lastVisitDate!);

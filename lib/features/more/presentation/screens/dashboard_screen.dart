@@ -9,6 +9,7 @@ import '../../../../features/dashboard/presentation/providers/dashboard_provider
 import '../../../../features/dashboard/models/dashboard_summary.dart';
 import '../../../../features/transactions/data/transactions_repository.dart';
 import '../../../../features/transactions/domain/transaction_models.dart';
+import '../../../../shared/widgets/pull_to_refresh.dart';
 
 // ─── Staff today stats provider ───────────────────────────────────────────────
 
@@ -106,7 +107,9 @@ class DashboardScreen extends ConsumerWidget {
             children: [
               header,
               Expanded(
-                child: dashboardAsync.when(
+                child: PullToRefresh(
+                  onRefresh: () => ref.refresh(dashboardProvider.future),
+                  child: dashboardAsync.when(
                   loading: () =>
                       const Center(child: CircularProgressIndicator()),
                   error: (e, _) => Center(
@@ -116,6 +119,7 @@ class DashboardScreen extends ConsumerWidget {
                             fontSize: 14, color: AppColors.textSecondary)),
                   ),
                   data: (summary) => ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
                     children: [
                       _GreetingRow(
@@ -192,6 +196,7 @@ class DashboardScreen extends ConsumerWidget {
                           onTap: () => context.go(AppRoutes.checkout)),
                     ],
                   ),
+                  ),
                 ),
               ),
             ],
@@ -210,7 +215,13 @@ class DashboardScreen extends ConsumerWidget {
           children: [
             header,
             Expanded(
-              child: ListView(
+              child: PullToRefresh(
+                onRefresh: () => Future.wait([
+                  ref.refresh(_staffTodayStatsProvider.future),
+                  ref.refresh(dashboardProvider.future),
+                ]),
+                child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
                 children: [
                   _GreetingRow(
@@ -266,6 +277,7 @@ class DashboardScreen extends ConsumerWidget {
 
                   _StartSaleButton(onTap: () => context.go(AppRoutes.checkout)),
                 ],
+                ),
               ),
             ),
           ],

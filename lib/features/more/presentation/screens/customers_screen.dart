@@ -5,14 +5,7 @@ import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../features/customers/domain/customer_models.dart';
 import '../../../../features/customers/presentation/providers/customers_provider.dart';
-
-// ── Providers ─────────────────────────────────────────────────────────────────
-
-final _customerSearchQueryProvider = customerSearchQueryProvider;
-
-final _customersProvider = FutureProvider.family<List<CustomerModel>, String>(
-  (ref, query) => ref.watch(customersRepoProvider).getAll(query: query.isEmpty ? null : query),
-);
+import '../../../../shared/widgets/pull_to_refresh.dart';
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 
@@ -34,8 +27,8 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final query = ref.watch(_customerSearchQueryProvider);
-    final customersAsync = ref.watch(_customersProvider(query));
+    final query = ref.watch(customerSearchQueryProvider);
+    final customersAsync = ref.watch(customersProvider);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -69,7 +62,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
               child: TextField(
                 controller: _searchCtrl,
                 onChanged: (v) => ref
-                    .read(_customerSearchQueryProvider.notifier)
+                    .read(customerSearchQueryProvider.notifier)
                     .state = v.trim(),
                 keyboardType: TextInputType.text,
                 decoration: InputDecoration(
@@ -86,7 +79,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                             _searchCtrl.clear();
                             ref
                                 .read(
-                                    _customerSearchQueryProvider.notifier)
+                                    customerSearchQueryProvider.notifier)
                                 .state = '';
                           },
                         )
@@ -118,7 +111,9 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
 
             // ── Body ──────────────────────────────────────────────────────
             Expanded(
-              child: customersAsync.when(
+              child: PullToRefresh(
+                onRefresh: () => ref.refresh(customersProvider.future),
+                child: customersAsync.when(
                 loading: () => const Center(
                     child: CircularProgressIndicator(
                         color: Colors.black, strokeWidth: 2)),
@@ -137,6 +132,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                   return _CustomerSectionedList(
                       customers: customers);
                 },
+                ),
               ),
             ),
           ],
@@ -183,6 +179,7 @@ class _CustomerSectionedList extends StatelessWidget {
         ),
         Expanded(
           child: ListView.builder(
+            physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.only(bottom: 40),
             itemCount: keys.fold<int>(
                 0, (sum, k) => sum + 1 + grouped[k]!.length),

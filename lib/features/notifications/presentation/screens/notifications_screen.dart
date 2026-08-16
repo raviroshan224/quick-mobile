@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../domain/notification_log_model.dart';
 import '../providers/notifications_provider.dart';
+import '../../../../shared/widgets/pull_to_refresh.dart';
 
 class NotificationsScreen extends ConsumerWidget {
   const NotificationsScreen({super.key});
@@ -41,18 +42,22 @@ class NotificationsScreen extends ConsumerWidget {
               ),
             ),
             Expanded(
-              child: logsAsync.when(
+              child: PullToRefresh(
+                onRefresh: () => ref.refresh(notificationLogsProvider.future),
+                child: logsAsync.when(
                 loading: () => const Center(child: CircularProgressIndicator()),
                 error: (e, _) => _ErrorState(onRetry: () => ref.refresh(notificationLogsProvider)),
                 data: (logs) => logs.isEmpty
                     ? const _EmptyState()
                     : ListView.separated(
+                        physics: const AlwaysScrollableScrollPhysics(),
                         padding: EdgeInsets.zero,
                         itemCount: logs.length,
                         separatorBuilder: (_, _) =>
                             const Divider(height: 1, color: AppColors.surfaceVariant),
                         itemBuilder: (_, i) => _NotifTile(log: logs[i]),
                       ),
+                ),
               ),
             ),
           ],

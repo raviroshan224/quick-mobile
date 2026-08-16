@@ -1,5 +1,5 @@
-import 'dart:io';
 import 'package:dio/dio.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../../core/network/api_client.dart';
 import '../models/image_asset_model.dart';
 
@@ -18,15 +18,15 @@ class ImageLibraryRepository {
   }
 
   Future<ImageAsset> upload({
-    required File file,
+    required XFile file,
     required String type,
     String? name,
     bool isDefault = false,
   }) async {
     final formData = FormData.fromMap({
-      'file': await MultipartFile.fromFile(
-        file.path,
-        filename: file.path.split(Platform.pathSeparator).last,
+      'file': MultipartFile.fromBytes(
+        await file.readAsBytes(),
+        filename: file.name,
       ),
       'type': type,
       if (name != null && name.isNotEmpty) 'name': name,

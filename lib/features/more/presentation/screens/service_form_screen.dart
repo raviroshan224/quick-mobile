@@ -6,6 +6,7 @@ import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../features/services/data/services_repository.dart';
+import '../../../../features/services/domain/service_colors.dart';
 import '../../../../features/services/domain/service_models.dart';
 import '../../../../features/services/presentation/providers/services_provider.dart';
 import '../../../../shared/widgets/image_picker_sheet.dart';
@@ -55,6 +56,9 @@ class _ServiceFormScreenState extends ConsumerState<ServiceFormScreen> {
   bool _loading = true;
   ServiceModel? _original;
   PickedImage? _pickedImage;
+  // Null means "auto" — checkout falls back to its deterministic per-
+  // category color (see resolveServiceColor in service_colors.dart).
+  String? _selectedColorKey;
 
   @override
   void initState() {
@@ -82,6 +86,7 @@ class _ServiceFormScreenState extends ConsumerState<ServiceFormScreen> {
           _selectedCategory = cats.where((c) => c.id == s.category?.id).firstOrNull
               ?? (cats.isNotEmpty ? cats.first : null);
           _isActive = s.isActive;
+          _selectedColorKey = s.color;
           _loading = false;
         });
       } else {
@@ -183,6 +188,8 @@ class _ServiceFormScreenState extends ConsumerState<ServiceFormScreen> {
           price: price,
           description: description,
           categoryId: _selectedCategory?.id,
+          color: _selectedColorKey,
+          clearColor: _selectedColorKey == null,
           isActive: _isActive,
         );
       } else {
@@ -192,11 +199,18 @@ class _ServiceFormScreenState extends ConsumerState<ServiceFormScreen> {
           duration: 0,
           description: description,
           categoryId: _selectedCategory?.id,
+          color: _selectedColorKey,
           isActive: _isActive,
         );
       }
       ref.invalidate(servicesListProvider);
       ref.invalidate(serviceCategoriesListProvider);
+      // The management list above and Checkout's Services tab read from two
+      // separate providers (servicesListProvider fetches all services;
+      // activeServicesProvider fetches only active ones) — without this, a
+      // newly created/edited service shows up here immediately but stays
+      // missing from checkout until something else happens to refetch it.
+      ref.invalidate(activeServicesProvider);
       if (mounted) context.go(AppRoutes.moreServices);
     } catch (e) {
       if (mounted) {
@@ -231,6 +245,7 @@ class _ServiceFormScreenState extends ConsumerState<ServiceFormScreen> {
               try {
                 await ref.read(_servicesRepoProvider).delete(widget.serviceId!);
                 ref.invalidate(servicesListProvider);
+                ref.invalidate(activeServicesProvider);
                 if (mounted) context.go(AppRoutes.moreServices);
               } catch (e) {
                 if (mounted) {
@@ -502,7 +517,7 @@ class _ServiceFormScreenState extends ConsumerState<ServiceFormScreen> {
                     _SectionLabel(text: 'PRICING'),
                     _Card(children: [
                       _Field(
-                        label: 'Price (Rs)',
+                        label: 'Price (Rs) — optional',
                         child: TextFormField(
                           controller: _priceCtrl,
                           keyboardType: TextInputType.number,
@@ -510,18 +525,56 @@ class _ServiceFormScreenState extends ConsumerState<ServiceFormScreen> {
                             FilteringTextInputFormatter.digitsOnly,
                           ],
                           decoration: const InputDecoration(
-                            hintText: 'e.g. 500',
+                            hintText: '0',
                             prefixText: 'Rs ',
                           ),
-                          validator: (v) {
-                            if (v == null || v.trim().isEmpty) {
-                              return 'Price is required';
-                            }
-                            if ((double.tryParse(v) ?? 0) <= 0) {
-                              return 'Enter a valid price';
-                            }
-                            return null;
-                          },
+                          // Only the service name is required to create a
+                          // service — an unset or blank price is saved as 0
+                          // (ServicesService.create() on the backend applies
+                          // the same default if this is ever omitted).
+                        ),
+                      ),
+                    ]),
+
+                    // ── Card Color ───────────────────────────────────────────
+                    _SectionLabel(text: 'CARD COLOR'),
+                    _Card(children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 14),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Shown on the Checkout services grid',
+                              style: TextStyle(
+                                  fontSize: 12, color: AppColors.textSecondary),
+                            ),
+                            const SizedBox(height: 12),
+                            Wrap(
+                              spacing: 12,
+                              runSpacing: 12,
+                              children: [
+                                _ColorSwatchOption(
+                                  selected: _selectedColorKey == null,
+                                  onTap: () =>
+                                      setState(() => _selectedColorKey = null),
+                                  tooltip: 'Auto',
+                                  child: const Icon(Icons.auto_awesome,
+                                      size: 16, color: AppColors.textSecondary),
+                                ),
+                                ...kServiceColorPalette.map(
+                                  (swatch) => _ColorSwatchOption(
+                                    selected: _selectedColorKey == swatch.key,
+                                    onTap: () => setState(
+                                        () => _selectedColorKey = swatch.key),
+                                    color: swatch.accent,
+                                    tooltip: swatch.label,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
                         ),
                       ),
                     ]),
@@ -641,4 +694,48 @@ class _Divider extends StatelessWidget {
   @override
   Widget build(BuildContext context) => const Divider(
       height: 1, indent: 16, endIndent: 16, color: AppColors.divider);
+}
+
+// A single tappable swatch in the Card Color picker — either a solid color
+// circle (one of kServiceColorPalette) or, for the "Auto" option, a plain
+// circle holding [child] instead.
+class _ColorSwatchOption extends StatelessWidget {
+  const _ColorSwatchOption({
+    required this.selected,
+    required this.onTap,
+    required this.tooltip,
+    this.color,
+    this.child,
+  });
+  final bool selected;
+  final VoidCallback onTap;
+  final String tooltip;
+  final Color? color;
+  final Widget? child;
+
+  @override
+  Widget build(BuildContext context) => Tooltip(
+        message: tooltip,
+        child: GestureDetector(
+          onTap: onTap,
+          child: Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: color ?? AppColors.surfaceVariant,
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: selected ? Colors.black : AppColors.divider,
+                width: selected ? 2 : 1,
+              ),
+            ),
+            child: Center(
+              child: child ??
+                  (selected
+                      ? const Icon(Icons.check, size: 16, color: Colors.white)
+                      : null),
+            ),
+          ),
+        ),
+      );
 }

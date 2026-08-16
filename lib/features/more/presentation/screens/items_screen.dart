@@ -6,6 +6,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../features/auth/presentation/providers/auth_provider.dart';
 import '../../../../features/inventory/domain/inventory_models.dart';
 import '../../../../features/inventory/presentation/providers/inventory_provider.dart';
+import '../../../../shared/widgets/pull_to_refresh.dart';
 
 class ItemsScreen extends ConsumerStatefulWidget {
   const ItemsScreen({super.key});
@@ -59,7 +60,9 @@ class _ItemsScreenState extends ConsumerState<ItemsScreen> {
           ),
         ],
       ),
-      body: itemsAsync.when(
+      body: PullToRefresh(
+        onRefresh: () => ref.refresh(productsProvider.future),
+        child: itemsAsync.when(
         loading: () =>
             const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Error: $e')),
@@ -144,6 +147,7 @@ class _ItemsScreenState extends ConsumerState<ItemsScreen> {
               // Grid
               Expanded(
                 child: GridView.builder(
+                  physics: const AlwaysScrollableScrollPhysics(),
                   padding: const EdgeInsets.fromLTRB(14, 8, 14, 16),
                   gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 3,
@@ -165,6 +169,7 @@ class _ItemsScreenState extends ConsumerState<ItemsScreen> {
             ],
           );
         },
+        ),
       ),
     );
   }

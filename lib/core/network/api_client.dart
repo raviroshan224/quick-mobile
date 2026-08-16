@@ -56,13 +56,7 @@ final dioProvider = Provider<Dio>((ref) {
       onUnauthenticated: () => _unauthenticatedCallback?.call(),
     ),
     ErrorInterceptor(),
-    if (kDebugMode)
-      LogInterceptor(
-        requestBody: true,
-        responseBody: true,
-        error: true,
-        logPrint: (o) => debugPrint(o.toString()),
-      ),
+    if (kDebugMode) DebugLogInterceptor(),
   ]);
 
   return dio;

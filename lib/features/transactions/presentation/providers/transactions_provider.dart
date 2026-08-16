@@ -331,10 +331,6 @@ final refundHistoryProvider =
   (ref) => RefundHistoryNotifier(ref.read(_transactionsRepoProvider)),
 );
 
-// ─── Last completed transaction (set after checkout) ─────────────────────────
-
-final lastTransactionIdProvider = StateProvider<String?>((ref) => null);
-
 // ─── Customer visit history ───────────────────────────────────────────────────
 
 final customerTransactionsProvider =
@@ -357,18 +353,27 @@ final staffTransactionsProvider =
   return result.items;
 });
 
-// ─── Today's volume (for transactions screen summary card) ────────────────────
+// ─── Sales summary (for transactions screen summary card) ─────────────────────
+//
+// Mirrors whatever date range is currently applied on the transactions list
+// (defaulting to just today when no explicit date filter is set) so the
+// summary card's total always matches the list the user is actually looking
+// at, instead of silently always summing today regardless of the filter.
 
-final todayRevenueProvider =
-    FutureProvider.autoDispose<({double revenue, int sales, int refunds})>(
-        (ref) async {
+final todayRevenueProvider = FutureProvider.autoDispose<
+    ({double revenue, int sales, int refunds, DateTime from, DateTime to, bool isCustomRange})>((ref) async {
   final user = ref.watch(currentUserProvider);
   final staffUserId = (user != null && !user.isOwner) ? user.id : null;
+  final txState = ref.watch(transactionListProvider);
   final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final isCustomRange = txState.dateFrom != null;
+  final rangeFrom = txState.dateFrom ?? today;
+  final rangeTo = txState.dateTo ?? rangeFrom;
   // Send UTC ISO timestamps so the backend gets the correct local-day boundaries
   // regardless of server timezone (e.g. NPT midnight = June 30 18:15 UTC).
-  final fromUtc = _utcMs(DateTime(now.year, now.month, now.day));
-  final toUtc = _utcMs(DateTime(now.year, now.month, now.day, 23, 59, 59, 999));
+  final fromUtc = _utcMs(DateTime(rangeFrom.year, rangeFrom.month, rangeFrom.day));
+  final toUtc = _utcMs(DateTime(rangeTo.year, rangeTo.month, rangeTo.day, 23, 59, 59, 999));
   final result = await ref
       .read(_transactionsRepoProvider)
       .getAll(limit: 100, from: fromUtc, to: toUtc, userId: staffUserId);
@@ -386,5 +391,12 @@ final todayRevenueProvider =
       refunds++;
     }
   }
-  return (revenue: revenue, sales: sales, refunds: refunds);
+  return (
+    revenue: revenue,
+    sales: sales,
+    refunds: refunds,
+    from: rangeFrom,
+    to: rangeTo,
+    isCustomRange: isCustomRange,
+  );
 });

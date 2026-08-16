@@ -5,6 +5,9 @@ class SalesSummary {
     required this.avgTicket,
     required this.refundTotal,
     required this.totalDiscounts,
+    required this.serviceValue,
+    required this.manualAdjustments,
+    required this.finalCollectedAmount,
     required this.byPaymentMethod,
   });
 
@@ -12,7 +15,20 @@ class SalesSummary {
   final int transactionCount;
   final double avgTicket;
   final double refundTotal;
+  // Catalog/promo discounts only — kept separate from manualAdjustments
+  // below, since the two are different mechanisms (see ReportsService.
+  // getSalesSummary on the backend). Never mixed into one figure.
   final double totalDiscounts;
+  // Salon "final payable" checkout, owner-facing figures:
+  // serviceValue = catalog price of services actually performed (=subtotal)
+  // manualAdjustments = signed sum of cashier-entered adjustments (+/-)
+  // finalCollectedAmount = what was actually charged (=totalRevenue)
+  // Kept as distinct named fields (rather than reusing totalRevenue/
+  // totalDiscounts) so the Reports screen can show them under their own
+  // labels without implying they're the same thing as ordinary discounts.
+  final double serviceValue;
+  final double manualAdjustments;
+  final double finalCollectedAmount;
   final Map<String, double> byPaymentMethod; // keys: CASH, FONEPAY, SPLIT
 
   factory SalesSummary.fromJson(Map<String, dynamic> j) {
@@ -30,12 +46,21 @@ class SalesSummary {
     } else if (rawList is Map<String, dynamic>) {
       rawList.forEach((k, v) => byMethod[k] = (v as num? ?? 0).toDouble());
     }
+    final totalRevenue = (j['totalRevenue'] as num? ?? 0).toDouble();
+    final totalSubtotal = (j['totalSubtotal'] as num? ?? 0).toDouble();
     return SalesSummary(
-      totalRevenue: (j['totalRevenue'] as num? ?? 0).toDouble(),
+      totalRevenue: totalRevenue,
       transactionCount: (j['totalTransactions'] as num? ?? j['transactionCount'] as num? ?? 0).toInt(),
       avgTicket: (j['averageTransaction'] as num? ?? j['avgTicket'] as num? ?? 0).toDouble(),
       refundTotal: (j['refundTotal'] as num? ?? 0).toDouble(),
       totalDiscounts: (j['totalDiscounts'] as num? ?? 0).toDouble(),
+      // Fall back to the plain sums the backend has always returned
+      // (subtotal/total) if an older backend build hasn't added the
+      // dedicated keys yet — keeps this screen working either way.
+      serviceValue: (j['serviceValue'] as num? ?? totalSubtotal).toDouble(),
+      manualAdjustments: (j['manualAdjustments'] as num? ?? j['totalManualAdjustments'] as num? ?? 0)
+          .toDouble(),
+      finalCollectedAmount: (j['finalCollectedAmount'] as num? ?? totalRevenue).toDouble(),
       byPaymentMethod: byMethod,
     );
   }

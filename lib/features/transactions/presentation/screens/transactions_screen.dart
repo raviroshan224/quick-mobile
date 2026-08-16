@@ -11,6 +11,7 @@ import '../../../../features/staff/presentation/providers/staff_provider.dart';
 import '../../domain/transaction_models.dart';
 import '../providers/transactions_provider.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../shared/widgets/pull_to_refresh.dart';
 
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -56,6 +57,17 @@ String _shortDate(DateTime dt) {
   ];
   return '${months[dt.month]} ${dt.day}';
 }
+
+// Header badge label — reflects the applied date filter instead of always
+// claiming "Today" once the user has picked a different range.
+String _headerDateLabel(DateTime? from, DateTime? to) {
+  if (from == null) return 'Today · ${_shortDate(DateTime.now())}';
+  if (to == null || _isSameDay(from, to)) return _shortDate(from);
+  return '${_shortDate(from)} – ${_shortDate(to)}';
+}
+
+bool _isSameDay(DateTime a, DateTime b) =>
+    a.year == b.year && a.month == b.month && a.day == b.day;
 
 int _activeFilterCount(TransactionListState state) {
   var count = 0;
@@ -146,7 +158,7 @@ class TransactionsScreen extends HookConsumerWidget {
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
-                      'Today · ${_shortDate(DateTime.now())}',
+                      _headerDateLabel(txState.dateFrom, txState.dateTo),
                       style: const TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
@@ -160,10 +172,10 @@ class TransactionsScreen extends HookConsumerWidget {
 
             const SizedBox(height: 14),
 
-            // ── Volume card ──────────────────────────────────────────────────
+            // ── Sales summary card ─────────────────────────────────────────────
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: const _VolumeCard(),
+              child: const _SalesSummaryCard(),
             ),
 
             const SizedBox(height: 14),
@@ -215,7 +227,12 @@ class TransactionsScreen extends HookConsumerWidget {
 
             // ── List ─────────────────────────────────────────────────────────
             Expanded(
-              child: txState.isLoading
+              child: PullToRefresh(
+                onRefresh: () => Future.wait([
+                  notifier.refresh(),
+                  ref.read(refundHistoryProvider.notifier).refresh(),
+                ]),
+                child: txState.isLoading
                   ? const _LoadingSkeleton()
                   : txState.error != null && txState.items.isEmpty
                       ? _ErrorState(
@@ -225,6 +242,7 @@ class TransactionsScreen extends HookConsumerWidget {
                       : grouped.isEmpty
                           ? const _EmptyState()
                           : ListView.builder(
+                              physics: const AlwaysScrollableScrollPhysics(),
                               controller: scrollCtrl,
                               padding:
                                   const EdgeInsets.fromLTRB(20, 0, 20, 100),
@@ -240,6 +258,7 @@ class TransactionsScreen extends HookConsumerWidget {
                                 );
                               },
                             ),
+              ),
             ),
           ],
         ),
@@ -336,10 +355,10 @@ class TransactionsScreen extends HookConsumerWidget {
   }
 }
 
-// ─── Volume card ──────────────────────────────────────────────────────────────
+// ─── Sales summary card ────────────────────────────────────────────────────────
 
-class _VolumeCard extends ConsumerWidget {
-  const _VolumeCard();
+class _SalesSummaryCard extends ConsumerWidget {
+  const _SalesSummaryCard();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -366,11 +385,11 @@ class _VolumeCard extends ConsumerWidget {
             ),
           ),
         ),
-        error: (_, _) => Column(
+        error: (_, _) => const Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          children: const [
+          children: [
             Text(
-              "Today's Volume",
+              "Today's Sales",
               style: TextStyle(color: AppColors.textTertiary, fontSize: 13),
             ),
             SizedBox(height: 6),
@@ -387,9 +406,13 @@ class _VolumeCard extends ConsumerWidget {
         data: (s) => Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              "Today's Volume",
-              style: TextStyle(color: AppColors.textTertiary, fontSize: 13),
+            Text(
+              s.isCustomRange
+                  ? (_isSameDay(s.from, s.to)
+                      ? '${_shortDate(s.from)} Sales'
+                      : '${_shortDate(s.from)} – ${_shortDate(s.to)} Sales')
+                  : "Today's Sales",
+              style: const TextStyle(color: AppColors.textTertiary, fontSize: 13),
             ),
             const SizedBox(height: 6),
             Text(
@@ -404,11 +427,11 @@ class _VolumeCard extends ConsumerWidget {
             const SizedBox(height: 8),
             Row(
               children: [
-                _VolumeChip(
+                _SalesChip(
                     label: '${s.sales} ${s.sales == 1 ? 'Sale' : 'Sales'}'),
                 if (s.refunds > 0) ...[
                   const SizedBox(width: 8),
-                  _VolumeChip(
+                  _SalesChip(
                       label:
                           '${s.refunds} ${s.refunds == 1 ? 'Refund' : 'Refunds'}'),
                 ],
@@ -421,8 +444,8 @@ class _VolumeCard extends ConsumerWidget {
   }
 }
 
-class _VolumeChip extends StatelessWidget {
-  const _VolumeChip({required this.label});
+class _SalesChip extends StatelessWidget {
+  const _SalesChip({required this.label});
   final String label;
 
   @override

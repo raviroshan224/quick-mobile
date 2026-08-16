@@ -30,7 +30,7 @@ class DiscountPickerSheet extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final discountsAsync = ref.watch(discountsProvider);
-    final cart = ref.watch(cartProvider);
+    final cart = ref.watch(activeCartProvider);
     // Hide discounts scoped to a service that isn't in the cart — applying
     // one would silently compute to Rs 0 with no explanation.
     final active = discountsAsync.value
@@ -84,7 +84,7 @@ class DiscountPickerSheet extends ConsumerWidget {
             _AppliedBanner(
               discount: applied,
               onRemove: () {
-                ref.read(cartProvider.notifier).clearDiscount();
+                ref.read(activeCartNotifierProvider).clearDiscount();
                 Navigator.pop(context);
               },
             ),
@@ -137,9 +137,9 @@ class DiscountPickerSheet extends ConsumerWidget {
                   isApplied: isApplied,
                   onTap: () {
                     if (isApplied) {
-                      ref.read(cartProvider.notifier).clearDiscount();
+                      ref.read(activeCartNotifierProvider).clearDiscount();
                     } else {
-                      ref.read(cartProvider.notifier).applyDiscount(
+                      ref.read(activeCartNotifierProvider).applyDiscount(
                             d.name,
                             d.value,
                             isPercentage: d.type == DiscountType.percentage,

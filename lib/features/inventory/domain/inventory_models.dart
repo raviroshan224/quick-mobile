@@ -44,6 +44,21 @@ class ProductModel {
   bool get isLowStock => stock <= lowStockThreshold;
   String get priceLabel => 'Rs ${price.toStringAsFixed(0)}';
 
+  // Local-only round-trip (session persistence), not sent to the backend.
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'price': price,
+        'stock': stock,
+        'description': description,
+        'sku': sku,
+        'cost': cost,
+        'lowStockThreshold': lowStockThreshold,
+        'category': category,
+        'imageUrl': imageUrl,
+        'isActive': isActive,
+      };
+
   ProductModel copyWith({
     String? name, double? price, int? stock, String? description,
     String? sku, double? cost, int? lowStockThreshold, String? category,

@@ -129,6 +129,22 @@ class ReportsNotifier extends StateNotifier<ReportsState> {
 
   Future<void> retry() => _fetch();
 
+  // Unlike retry(), forces a re-fetch even when the active tab's data is
+  // already cached — used by pull-to-refresh.
+  Future<void> refresh() async {
+    switch (state.activeTab) {
+      case ReportsTab.sales:
+        state = state.copyWith(clearSales: true);
+      case ReportsTab.staff:
+        state = state.copyWith(clearStaff: true);
+      case ReportsTab.services:
+        state = state.copyWith(clearServices: true);
+      case ReportsTab.inventory:
+        state = state.copyWith(clearInventory: true);
+    }
+    await _fetch();
+  }
+
   Future<void> _fetch() async {
     final tab = state.activeTab;
     final alreadyLoaded = switch (tab) {

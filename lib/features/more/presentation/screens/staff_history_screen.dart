@@ -8,6 +8,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../features/staff/presentation/providers/staff_provider.dart';
 import '../../../../features/transactions/domain/transaction_models.dart';
 import '../../../../features/transactions/presentation/providers/transactions_provider.dart';
+import '../../../../shared/widgets/pull_to_refresh.dart';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -107,7 +108,12 @@ class StaffHistoryScreen extends HookConsumerWidget {
 
             // ── List ─────────────────────────────────────────────────────────
             Expanded(
-              child: txState.isLoading
+              child: PullToRefresh(
+                onRefresh: () => Future.wait([
+                  notifier.refresh(),
+                  ref.refresh(staffDetailProvider(staffId).future),
+                ]),
+                child: txState.isLoading
                   ? const Center(child: CircularProgressIndicator())
                   : txState.error != null && txState.items.isEmpty
                       ? _ErrorState(
@@ -117,6 +123,7 @@ class StaffHistoryScreen extends HookConsumerWidget {
                       : grouped.isEmpty
                           ? const _EmptyState()
                           : ListView.builder(
+                              physics: const AlwaysScrollableScrollPhysics(),
                               controller: scrollCtrl,
                               padding:
                                   const EdgeInsets.fromLTRB(20, 0, 20, 32),
@@ -125,7 +132,8 @@ class StaffHistoryScreen extends HookConsumerWidget {
                               itemBuilder: (context, index) => _buildListItem(
                                   context, index, grouped, txState),
                             ),
-            ),
+                ),
+              ),
           ],
         ),
       ),

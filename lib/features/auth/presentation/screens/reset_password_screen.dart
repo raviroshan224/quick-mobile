@@ -246,7 +246,10 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
           const SizedBox(height: 24),
           Center(
             child: GestureDetector(
-              onTap: () => context.go(AppRoutes.forgotPassword),
+              onTap: () {
+                ref.read(authProvider.notifier).clearError();
+                context.go(AppRoutes.forgotPassword);
+              },
               child: Text(
                 'Resend code',
                 style: AppTextStyles.bodySmall.copyWith(

@@ -5,6 +5,7 @@ import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../features/cash_drawer/domain/cash_drawer_models.dart';
 import '../../../../features/cash_drawer/presentation/providers/cash_drawer_provider.dart';
+import '../../../../shared/widgets/pull_to_refresh.dart';
 
 class DrawersScreen extends ConsumerWidget {
   const DrawersScreen({super.key});
@@ -30,13 +31,16 @@ class DrawersScreen extends ConsumerWidget {
                 color: Colors.black)),
         centerTitle: true,
       ),
-      body: drawerAsync.when(
+      body: PullToRefresh(
+        onRefresh: () => ref.read(cashDrawerNotifierProvider.notifier).refresh(),
+        child: drawerAsync.when(
         loading: () =>
             const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Error: $e')),
         data: (session) => session == null
             ? _ClosedState(ref: ref)
             : _OpenState(session: session, ref: ref),
+        ),
       ),
     );
   }
@@ -209,7 +213,26 @@ class _OpenState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // The opening float is a real cash-drawer event (it's part of
+    // currentBalance's math — see CashDrawerSession.currentBalance) but the
+    // backend only ever records Pay In/Pay Out as CashMovement rows, not
+    // the drawer's own openBalance. Without this, "Movements" looks empty
+    // right after opening a drawer even though the balance card above
+    // already reflects that starting cash. Synthesized client-side only —
+    // never sent anywhere, just displayed as the oldest entry.
+    final openingEntry = CashMovementEntry(
+      id: 'opening-${session.id}',
+      type: CashMovementType.cashIn,
+      amount: session.openBalance,
+      reason: (session.notes?.isNotEmpty ?? false)
+          ? 'Opening balance — ${session.notes}'
+          : 'Opening balance',
+      createdAt: session.openedAt,
+    );
+    final allEntries = [...session.movements, openingEntry];
+
     return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(20),
       children: [
         // Balance card
@@ -276,7 +299,7 @@ class _OpenState extends StatelessWidget {
             style: TextStyle(
                 fontSize: 15, fontWeight: FontWeight.w600)),
         const SizedBox(height: 12),
-        ...session.movements.map((m) => _MovementRow(entry: m)),
+        ...allEntries.map((m) => _MovementRow(entry: m)),
       ],
     );
   }

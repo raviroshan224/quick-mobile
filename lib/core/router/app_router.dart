@@ -11,7 +11,6 @@ import '../../features/auth/presentation/screens/forgot_password_screen.dart';
 import '../../features/auth/presentation/screens/reset_password_screen.dart';
 import '../../features/auth/presentation/screens/profile_picker_screen.dart';
 import '../../features/checkout/presentation/screens/checkout_screen.dart';
-import '../../features/pos/presentation/screens/receipt_screen.dart';
 import '../../features/transactions/presentation/screens/transactions_screen.dart';
 import '../../features/transactions/presentation/screens/transaction_detail_screen.dart';
 import '../../features/notifications/presentation/screens/notifications_screen.dart';
@@ -148,9 +147,6 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
               path: AppRoutes.checkout,
               builder: (_, _) => const CheckoutScreen()),
-          GoRoute(
-              path: AppRoutes.posReceipt,
-              builder: (_, _) => const ReceiptScreen()),
           GoRoute(
               path: AppRoutes.transactions,
               builder: (_, _) => const TransactionsScreen()),

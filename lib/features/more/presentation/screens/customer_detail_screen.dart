@@ -7,6 +7,7 @@ import '../../../../features/customers/domain/customer_models.dart';
 import '../../../../features/customers/presentation/providers/customers_provider.dart';
 import '../../../../features/transactions/domain/transaction_models.dart';
 import '../../../../features/transactions/presentation/providers/transactions_provider.dart';
+import '../../../../shared/widgets/pull_to_refresh.dart';
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 
@@ -21,7 +22,12 @@ class CustomerDetailScreen extends ConsumerWidget {
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
-        child: customerAsync.when(
+        child: PullToRefresh(
+          onRefresh: () => Future.wait([
+            ref.refresh(customerDetailProvider(customerId).future),
+            ref.refresh(customerTransactionsProvider(customerId).future),
+          ]),
+          child: customerAsync.when(
           loading: () => Column(
             children: [
               _Header(
@@ -55,6 +61,7 @@ class CustomerDetailScreen extends ConsumerWidget {
                   context.push(AppRoutes.customerEdit(customerId)),
             );
           },
+          ),
         ),
       ),
     );
@@ -129,6 +136,7 @@ class _CustomerDetailBody extends ConsumerWidget {
         _Header(customerId: customer.id, onEdit: onEdit),
         Expanded(
           child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.only(bottom: 40),
             children: [
               // ── Hero section ──────────────────────────────────────

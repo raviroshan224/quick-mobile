@@ -1,7 +1,11 @@
 import 'dart:math';
+import 'package:uuid/uuid.dart';
+import '../../../core/models/app_exception.dart';
 import '../../../core/models/paginated_response.dart';
 import '../../../core/network/api_client.dart';
 import '../domain/staff_models.dart';
+
+const _uuid = Uuid();
 
 class StaffRepository {
   StaffRepository(this._api);
@@ -9,7 +13,12 @@ class StaffRepository {
 
   // Staff sign in with a PIN, not a password — the account still needs one
   // internally, so generate a random one the owner never sees or shares.
-  String _generatePassword() {
+  // Public so a caller that needs createWithAccount() to be safely retryable
+  // (see StaffFormScreen) can generate one up front and keep sending the
+  // exact same value on every retry of the same logical attempt — the
+  // password is part of the /auth/register body, and the idempotency check
+  // below only matches a retry whose body is byte-identical to the original.
+  String generatePassword() {
     final rand = Random.secure();
     const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
     const lower = 'abcdefghijkmnopqrstuvwxyz';
@@ -39,6 +48,18 @@ class StaffRepository {
   //    staff sign in with their PIN, not this)
   // 2. POST /staff → creates the Staff profile linked to that user
   // 3. PATCH /auth/staff/:id/pin → sets the sign-in PIN
+  //
+  // Step 1 alone is retry-safe: it's idempotent server-side (see
+  // AuthController.register), keyed off [idempotencyKey]/[password]. If the
+  // caller doesn't pass them, fresh ones are generated here — fine for a
+  // one-shot call, but a caller that wants a *retry* (e.g. after a client
+  // timeout where the request may have actually succeeded) must pass the
+  // exact same [idempotencyKey] and [password] it used the first time, or
+  // the retry becomes indistinguishable from a brand new signup attempt and
+  // fails with "Email already in use" against the account step 1 already
+  // created — see StaffFormScreen, which is the only caller and does this.
+  // Steps 2/3 are not idempotent — a caller retrying after those partially
+  // succeeded would need separate handling, not covered here.
   Future<({StaffModel staff, String email})> createWithAccount({
     required String firstName,
     required String lastName,
@@ -53,18 +74,55 @@ class StaffRepository {
     String? emergencyRelationship,
     String? address,
     String? govIdType,
+    String? password,
+    String? idempotencyKey,
   }) async {
-    final resolvedEmail = (email != null && email.isNotEmpty)
-        ? email
-        : '${firstName.toLowerCase()}${lastName.toLowerCase()}$phone@quickpos.staff';
+    // Nobody ever sees or uses this address — staff sign in with a PIN, not
+    // email — so it's just an internal identifier the backend's User model
+    // requires. Kept short and readable rather than stuffing the phone
+    // number into it. Only collision risk is two staff sharing a first+last
+    // name, handled below by retrying once with a short disambiguator
+    // rather than surfacing a confusing "email already in use" for an
+    // address the owner never typed and will never see.
+    final usingSyntheticEmail = email == null || email.isEmpty;
+    var resolvedEmail = usingSyntheticEmail
+        ? '${firstName.toLowerCase()}${lastName.toLowerCase()}@quick.staff'
+        : email;
 
     // Step 1: create user account.
-    final userResult = await _api.post('/auth/register', data: {
-      'email': resolvedEmail,
-      'firstName': firstName,
-      'lastName': lastName,
-      'password': _generatePassword(),
-    }) as Map<String, dynamic>;
+    Map<String, dynamic> userResult;
+    try {
+      userResult = await _api.post(
+        '/auth/register',
+        data: {
+          'email': resolvedEmail,
+          'firstName': firstName,
+          'lastName': lastName,
+          'password': password ?? generatePassword(),
+        },
+        headers: {'Idempotency-Key': idempotencyKey ?? _uuid.v4()},
+      ) as Map<String, dynamic>;
+    } on AppException catch (e) {
+      if (!usingSyntheticEmail || !e.isConflict) rethrow;
+      final suffix = (phone != null && phone.length >= 4)
+          ? phone.substring(phone.length - 4)
+          : _uuid.v4().substring(0, 4);
+      resolvedEmail =
+          '${firstName.toLowerCase()}${lastName.toLowerCase()}$suffix@quick.staff';
+      // A different email is a genuinely different request — always a
+      // fresh idempotency key here, never the caller's, so the backend
+      // can't mistake this for a retry of the first (failed) attempt.
+      userResult = await _api.post(
+        '/auth/register',
+        data: {
+          'email': resolvedEmail,
+          'firstName': firstName,
+          'lastName': lastName,
+          'password': password ?? generatePassword(),
+        },
+        headers: {'Idempotency-Key': _uuid.v4()},
+      ) as Map<String, dynamic>;
+    }
 
     final userId = (userResult['user'] as Map<String, dynamic>?)?['id'] as String? ??
         userResult['id'] as String? ??

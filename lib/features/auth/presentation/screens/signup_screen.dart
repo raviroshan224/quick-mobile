@@ -15,6 +15,7 @@ class SignupScreen extends ConsumerStatefulWidget {
 
 class _SignupScreenState extends ConsumerState<SignupScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _companyNameCtrl = TextEditingController();
   final _firstNameCtrl = TextEditingController();
   final _lastNameCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
@@ -23,6 +24,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
 
   @override
   void dispose() {
+    _companyNameCtrl.dispose();
     _firstNameCtrl.dispose();
     _lastNameCtrl.dispose();
     _emailCtrl.dispose();
@@ -33,6 +35,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
   Future<void> _submit() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     await ref.read(authProvider.notifier).signup(
+          _companyNameCtrl.text.trim(),
           _firstNameCtrl.text.trim(),
           _lastNameCtrl.text.trim(),
           _emailCtrl.text.trim(),
@@ -119,6 +122,21 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
             style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary),
           ),
           const SizedBox(height: 32),
+
+          _FieldLabel('Salon name'),
+          const SizedBox(height: 8),
+          TextFormField(
+            controller: _companyNameCtrl,
+            textCapitalization: TextCapitalization.words,
+            textInputAction: TextInputAction.next,
+            decoration: const InputDecoration(
+              hintText: "Jane's Salon",
+              prefixIcon: Icon(Icons.storefront_outlined, size: 18),
+            ),
+            validator: (v) =>
+                (v == null || v.trim().isEmpty) ? 'Salon name is required' : null,
+          ),
+          const SizedBox(height: 20),
 
           // First + Last name row
           Row(
@@ -247,7 +265,10 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                     style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary)),
                 const SizedBox(width: 4),
                 GestureDetector(
-                  onTap: () => context.go(AppRoutes.login),
+                  onTap: () {
+                    ref.read(authProvider.notifier).clearError();
+                    context.go(AppRoutes.login);
+                  },
                   child: Text(
                     'Sign in',
                     style: AppTextStyles.bodySmall.copyWith(

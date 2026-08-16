@@ -10,6 +10,7 @@ import '../../../../features/transactions/data/transactions_repository.dart';
 import '../../../../features/transactions/domain/transaction_models.dart';
 import '../../../../core/network/api_client.dart';
 import 'settings_screen.dart' show salonSettingsProvider;
+import '../../../../shared/widgets/pull_to_refresh.dart';
 
 // UTC ISO string with ms precision — Dart's toIso8601String() produces 6-decimal
 // microseconds that JS's Date constructor rejects.
@@ -134,7 +135,14 @@ class MyProfileScreen extends ConsumerWidget {
 
             // ── Body ─────────────────────────────────────────────────────
             Expanded(
-              child: staffAsync.when(
+              child: PullToRefresh(
+                onRefresh: () => Future.wait([
+                  ref.refresh(_myStaffProfileProvider.future),
+                  ref.refresh(_myWeekStatsProvider.future),
+                  ref.refresh(_myMonthStatsProvider.future),
+                  ref.refresh(_myRecentTxProvider.future),
+                ]),
+                child: staffAsync.when(
                 loading: () =>
                     const Center(child: CircularProgressIndicator()),
                 error: (err, st) =>
@@ -145,6 +153,7 @@ class MyProfileScreen extends ConsumerWidget {
                   }
                   return _ProfileBody(ref: ref, staff: staff);
                 },
+                ),
               ),
             ),
           ],
@@ -178,6 +187,7 @@ class _ProfileBody extends ConsumerWidget {
         : 0;
 
     return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
       children: [
         // ── Profile hero card ─────────────────────────────────────────

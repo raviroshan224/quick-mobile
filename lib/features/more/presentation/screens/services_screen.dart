@@ -4,8 +4,10 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../features/auth/presentation/providers/auth_provider.dart';
+import '../../../../features/services/domain/service_colors.dart';
 import '../../../../features/services/domain/service_models.dart';
 import '../../../../features/services/presentation/providers/services_provider.dart';
+import '../../../../shared/widgets/pull_to_refresh.dart';
 
 class ServicesScreen extends ConsumerStatefulWidget {
   const ServicesScreen({super.key});
@@ -18,13 +20,6 @@ class _ServicesScreenState extends ConsumerState<ServicesScreen> {
   String _search = '';
   String? _selectedCategoryId;
 
-  static const _catColors = {
-    'cat-1': Color(0xFFE8EDD6), // Hair — olive-50
-    'cat-2': Color(0xFFEEEEEB), // Nails — warm grey
-    'cat-3': Color(0xFFD1FAE5), // Skin — green (keep semantic)
-    'cat-4': Color(0xFFDCE0C8), // Makeup — deeper olive
-    'cat-5': Color(0xFFFFEDD5), // Massage — orange (keep warm)
-  };
   @override
   Widget build(BuildContext context) {
     final isOwner = ref.watch(isOwnerProvider);
@@ -54,7 +49,12 @@ class _ServicesScreenState extends ConsumerState<ServicesScreen> {
           ),
         ],
       ),
-      body: servicesAsync.when(
+      body: PullToRefresh(
+        onRefresh: () => Future.wait([
+          ref.refresh(servicesListProvider.future),
+          ref.refresh(serviceCategoriesListProvider.future),
+        ]),
+        child: servicesAsync.when(
         loading: () =>
             const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Error: $e')),
@@ -132,6 +132,7 @@ class _ServicesScreenState extends ConsumerState<ServicesScreen> {
               // Grid grouped by category
               Expanded(
                 child: GridView.builder(
+                  physics: const AlwaysScrollableScrollPhysics(),
                   padding: const EdgeInsets.fromLTRB(14, 8, 14, 16),
                   gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 3,
@@ -142,10 +143,9 @@ class _ServicesScreenState extends ConsumerState<ServicesScreen> {
                   itemCount: filtered.length,
                   itemBuilder: (_, i) {
                     final s = filtered[i];
-                    final catId = s.category?.id ?? '';
                     return _ServiceGridCard(
                       service: s,
-                      bg: _catColors[catId] ?? AppColors.surfaceVariant,
+                      bg: resolveServiceColor(s).bg,
                       onTap: isOwner ? () => context.push(
                           AppRoutes.serviceEdit(s.id)) : null,
                     );
@@ -155,6 +155,7 @@ class _ServicesScreenState extends ConsumerState<ServicesScreen> {
             ],
           );
         },
+        ),
       ),
     );
   }

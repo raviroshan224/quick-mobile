@@ -40,7 +40,7 @@ class ManualDiscountSheet extends HookConsumerWidget {
     final errorText = useState<String?>(null);
     // Only prefill/offer "Remove" for a manually-entered discount — a
     // catalog discount (discountId != null) isn't editable from here.
-    final cartDiscount = ref.watch(cartProvider).discount;
+    final cartDiscount = ref.watch(activeCartProvider).discount;
     final current =
         cartDiscount != null && cartDiscount.discountId == null ? cartDiscount : null;
 
@@ -73,7 +73,7 @@ class ManualDiscountSheet extends HookConsumerWidget {
         return;
       }
       errorText.value = null;
-      ref.read(cartProvider.notifier).applyDiscount(
+      ref.read(activeCartNotifierProvider).applyDiscount(
             selectedType.value.label(val),
             val,
             isPercentage: selectedType.value == ManualDiscountType.percentage,
@@ -289,7 +289,7 @@ class ManualDiscountSheet extends HookConsumerWidget {
                       Expanded(
                         child: OutlinedButton(
                           onPressed: () {
-                            ref.read(cartProvider.notifier).clearDiscount();
+                            ref.read(activeCartNotifierProvider).clearDiscount();
                             Navigator.pop(context);
                           },
                           style: OutlinedButton.styleFrom(

@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -7,6 +6,7 @@ import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../features/image_library/models/image_asset_model.dart';
 import '../../../../features/image_library/presentation/providers/image_library_provider.dart';
+import '../../../../shared/widgets/pull_to_refresh.dart';
 
 // type filter → API string
 const _kTypes = <String, String?>{
@@ -76,7 +76,7 @@ class _ImageLibraryScreenState extends ConsumerState<ImageLibraryScreen> {
 
     try {
       await ref.read(imageLibraryNotifierProvider.notifier).upload(
-            file: File(picked.path),
+            file: picked,
             type: type,
             name: nameCtrl.text.trim(),
           );
@@ -294,7 +294,9 @@ class _ImageLibraryScreenState extends ConsumerState<ImageLibraryScreen> {
 
             // Content
             Expanded(
-              child: imagesAsync.when(
+              child: PullToRefresh(
+                onRefresh: () => ref.read(imageLibraryNotifierProvider.notifier).refresh(),
+                child: imagesAsync.when(
                 loading: () => const Center(child: CircularProgressIndicator()),
                 error: (e, _) => Center(
                   child: Column(
@@ -336,6 +338,7 @@ class _ImageLibraryScreenState extends ConsumerState<ImageLibraryScreen> {
                       const SizedBox(height: 10),
                       Expanded(
                         child: GridView.builder(
+                          physics: const AlwaysScrollableScrollPhysics(),
                           padding: const EdgeInsets.fromLTRB(20, 0, 20, 120),
                           gridDelegate:
                               const SliverGridDelegateWithFixedCrossAxisCount(
@@ -355,6 +358,7 @@ class _ImageLibraryScreenState extends ConsumerState<ImageLibraryScreen> {
                     ],
                   );
                 },
+              ),
               ),
             ),
           ],

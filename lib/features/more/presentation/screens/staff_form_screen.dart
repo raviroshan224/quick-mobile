@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:uuid/uuid.dart';
 import '../../../../features/staff/data/staff_repository.dart';
+import '../../../../features/staff/presentation/providers/staff_provider.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../features/staff/domain/staff_models.dart';
 import '../../../../core/network/api_client.dart';
@@ -10,6 +12,7 @@ import '../../../../shared/widgets/image_picker_sheet.dart';
 import '../../../../features/transactions/presentation/providers/transactions_provider.dart';
 import '../../../../features/auth/data/auth_repository.dart';
 import '../../../../core/storage/secure_storage_service.dart';
+import '../../../../core/utils/pin_validator.dart';
 import 'settings_screen.dart' show salonSettingsProvider;
 
 // ─── Avatar colors (must stay in sync with staff_screen.dart) ─────────────────
@@ -80,11 +83,38 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
 
   bool _isActive = true;
   bool _loading = true;
+  // Collapsed by default when creating (keeps the common case — name,
+  // phone, PIN — short); expanded by default when editing, since an owner
+  // opening an existing staff member's profile likely wants to see what's
+  // already filled in, not have it hidden behind a tap.
+  late bool _showAdditional = widget.isEditing;
 
   Set<String> _selectedSpecialties = {};
   final _commissionCtrl = TextEditingController();
 
   StaffModel? _original;
+
+  // Retry-safety for _saveNew(): the account-creation step (POST
+  // /auth/register) is idempotent server-side, keyed off these two values
+  // staying byte-identical across a retry — see
+  // StaffRepository.createWithAccount(). Minted lazily on the first save
+  // attempt and reused as long as the identifying fields haven't changed
+  // since; regenerated if they have, since that's a genuinely different
+  // signup, not a retry of the same one. Without this, a client-side
+  // timeout on a request that actually succeeded server-side left the form
+  // permanently stuck: every retry recomputed the same synthesized email
+  // and got "Email already in use" from the account the first attempt had
+  // already created.
+  String? _pendingPassword;
+  String? _pendingIdempotencyKey;
+  String? _pendingRequestSignature;
+
+  String _requestSignature() => [
+        _previewFirstName,
+        _previewLastName,
+        _mobileCtrl.text.trim(),
+        _emailCtrl.text.trim().toLowerCase(),
+      ].join('|');
 
   @override
   void initState() {
@@ -220,6 +250,9 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
             ? null
             : _addressCtrl.text.trim(),
       );
+      ref.invalidate(staffListProvider);
+      ref.invalidate(activeStaffListProvider);
+      ref.invalidate(staffDetailProvider(widget.staffId!));
       if (mounted) context.go('/more/staff/${widget.staffId}');
     } catch (e) {
       if (mounted) {
@@ -238,6 +271,19 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
       final repo = ref.read(_staffRepoProvider);
       final rawEmail = _emailCtrl.text.trim().toLowerCase();
       final phone = _mobileCtrl.text.trim();
+
+      // Reuse the same password/idempotency-key as last time only if
+      // nothing identifying has changed since — otherwise this is a
+      // genuinely new signup, not a retry, and reusing stale tokens would
+      // make the idempotency check reject it as "same key, different
+      // payload" instead of letting it through.
+      final signature = _requestSignature();
+      if (_pendingRequestSignature != signature) {
+        _pendingRequestSignature = signature;
+        _pendingPassword = repo.generatePassword();
+        _pendingIdempotencyKey = const Uuid().v4();
+      }
+
       final result = await repo.createWithAccount(
         firstName: _previewFirstName,
         lastName: _previewLastName,
@@ -260,7 +306,16 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
             ? null
             : _addressCtrl.text.trim(),
         govIdType: _govIdType,
+        password: _pendingPassword,
+        idempotencyKey: _pendingIdempotencyKey,
       );
+      // Done — nothing left to retry, so these must not be reused if the
+      // owner comes back to this screen later to add someone else.
+      _pendingPassword = null;
+      _pendingIdempotencyKey = null;
+      _pendingRequestSignature = null;
+      ref.invalidate(staffListProvider);
+      ref.invalidate(activeStaffListProvider);
       if (mounted) _showCreatedDialog(result.email);
     } catch (e) {
       if (mounted) {
@@ -372,7 +427,7 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
                     validator: (v) {
                       if (v == null || v.length != 4) return 'PIN must be 4 digits';
                       if (!RegExp(r'^\d{4}$').hasMatch(v)) return 'Digits only';
-                      return null;
+                      return weakPinError(v);
                     },
                   ),
                   const SizedBox(height: 12),
@@ -465,6 +520,12 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
               Navigator.pop(ctx);
               try {
                 await ref.read(_staffRepoProvider).delete(widget.staffId!);
+                // The list/detail screens read from cached FutureProviders
+                // that never refetch on their own — without this, the
+                // removed staff member keeps showing until the app is
+                // fully restarted, making the removal look like it failed.
+                ref.invalidate(staffListProvider);
+                ref.invalidate(activeStaffListProvider);
                 if (mounted) context.go('/more/staff');
               } catch (e) {
                 if (mounted) {
@@ -551,8 +612,11 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
                       ),
                     ),
 
-                    // ── Basic Information ──────────────────────────────────
-                    const _SectionHeader(label: 'Basic Information'),
+                    // ── Required Information ───────────────────────────────
+                    _SectionHeader(
+                        label: widget.isEditing
+                            ? 'Basic Information'
+                            : 'Required Information'),
                     _FormCard(
                       children: [
                         _Field(
@@ -586,7 +650,102 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
                                 : null,
                           ),
                         ),
-                        const _FieldDivider(),
+                        if (!widget.isEditing) ...[
+                          const _FieldDivider(),
+                          _Field(
+                            label: 'PIN *',
+                            child: TextFormField(
+                              controller: _pinCtrl,
+                              keyboardType: TextInputType.number,
+                              obscureText: true,
+                              maxLength: 4,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.digitsOnly,
+                              ],
+                              decoration: const InputDecoration(
+                                hintText: '4-digit sign-in PIN',
+                                counterText: '',
+                              ),
+                              validator: (v) {
+                                if (v == null || v.length != 4) {
+                                  return 'PIN must be 4 digits';
+                                }
+                                return weakPinError(v);
+                              },
+                            ),
+                          ),
+                          const _FieldDivider(),
+                          _Field(
+                            label: 'Confirm PIN *',
+                            child: TextFormField(
+                              controller: _confirmPinCtrl,
+                              keyboardType: TextInputType.number,
+                              obscureText: true,
+                              maxLength: 4,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.digitsOnly,
+                              ],
+                              decoration: const InputDecoration(
+                                hintText: 'Re-enter PIN',
+                                counterText: '',
+                              ),
+                              validator: (v) {
+                                if (v != _pinCtrl.text) {
+                                  return 'PINs do not match';
+                                }
+                                return null;
+                              },
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+
+                    // ── Additional Information (collapsible) ───────────────
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+                      child: GestureDetector(
+                        onTap: () =>
+                            setState(() => _showAdditional = !_showAdditional),
+                        child: Row(
+                          children: [
+                            const Text(
+                              'ADDITIONAL INFORMATION',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.8,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Icon(
+                              _showAdditional
+                                  ? Icons.keyboard_arrow_up_rounded
+                                  : Icons.keyboard_arrow_down_rounded,
+                              size: 18,
+                              color: AppColors.textSecondary,
+                            ),
+                            const Spacer(),
+                            if (!_showAdditional)
+                              const Text(
+                                'Optional',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: AppColors.textTertiary,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    if (!_showAdditional) const SizedBox(height: 4),
+
+                    if (_showAdditional) ...[
+                    // ── Contact ─────────────────────────────────────────────
+                    const _SectionHeader(label: 'Contact'),
+                    _FormCard(
+                      children: [
                         _Field(
                           label: 'Email',
                           child: TextFormField(
@@ -968,59 +1127,8 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
                       ],
                     ),
 
-                    // ── Sign-in PIN ─────────────────────────────────────────
-                    if (!widget.isEditing) ...[
-                      const _SectionHeader(label: 'Sign-in PIN'),
-                      _FormCard(
-                        children: [
-                          _Field(
-                            label: 'PIN',
-                            child: TextFormField(
-                              controller: _pinCtrl,
-                              keyboardType: TextInputType.number,
-                              obscureText: true,
-                              maxLength: 4,
-                              inputFormatters: [
-                                FilteringTextInputFormatter.digitsOnly,
-                              ],
-                              decoration: const InputDecoration(
-                                hintText: '4-digit PIN',
-                                counterText: '',
-                              ),
-                              validator: (v) {
-                                if (v == null || v.length != 4) {
-                                  return 'PIN must be 4 digits';
-                                }
-                                return null;
-                              },
-                            ),
-                          ),
-                          const _FieldDivider(),
-                          _Field(
-                            label: 'Confirm PIN',
-                            child: TextFormField(
-                              controller: _confirmPinCtrl,
-                              keyboardType: TextInputType.number,
-                              obscureText: true,
-                              maxLength: 4,
-                              inputFormatters: [
-                                FilteringTextInputFormatter.digitsOnly,
-                              ],
-                              decoration: const InputDecoration(
-                                hintText: 'Re-enter PIN',
-                                counterText: '',
-                              ),
-                              validator: (v) {
-                                if (v != _pinCtrl.text) {
-                                  return 'PINs do not match';
-                                }
-                                return null;
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
+                    ], // end of _showAdditional block
+
                     if (widget.isEditing) ...[
                       Padding(
                         padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),

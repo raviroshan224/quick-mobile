@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../models/app_exception.dart';
@@ -39,7 +41,10 @@ class RefreshInterceptor extends Interceptor {
   final FlutterSecureStorage storage;
   final void Function() onUnauthenticated;
 
-  bool _isRefreshing = false;
+  // Non-null while a token refresh triggered by a concurrent 401 is in
+  // flight — lets sibling requests that 401 at the same moment await the
+  // same refresh and retry, instead of each independently failing.
+  Future<String?>? _refreshFuture;
 
   // Clears current session keys but preserves owner_* keys so the profile
   // picker can restore the owner session without a full re-login.
@@ -60,18 +65,48 @@ class RefreshInterceptor extends Interceptor {
     final response = err.response;
     final path = err.requestOptions.path;
 
+    // pin-login is a public credential-check endpoint (like /auth/login) —
+    // a 401 from it means "wrong PIN", not "access token expired". Treating
+    // it as the latter reads the *owner's* currently-active refresh token
+    // (the profile picker runs under the owner's session) and can rotate or
+    // clear it over a simple wrong-PIN entry, corrupting the owner's session
+    // for an error that has nothing to do with them.
     if (response?.statusCode == 401 &&
         !path.contains('/auth/refresh-token') &&
         !path.contains('/auth/login') &&
-        !path.contains('/auth/verify-otp') &&
-        !_isRefreshing) {
-      _isRefreshing = true;
+        !path.contains('/auth/pin-login') &&
+        !path.contains('/auth/verify-otp')) {
+      if (_refreshFuture != null) {
+        // A refresh triggered by another concurrent request is already in
+        // flight — await it and retry this request with the resulting
+        // token instead of failing it outright (the old behavior: only the
+        // first concurrent 401 got refreshed-and-retried, every other one
+        // failed even though the token was fixed a moment later).
+        try {
+          final newAccess = await _refreshFuture;
+          if (newAccess == null) {
+            handler.reject(err);
+            return;
+          }
+          final opts = err.requestOptions;
+          opts.headers['Authorization'] = 'Bearer $newAccess';
+          final retryResponse = await dio.fetch(opts);
+          handler.resolve(retryResponse);
+        } catch (_) {
+          handler.reject(err);
+        }
+        return;
+      }
+
+      final refreshCompleter = Completer<String?>();
+      _refreshFuture = refreshCompleter.future;
       try {
         final refreshToken = await storage.read(key: _kRefreshToken);
         if (refreshToken == null) {
-          _isRefreshing = false;
           await _clearSession(storage);
           onUnauthenticated();
+          refreshCompleter.complete(null);
+          _refreshFuture = null;
           handler.reject(err);
           return;
         }
@@ -85,12 +120,13 @@ class RefreshInterceptor extends Interceptor {
         final newAccess = data['accessToken'] as String;
         final newRefresh = data['refreshToken'] as String? ?? refreshToken;
 
-        await Future.wait([
-          storage.write(key: _kAccessToken, value: newAccess),
-          storage.write(key: _kRefreshToken, value: newRefresh),
-        ]);
+        // Sequential, not Future.wait — see secure_storage_service.dart's
+        // saveTokens for why parallel writes race on the web backend.
+        await storage.write(key: _kAccessToken, value: newAccess);
+        await storage.write(key: _kRefreshToken, value: newRefresh);
 
-        _isRefreshing = false;
+        refreshCompleter.complete(newAccess);
+        _refreshFuture = null;
 
         // Retry the original request with the new token.
         final opts = err.requestOptions;
@@ -98,7 +134,6 @@ class RefreshInterceptor extends Interceptor {
         final retryResponse = await dio.fetch(opts);
         handler.resolve(retryResponse);
       } catch (e) {
-        _isRefreshing = false;
         // A connection-level failure (DNS/timeout/no signal) during refresh
         // doesn't mean the refresh token is invalid — don't force a logout
         // for what's likely a transient network blip. Only clear the
@@ -108,6 +143,8 @@ class RefreshInterceptor extends Interceptor {
           await _clearSession(storage);
           onUnauthenticated();
         }
+        if (!refreshCompleter.isCompleted) refreshCompleter.complete(null);
+        _refreshFuture = null;
         handler.reject(err);
       }
       return;
@@ -196,6 +233,67 @@ class ConnectivityInterceptor extends Interceptor {
   }
 }
 
+// ─── Debug Logger ─────────────────────────────────────────────────────────────
+
+// Paths whose request/response bodies carry a password, PIN, or raw token —
+// never printed, even in debug builds, since debug logs are commonly shared
+// with QA/testers and are readable by other apps with log access on some
+// Android versions.
+const _sensitiveBodyPaths = [
+  '/auth/login',
+  '/auth/signup',
+  '/auth/register',
+  '/auth/pin-login',
+  '/auth/set-pin',
+  '/auth/staff/', // covers /auth/staff/:id/pin
+  '/auth/reset-password',
+  '/auth/refresh-token',
+];
+
+// Debug-only request/response logger. Deliberately not Dio's built-in
+// LogInterceptor: that logs the live RequestOptions/Response objects
+// directly, including the real Authorization header and body — there's no
+// way to redact just for the printed line without risking mutating the
+// object actually sent over the wire. This prints its own, separately
+// redacted string instead, so the real request/response are never touched.
+class DebugLogInterceptor extends Interceptor {
+  bool _isSensitive(String path) =>
+      _sensitiveBodyPaths.any((p) => path.contains(p));
+
+  @override
+  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
+    final sensitive = _isSensitive(options.path);
+    final body = sensitive ? '[redacted]' : options.data;
+    debugPrint(
+      '→ ${options.method} ${options.path} '
+      '${options.queryParameters.isNotEmpty ? options.queryParameters : ''} '
+      'body=$body',
+    );
+    handler.next(options);
+  }
+
+  @override
+  void onResponse(Response response, ResponseInterceptorHandler handler) {
+    final sensitive = _isSensitive(response.requestOptions.path);
+    final body = sensitive ? '[redacted]' : response.data;
+    debugPrint(
+      '← ${response.statusCode} ${response.requestOptions.path} body=$body',
+    );
+    handler.next(response);
+  }
+
+  @override
+  void onError(DioException err, ErrorInterceptorHandler handler) {
+    final sensitive = _isSensitive(err.requestOptions.path);
+    final body = sensitive ? '[redacted]' : err.response?.data;
+    debugPrint(
+      '✕ ${err.response?.statusCode} ${err.requestOptions.path} '
+      'body=$body error=${err.message}',
+    );
+    handler.next(err);
+  }
+}
+
 // ─── Error Interceptor ────────────────────────────────────────────────────────
 
 class ErrorInterceptor extends Interceptor {
@@ -234,6 +332,32 @@ class ErrorInterceptor extends Interceptor {
   }
 
   String _friendlyMessage(DioException err) {
+    // These four types share one trait real users need explained simply
+    // (no internet / cert / cancel) but that's exactly what makes them a
+    // dead end for debugging — a connectionError from a genuine dropped
+    // wifi connection and one from a CORS rejection or a misconfigured
+    // base URL look identical to the person tapping the button. In debug
+    // builds, show what Dio actually reported (its message includes the
+    // browser's raw fetch/XHR failure text on web, which is often the only
+    // place a CORS block ever surfaces) instead of the friendly copy —
+    // release builds are unaffected.
+    if (kDebugMode) {
+      switch (err.type) {
+        case DioExceptionType.connectionError:
+        case DioExceptionType.connectionTimeout:
+        case DioExceptionType.sendTimeout:
+        case DioExceptionType.receiveTimeout:
+        case DioExceptionType.badCertificate:
+          final uri = err.requestOptions.uri;
+          return '[DEBUG] ${err.type.name} calling $uri: '
+              '${err.message ?? err.error ?? "no further detail from Dio"}';
+        case DioExceptionType.cancel:
+        case DioExceptionType.badResponse:
+        case DioExceptionType.unknown:
+          break; // fall through to the normal messages below
+      }
+    }
+
     switch (err.type) {
       case DioExceptionType.connectionError:
         return 'No internet connection. Please check your network and try again.';

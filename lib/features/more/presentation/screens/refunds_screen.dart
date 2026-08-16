@@ -8,6 +8,7 @@ import 'package:shimmer/shimmer.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../features/transactions/domain/transaction_models.dart';
 import '../../../../features/transactions/presentation/providers/transactions_provider.dart';
+import '../../../../shared/widgets/pull_to_refresh.dart';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -58,7 +59,9 @@ class RefundsScreen extends ConsumerWidget {
 
             // ── Content ───────────────────────────────────────────────────
             Expanded(
-              child: histState.isLoading
+              child: PullToRefresh(
+                onRefresh: notifier.refresh,
+                child: histState.isLoading
                   ? const _RefundSkeleton()
                   : histState.error != null && histState.items.isEmpty
                       ? _ErrorState(onRetry: notifier.refresh)
@@ -66,7 +69,8 @@ class RefundsScreen extends ConsumerWidget {
                           ? const _EmptyState()
                           : _RefundList(
                               state: histState, notifier: notifier),
-            ),
+                ),
+              ),
           ],
         ),
       ),
@@ -97,6 +101,7 @@ class _RefundList extends HookWidget {
     }, [scrollCtrl]);
 
     return ListView.builder(
+      physics: const AlwaysScrollableScrollPhysics(),
       controller: scrollCtrl,
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
       itemCount: state.items.length + (state.isLoadingMore ? 1 : 0),

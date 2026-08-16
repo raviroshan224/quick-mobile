@@ -131,7 +131,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             children: [
               _FieldLabel('Password'),
               GestureDetector(
-                onTap: () => context.go(AppRoutes.forgotPassword),
+                onTap: () {
+                  ref.read(authProvider.notifier).clearError();
+                  context.go(AppRoutes.forgotPassword);
+                },
                 child: Text(
                   'Forgot password?',
                   style: AppTextStyles.bodySmall.copyWith(
@@ -193,7 +196,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary)),
                 const SizedBox(width: 4),
                 GestureDetector(
-                  onTap: () => context.go(AppRoutes.signup),
+                  onTap: () {
+                    ref.read(authProvider.notifier).clearError();
+                    context.go(AppRoutes.signup);
+                  },
                   child: Text(
                     'Create account',
                     style: AppTextStyles.bodySmall.copyWith(

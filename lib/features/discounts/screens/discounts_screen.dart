@@ -6,6 +6,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../features/auth/presentation/providers/auth_provider.dart';
 import '../models/discount_model.dart';
 import '../providers/discounts_provider.dart';
+import '../../../shared/widgets/pull_to_refresh.dart';
 
 class DiscountsScreen extends ConsumerWidget {
   const DiscountsScreen({super.key});
@@ -37,7 +38,9 @@ class DiscountsScreen extends ConsumerWidget {
           ),
         ],
       ),
-      body: discountsAsync.when(
+      body: PullToRefresh(
+        onRefresh: () => ref.refresh(discountsProvider.future),
+        child: discountsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Error: $e')),
         data: (discounts) {
@@ -46,6 +49,7 @@ class DiscountsScreen extends ConsumerWidget {
           return discounts.isEmpty
               ? _EmptyState(onAdd: isOwner ? () => context.push('/more/discounts/new') : null)
               : ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.only(bottom: 24),
               children: [
                 if (active.isNotEmpty) ...[
@@ -83,6 +87,7 @@ class DiscountsScreen extends ConsumerWidget {
               ],
             );
         },
+        ),
       ),
     );
   }

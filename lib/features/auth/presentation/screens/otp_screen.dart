@@ -78,7 +78,10 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                   children: [
                     IconButton(
                       icon: const Icon(Icons.arrow_back_rounded),
-                      onPressed: () => context.go(AppRoutes.login),
+                      onPressed: () {
+                        ref.read(authProvider.notifier).cancelPendingOtp();
+                        context.go(AppRoutes.login);
+                      },
                       padding: EdgeInsets.zero,
                     ),
                     const SizedBox(height: 12),

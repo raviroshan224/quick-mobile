@@ -6,6 +6,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../features/staff/domain/staff_models.dart';
 import '../../../../features/staff/presentation/providers/staff_provider.dart';
 import 'settings_screen.dart' show salonSettingsProvider;
+import '../../../../shared/widgets/pull_to_refresh.dart';
 
 // ─── Avatar colors (cycle by index) ───────────────────────────────────────────
 
@@ -85,7 +86,9 @@ class _StaffScreenState extends ConsumerState<StaffScreen> {
             const SizedBox(height: 8),
             // ── List ───────────────────────────────────────────────────────
             Expanded(
-              child: staffAsync.when(
+              child: PullToRefresh(
+                onRefresh: () => ref.refresh(staffListProvider.future),
+                child: staffAsync.when(
                 loading: () =>
                     const Center(child: CircularProgressIndicator()),
                 error: (e, _) =>
@@ -106,6 +109,7 @@ class _StaffScreenState extends ConsumerState<StaffScreen> {
                   }
 
                   return ListView.separated(
+                    physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
                     itemCount: filtered.length,
                     separatorBuilder: (_, _) =>
@@ -123,6 +127,7 @@ class _StaffScreenState extends ConsumerState<StaffScreen> {
                     },
                   );
                 },
+                ),
               ),
             ),
           ],

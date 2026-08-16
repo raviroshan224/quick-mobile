@@ -8,6 +8,7 @@ import '../../../../features/auth/presentation/providers/auth_provider.dart';
 import '../../../../features/reports/domain/reports_models.dart';
 import '../../../../features/reports/presentation/providers/reports_provider.dart';
 import 'settings_screen.dart' show salonSettingsProvider;
+import '../../../../shared/widgets/pull_to_refresh.dart';
 
 // ─── Formatting ───────────────────────────────────────────────────────────────
 
@@ -146,11 +147,14 @@ class ReportsScreen extends HookConsumerWidget {
 
             // ── Body ──────────────────────────────────────────────────────
             Expanded(
-              child: _TabBody(
-                tabIndex: tabIndex.value,
-                state: state,
-                onRetry: notifier.retry,
-                commissionEnabled: commissionEnabled,
+              child: PullToRefresh(
+                onRefresh: notifier.refresh,
+                child: _TabBody(
+                  tabIndex: tabIndex.value,
+                  state: state,
+                  onRetry: notifier.retry,
+                  commissionEnabled: commissionEnabled,
+                ),
               ),
             ),
           ],
@@ -427,6 +431,7 @@ class _SalesTab extends StatelessWidget {
     final split = s.byPaymentMethod['SPLIT'] ?? 0.0;
 
     return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
       children: [
         // ── Revenue hero ──────────────────────────────────────────────────
@@ -478,6 +483,49 @@ class _SalesTab extends StatelessWidget {
         ),
 
         const SizedBox(height: 20),
+
+        // ── Salon checkout: Service Value / Manual Adjustments / Final
+        // Collected — kept as its own section, separate from "Discounts"
+        // in the hero card above. A manual adjustment (the cashier-entered
+        // Final Payable Amount) is a different mechanism from a catalog
+        // discount and is never mixed into that figure.
+        if (s.serviceValue != 0 || s.manualAdjustments != 0) ...[
+          const _SectionLabel('Salon Checkout'),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceVariant,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppColors.divider),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _LightMetric(
+                    label: 'Service Value',
+                    value: _npr(s.serviceValue),
+                  ),
+                ),
+                Container(width: 1, height: 32, color: AppColors.divider),
+                Expanded(
+                  child: _LightMetric(
+                    label: 'Manual Adjustments',
+                    value: '${s.manualAdjustments > 0 ? '+' : '-'}'
+                        '${_npr(s.manualAdjustments.abs())}',
+                  ),
+                ),
+                Container(width: 1, height: 32, color: AppColors.divider),
+                Expanded(
+                  child: _LightMetric(
+                    label: 'Final Collected',
+                    value: _npr(s.finalCollectedAmount),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+        ],
 
         // ── Payment method breakdown ──────────────────────────────────────
         const _SectionLabel('Payment Methods'),
@@ -549,6 +597,28 @@ class _SummaryMetric extends StatelessWidget {
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
                   color: Colors.white)),
+          const SizedBox(height: 2),
+          Text(label,
+              style: const TextStyle(fontSize: 11, color: AppColors.textTertiary)),
+        ],
+      );
+}
+
+// Same layout as _SummaryMetric, but dark text for a light card background
+// (the hero card above is black; the "Salon Checkout" card is not).
+class _LightMetric extends StatelessWidget {
+  const _LightMetric({required this.label, required this.value});
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) => Column(
+        children: [
+          Text(value,
+              style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textPrimary)),
           const SizedBox(height: 2),
           Text(label,
               style: const TextStyle(fontSize: 11, color: AppColors.textTertiary)),
@@ -677,6 +747,7 @@ class _StaffTab extends HookWidget {
     }
 
     return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
       children: [
         Container(
@@ -900,6 +971,7 @@ class _ServicesTab extends HookWidget {
         sorted.map((s) => s.bookingCount).fold(0, (m, v) => v > m ? v : m);
 
     return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
       children: [
         // Sort toggle
@@ -1081,6 +1153,7 @@ class _InventoryTab extends StatelessWidget {
     final low = r.products.where((p) => p.status == 'low').toList();
 
     return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
       children: [
         // ── Critical alert ────────────────────────────────────────────────

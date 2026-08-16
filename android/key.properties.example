@@ -1,0 +1,15 @@
+# Copy this file to android/key.properties (git-ignored — never commit the
+# real one) and fill in your production keystore details. Generate a
+# keystore with:
+#
+#   keytool -genkey -v -keystore ~/quick-release.jks -keyalg RSA \
+#     -keysize 2048 -validity 10000 -alias quick
+#
+# See https://flutter.dev/to/reference-keystore for the full walkthrough.
+# Once this file exists, `android/app/build.gradle.kts` automatically signs
+# release builds with it instead of the debug key.
+
+storePassword=
+keyPassword=
+keyAlias=quick
+storeFile=/absolute/path/to/quick-release.jks

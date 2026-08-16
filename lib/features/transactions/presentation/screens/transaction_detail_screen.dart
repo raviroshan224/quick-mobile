@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -9,6 +10,7 @@ import '../../data/transactions_repository.dart';
 import '../../domain/transaction_models.dart';
 import '../providers/transactions_provider.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../shared/widgets/pull_to_refresh.dart';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -35,7 +37,10 @@ class TransactionDetailScreen extends HookConsumerWidget {
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
-        child: txAsync.when(
+        child: PullToRefresh(
+          onRefresh: () =>
+              ref.refresh(transactionDetailProvider(transactionId).future),
+          child: txAsync.when(
           loading: () => Column(
             children: [
               _Header(title: 'Transaction', onBack: () => Navigator.of(context).pop()),
@@ -86,6 +91,7 @@ class TransactionDetailScreen extends HookConsumerWidget {
             ],
           ),
           data: (tx) => _DetailBody(transaction: tx),
+          ),
         ),
       ),
     );
@@ -108,6 +114,7 @@ class _DetailBody extends HookConsumerWidget {
         ),
         Expanded(
           child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -153,6 +160,19 @@ class _DetailBody extends HookConsumerWidget {
 
                 const SizedBox(height: 14),
 
+                // ── Pending Fonepay payment ────────────────────────────────
+                // Safety net for "the app closed/crashed while this sale was
+                // still awaiting Fonepay confirmation" — without this, a
+                // PENDING transaction is only actionable from the checkout
+                // sheet's own local state, which doesn't survive a restart.
+                // Reachable here any time from the transaction list/detail,
+                // independent of how the app got here.
+                if (transaction.status == TransactionStatus.pending &&
+                    transaction.paymentMethod == TxPaymentMethod.fonepay) ...[
+                  _PendingFonepayPanel(transaction: transaction),
+                  const SizedBox(height: 14),
+                ],
+
                 // ── Items ──────────────────────────────────────────────────
                 if (transaction.items != null &&
                     transaction.items!.isNotEmpty) ...[
@@ -197,6 +217,16 @@ class _DetailBody extends HookConsumerWidget {
                         _SummaryRow(
                           label: 'Discount',
                           value: '– ${_formatNpr(transaction.discountAmount!)}',
+                          valueColor: const Color(0xFF16A34A),
+                        ),
+                        const SizedBox(height: 6),
+                      ],
+                      if (transaction.hasManualAdjustment) ...[
+                        _SummaryRow(
+                          label: 'Manual Adjustment',
+                          value:
+                              '${transaction.manualAdjustment! > 0 ? '+' : '–'} '
+                              '${_formatNpr(transaction.manualAdjustment!.abs())}',
                           valueColor: const Color(0xFF16A34A),
                         ),
                         const SizedBox(height: 6),
@@ -297,6 +327,174 @@ class _DetailBody extends HookConsumerWidget {
   }
 }
 
+// ─── Pending Fonepay action panel ─────────────────────────────────────────────
+
+class _PendingFonepayPanel extends HookConsumerWidget {
+  const _PendingFonepayPanel({required this.transaction});
+  final Transaction transaction;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final refCtrl = useTextEditingController();
+    final verifying = useState(false);
+    final cancelling = useState(false);
+    final error = useState<String?>(null);
+
+    void refreshAfterResolution() {
+      ref.invalidate(transactionDetailProvider(transaction.id));
+      ref.invalidate(transactionListProvider);
+      ref.invalidate(refundHistoryProvider);
+      ref.invalidate(todayRevenueProvider);
+      ref.invalidate(dashboardProvider);
+    }
+
+    Future<void> verify() async {
+      final reference = refCtrl.text.trim();
+      if (reference.isEmpty) {
+        error.value = 'Enter the Fonepay reference number';
+        return;
+      }
+      verifying.value = true;
+      error.value = null;
+      try {
+        await ref
+            .read(_detailRepoProvider)
+            .verifyFonepay(transaction.id, reference);
+        if (!context.mounted) return;
+        refreshAfterResolution();
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Payment verified'),
+          backgroundColor: Colors.black,
+          behavior: SnackBarBehavior.floating,
+        ));
+      } catch (e) {
+        error.value = e.toString();
+      } finally {
+        if (context.mounted) verifying.value = false;
+      }
+    }
+
+    Future<void> cancel() async {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Cancel this sale?'),
+          content: const Text(
+              'This releases the held stock. Only do this if the customer never actually paid.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Back'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Cancel Sale',
+                  style: TextStyle(color: AppColors.danger)),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+      cancelling.value = true;
+      error.value = null;
+      try {
+        await ref.read(_detailRepoProvider).cancelPendingFonepay(transaction.id);
+        if (!context.mounted) return;
+        refreshAfterResolution();
+      } catch (e) {
+        error.value = e.toString();
+      } finally {
+        if (context.mounted) cancelling.value = false;
+      }
+    }
+
+    final busy = verifying.value || cancelling.value;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0FDF4),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFF6BBD44).withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.hourglass_top_rounded, size: 16, color: Color(0xFF6BBD44)),
+              SizedBox(width: 6),
+              Text('Awaiting Fonepay payment',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+            ],
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'This sale is still pending — it has no receipt and isn\'t counted as '
+            'revenue until verified. Enter the Fonepay reference number once the '
+            'customer has paid.',
+            style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: refCtrl,
+            enabled: !busy,
+            textCapitalization: TextCapitalization.characters,
+            decoration: InputDecoration(
+              hintText: 'Fonepay reference number',
+              filled: true,
+              fillColor: Colors.white,
+              errorText: error.value,
+              isDense: true,
+              border: OutlineInputBorder(
+                borderSide: BorderSide.none,
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: busy ? null : cancel,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.danger,
+                    side: const BorderSide(color: AppColors.danger),
+                  ),
+                  child: cancelling.value
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Cancel Sale'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: FilledButton(
+                  onPressed: busy ? null : verify,
+                  style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF6BBD44)),
+                  child: verifying.value
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Text('Verify Payment'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 // ─── Refund sheet ─────────────────────────────────────────────────────────────
 
 class _RefundSheet extends HookConsumerWidget {
@@ -309,28 +507,15 @@ class _RefundSheet extends HookConsumerWidget {
     final refundQtys =
         useState<List<int>>(List.filled(items.length, 0));
     final fullRefund = useState(false);
-    final customMode = useState(false);
-    final customAmountCtrl = useTextEditingController();
-    final customAmountError = useState<String?>(null);
     final reasonCtrl = useTextEditingController();
     final reasonError = useState<String?>(null);
     final processing = useState(false);
 
     void toggleFull(bool val) {
       fullRefund.value = val;
-      if (val) customMode.value = false;
       refundQtys.value = val
           ? items.map((i) => i.maxRefundable).toList()
           : List.filled(items.length, 0);
-    }
-
-    void toggleCustom(bool val) {
-      customMode.value = val;
-      if (val) {
-        fullRefund.value = false;
-        refundQtys.value = List.filled(items.length, 0);
-      }
-      customAmountError.value = null;
     }
 
     void setQty(int idx, int qty) {
@@ -343,67 +528,70 @@ class _RefundSheet extends HookConsumerWidget {
               .every((e) => e.value == items[e.key].maxRefundable);
     }
 
-    double refundTotal() {
-      if (customMode.value) {
-        return double.tryParse(customAmountCtrl.text.trim()) ?? 0.0;
+    // Rough local estimate — used only to decide whether there's anything
+    // to preview at all. Never shown to the user or submitted; the real
+    // amount (tax- and discount-accurate) comes from the server preview
+    // below, since raw unitPrice sums can't account for either.
+    bool hasAnySelection() =>
+        fullRefund.value || refundQtys.value.any((q) => q > 0);
+
+    // Authoritative refund amount from the server — refetched whenever the
+    // selection changes, exactly mirroring the checkout quote pattern (see
+    // ReviewSaleSheet): the client cannot itself compute tax/discount
+    // proration, so "Confirm Refund" is gated on this being fresh and
+    // successful rather than ever letting the cashier confirm a guessed
+    // number.
+    final preview = useState<double?>(null);
+    final previewing = useState(false);
+    final previewError = useState<String?>(null);
+
+    useEffect(() {
+      if (!hasAnySelection()) {
+        preview.value = null;
+        previewError.value = null;
+        previewing.value = false;
+        return null;
       }
-      if (fullRefund.value && items.isEmpty) return transaction.total;
-      return refundQtys.value.asMap().entries.fold(
-          0.0, (s, e) => s + e.value * items[e.key].unitPrice);
-    }
+      var cancelled = false;
+      previewing.value = true;
+      preview.value = null;
+      previewError.value = null;
+      final timer = Timer(const Duration(milliseconds: 350), () {
+        final requestItems = fullRefund.value && items.isEmpty
+            ? const <({String transactionItemId, int quantity})>[]
+            : items
+                .asMap()
+                .entries
+                .where((e) => refundQtys.value[e.key] > 0)
+                .map((e) => (
+                      transactionItemId: e.value.id,
+                      quantity: refundQtys.value[e.key],
+                    ))
+                .toList();
+        ref
+            .read(_detailRepoProvider)
+            .previewRefund(transaction.id, requestItems)
+            .then((amount) {
+          if (cancelled) return;
+          preview.value = amount;
+          previewing.value = false;
+        }).catchError((dynamic e) {
+          if (cancelled) return;
+          previewError.value = e.toString();
+          previewing.value = false;
+        });
+      });
+      return () {
+        cancelled = true;
+        timer.cancel();
+      };
+    }, [fullRefund.value, refundQtys.value]);
 
     Future<void> confirm() async {
       if (processing.value) return;
       final reason = reasonCtrl.text.trim();
       if (reason.length < 5) {
         reasonError.value = 'Reason must be at least 5 characters';
-        return;
-      }
-
-      if (customMode.value) {
-        final amt = double.tryParse(customAmountCtrl.text.trim()) ?? 0.0;
-        if (amt <= 0) {
-          customAmountError.value = 'Enter a valid amount';
-          return;
-        }
-        if (amt > transaction.total) {
-          customAmountError.value =
-              'Cannot exceed ${_formatNpr(transaction.total)}';
-          return;
-        }
-        processing.value = true;
-        try {
-          await ref
-              .read(_detailRepoProvider)
-              .refund(transaction.id, amount: amt, reason: reason);
-          if (!context.mounted) return;
-          ref.invalidate(transactionDetailProvider(transaction.id));
-          ref.invalidate(transactionListProvider);
-          ref.invalidate(refundHistoryProvider);
-          ref.invalidate(todayRevenueProvider);
-          ref.invalidate(dashboardProvider);
-          Navigator.of(context).pop();
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('Refund of ${_formatNpr(amt)} processed'),
-            backgroundColor: Colors.black,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10)),
-            margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          ));
-        } catch (e) {
-          if (!context.mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('Refund failed: $e'),
-            backgroundColor: AppColors.danger,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10)),
-            margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          ));
-        } finally {
-          if (context.mounted) processing.value = false;
-        }
         return;
       }
 
@@ -414,6 +602,11 @@ class _RefundSheet extends HookConsumerWidget {
             'Select at least one item or enable Full Refund';
         return;
       }
+      // Never submit against a stale/unconfirmed amount — if the preview
+      // hasn't resolved yet (or failed), there's nothing accurate to show
+      // the cashier a receipt for.
+      final confirmedAmount = preview.value;
+      if (confirmedAmount == null || previewing.value) return;
       processing.value = true;
       try {
         final dto = CreateRefundDto(
@@ -438,10 +631,11 @@ class _RefundSheet extends HookConsumerWidget {
         ref.invalidate(transactionListProvider);
         ref.invalidate(refundHistoryProvider);
         ref.invalidate(todayRevenueProvider);
+        ref.invalidate(dashboardProvider);
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(
-              'Refund of ${_formatNpr(refundTotal())} processed'),
+              'Refund of ${_formatNpr(confirmedAmount)} processed'),
           backgroundColor: Colors.black,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
@@ -509,133 +703,26 @@ class _RefundSheet extends HookConsumerWidget {
                 ),
                 const SizedBox(height: 16),
 
-                // Mode toggles
-                if (!customMode.value)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: Row(
-                      children: [
-                        const Text('Full Refund',
-                            style: TextStyle(
-                                fontSize: 14, fontWeight: FontWeight.w600)),
-                        const Spacer(),
-                        Switch(
-                          value: fullRefund.value,
-                          onChanged: toggleFull,
-                          activeThumbColor: Colors.white,
-                          activeTrackColor: Colors.black,
-                        ),
-                      ],
-                    ),
-                  ),
+                // Mode toggle
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: Row(
                     children: [
-                      const Text('Custom Amount',
+                      const Text('Full Refund',
                           style: TextStyle(
                               fontSize: 14, fontWeight: FontWeight.w600)),
                       const Spacer(),
                       Switch(
-                        value: customMode.value,
-                        onChanged: toggleCustom,
+                        value: fullRefund.value,
+                        onChanged: toggleFull,
                         activeThumbColor: Colors.white,
                         activeTrackColor: Colors.black,
                       ),
                     ],
                   ),
                 ),
-
-                // Custom amount field
-                if (customMode.value) ...[
-                  const Divider(height: 1, color: AppColors.divider),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            const Text('AMOUNT',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.textSecondary,
-                                  letterSpacing: 0.8,
-                                )),
-                            const Spacer(),
-                            Text(
-                              'Max ${_formatNpr(transaction.total)}',
-                              style: const TextStyle(
-                                  fontSize: 11,
-                                  color: AppColors.textTertiary),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Container(
-                          decoration: BoxDecoration(
-                            color: AppColors.background,
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                              color: customAmountError.value != null
-                                  ? AppColors.danger
-                                  : AppColors.divider,
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              const Padding(
-                                padding: EdgeInsets.only(left: 14),
-                                child: Text('Rs',
-                                    style: TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.w600,
-                                        color: AppColors.textSecondary)),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: TextField(
-                                  controller: customAmountCtrl,
-                                  keyboardType:
-                                      const TextInputType.numberWithOptions(
-                                          decimal: true),
-                                  style: const TextStyle(
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.w700),
-                                  onChanged: (_) =>
-                                      customAmountError.value = null,
-                                  decoration: InputDecoration(
-                                    hintText: '0.00',
-                                    hintStyle: TextStyle(
-                                        fontSize: 20,
-                                        fontWeight: FontWeight.w700,
-                                        color: Colors.black
-                                            .withValues(alpha: 0.18)),
-                                    border: InputBorder.none,
-                                    contentPadding:
-                                        const EdgeInsets.symmetric(
-                                            vertical: 14),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        if (customAmountError.value != null) ...[
-                          const SizedBox(height: 6),
-                          Text(customAmountError.value!,
-                              style: const TextStyle(
-                                  fontSize: 12,
-                                  color: AppColors.danger)),
-                        ],
-                      ],
-                    ),
-                  ),
-                ],
-
-                // Items (hidden in custom mode)
-                if (!customMode.value && items.isNotEmpty) ...[
+                // Items
+                if (items.isNotEmpty) ...[
                   const Divider(height: 1, color: AppColors.divider),
                   ...items.asMap().entries.map((e) {
                     final item = e.value;
@@ -777,14 +864,27 @@ class _RefundSheet extends HookConsumerWidget {
                               fontSize: 14,
                               fontWeight: FontWeight.w600)),
                       const Spacer(),
-                      Text(
-                        _formatNpr(refundTotal()),
-                        style: const TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.danger,
+                      if (previewing.value)
+                        const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      else if (previewError.value != null)
+                        const Text('Could not confirm amount',
+                            style: TextStyle(
+                                fontSize: 13, color: AppColors.danger))
+                      else
+                        Text(
+                          preview.value != null
+                              ? _formatNpr(preview.value!)
+                              : '—',
+                          style: const TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.danger,
+                          ),
                         ),
-                      ),
                     ],
                   ),
                 ),
@@ -793,13 +893,19 @@ class _RefundSheet extends HookConsumerWidget {
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
                   child: GestureDetector(
-                    onTap: processing.value ? null : confirm,
+                    onTap: (processing.value ||
+                            previewing.value ||
+                            preview.value == null)
+                        ? null
+                        : confirm,
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 150),
                       width: double.infinity,
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       decoration: BoxDecoration(
-                        color: processing.value
+                        color: (processing.value ||
+                                previewing.value ||
+                                preview.value == null)
                             ? AppColors.textSecondary
                             : Colors.black,
                         borderRadius: BorderRadius.circular(14),
