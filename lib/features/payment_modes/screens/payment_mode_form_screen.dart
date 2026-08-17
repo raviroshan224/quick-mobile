@@ -255,7 +255,14 @@ class _PaymentModeFormScreenState extends ConsumerState<PaymentModeFormScreen> {
                             : _qrImageUrl != null
                                 ? ClipRRect(
                                     borderRadius: BorderRadius.circular(10),
-                                    child: Image.network(_qrImageUrl!, fit: BoxFit.contain),
+                                    child: Image.network(
+                                      _qrImageUrl!,
+                                      fit: BoxFit.contain,
+                                      errorBuilder: (_, _, _) => const Icon(
+                                          Icons.broken_image_outlined,
+                                          size: 40,
+                                          color: AppColors.danger),
+                                    ),
                                   )
                                 : const Icon(Icons.qr_code_2_rounded,
                                     size: 56, color: AppColors.textTertiary),
