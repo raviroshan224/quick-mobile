@@ -44,6 +44,7 @@ dependencies:
 
   # Image picking (image library upload)
   image_picker: ^1.1.2
+  image_cropper: ^8.0.2
 
   # URL launching (support contacts — phone, email, WhatsApp)
   url_launcher: ^6.3.1

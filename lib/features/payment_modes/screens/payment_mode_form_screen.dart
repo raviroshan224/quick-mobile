@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_theme.dart';
@@ -49,10 +50,39 @@ class _PaymentModeFormScreenState extends ConsumerState<PaymentModeFormScreen> {
   Future<void> _pickAndUploadQr(ImageSource source) async {
     final picked = await ImagePicker().pickImage(source: source, imageQuality: 90);
     if (picked == null || !mounted) return;
+
+    // QR codes are square and only the code itself matters — cropping
+    // before upload (rather than uploading the raw photo, background and
+    // all) is what makes the saved image actually look like a QR code
+    // instead of a snapshot with a QR code somewhere in it.
+    final cropped = await ImageCropper().cropImage(
+      sourcePath: picked.path,
+      aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
+      compressQuality: 90,
+      uiSettings: [
+        AndroidUiSettings(
+          toolbarTitle: 'Crop QR Code',
+          toolbarColor: Colors.black,
+          toolbarWidgetColor: Colors.white,
+          statusBarLight: true,
+          activeControlsWidgetColor: AppColors.primary,
+          initAspectRatio: CropAspectRatioPreset.square,
+          lockAspectRatio: true,
+        ),
+        IOSUiSettings(
+          title: 'Crop QR Code',
+          aspectRatioLockEnabled: true,
+          resetAspectRatioEnabled: false,
+          aspectRatioPickerButtonHidden: true,
+        ),
+      ],
+    );
+    if (cropped == null || !mounted) return;
+
     setState(() => _uploading = true);
     try {
       final asset = await ref.read(imageLibraryRepoProvider).upload(
-            file: picked,
+            file: XFile(cropped.path),
             type: 'PAYMENT_QR',
             name: _nameCtrl.text.trim().isEmpty ? 'Payment QR' : _nameCtrl.text.trim(),
           );
