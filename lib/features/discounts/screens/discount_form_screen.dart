@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../pos/presentation/providers/cart_provider.dart';
-import '../../pos/presentation/providers/salon_sessions_provider.dart';
 import '../../services/domain/service_models.dart';
 import '../../services/presentation/providers/services_provider.dart';
 import '../models/discount_model.dart';
@@ -137,16 +136,12 @@ class _DiscountFormScreenState extends ConsumerState<DiscountFormScreen> {
           TextButton(
             onPressed: () async {
               Navigator.pop(ctx);
-              // A deleted catalog discount could be sitting applied in ANY
-              // concurrently open session's cart, not just whichever one
-              // happens to be selected right now — check and clear it in
-              // all of them so no session is left referencing a discount
-              // that no longer exists.
-              for (final s in ref.read(salonSessionsProvider).sessions) {
-                final applied = ref.read(cartProvider(s.id)).discount;
-                if (applied?.discountId == widget.discountId) {
-                  ref.read(cartProvider(s.id).notifier).clearDiscount();
-                }
+              // A deleted catalog discount could be sitting applied on the
+              // cart right now — clear it so nothing keeps referencing a
+              // discount that no longer exists.
+              final applied = ref.read(cartProvider).discount;
+              if (applied?.discountId == widget.discountId) {
+                ref.read(cartProvider.notifier).clearDiscount();
               }
               try {
                 await ref

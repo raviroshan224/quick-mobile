@@ -18,6 +18,8 @@ import '../../features/more/presentation/screens/more_screen.dart';
 import '../../features/more/presentation/screens/setup_guide_screen.dart';
 import '../../features/discounts/screens/discounts_screen.dart';
 import '../../features/discounts/screens/discount_form_screen.dart';
+import '../../features/payment_modes/screens/payment_modes_screen.dart';
+import '../../features/payment_modes/screens/payment_mode_form_screen.dart';
 import '../../features/more/presentation/screens/items_screen.dart';
 import '../../features/more/presentation/screens/item_form_screen.dart';
 import '../../features/more/presentation/screens/services_screen.dart';
@@ -95,6 +97,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           '/more/services',
           '/more/items',
           '/more/discounts',
+          '/more/payment-modes',
           '/more/staff',
           '/more/reports',
           '/more/settings',
@@ -233,6 +236,17 @@ final routerProvider = Provider<GoRouter>((ref) {
               path: '/more/discounts/:id',
               builder: (_, state) => DiscountFormScreen(
                     discountId: state.pathParameters['id'],
+                  )),
+          GoRoute(
+              path: AppRoutes.morePaymentModes,
+              builder: (_, _) => const PaymentModesScreen()),
+          GoRoute(
+              path: AppRoutes.morePaymentModesNew,
+              builder: (_, _) => const PaymentModeFormScreen()),
+          GoRoute(
+              path: '/more/payment-modes/:id',
+              builder: (_, state) => PaymentModeFormScreen(
+                    paymentModeId: state.pathParameters['id'],
                   )),
           GoRoute(
               path: AppRoutes.moreStaff,

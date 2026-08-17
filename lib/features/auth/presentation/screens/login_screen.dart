@@ -240,7 +240,7 @@ class _BrandPanel extends StatelessWidget {
           const SizedBox(height: 48),
           _Bullet(icon: Icons.bolt_rounded, text: 'Checkout in under 10 seconds'),
           const SizedBox(height: 12),
-          _Bullet(icon: Icons.qr_code_2_rounded, text: 'Fonepay QR · Cash · Split'),
+          _Bullet(icon: Icons.qr_code_2_rounded, text: 'Cash · eSewa, Fonepay & more via QR'),
           const SizedBox(height: 12),
           _Bullet(icon: Icons.people_alt_rounded, text: 'Customer CRM & staff commissions'),
           const SizedBox(height: 12),

@@ -10,8 +10,6 @@ class ServiceCategory {
         isActive: j['isActive'] as bool? ?? true,
       );
 
-  // Local-only round-trip (session persistence — see SalonSessionsStorage),
-  // not sent to the backend, which never accepts a category shape like this.
   Map<String, dynamic> toJson() => {'id': id, 'name': name, 'isActive': isActive};
 
   ServiceCategory copyWith({String? name, bool? isActive}) =>

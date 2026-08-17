@@ -30,9 +30,9 @@ class _SupportScreenState extends State<SupportScreen> {
     ),
     _FAQ(
       category: 'Checkout',
-      question: 'How do I process a split payment?',
+      question: 'How do I take a payment with eSewa, Fonepay, or another QR method?',
       answer:
-          'Tap "Charge" to open the payment sheet, then tap "Split Payment". Enter the cash amount — Fonepay will automatically fill the remainder. Quick chips (50/50, 25%, 75%) are available for common splits.',
+          'Tap "Charge" to open the payment sheet, then tap the payment mode you configured in More → Settings → Payment Modes. This shows its QR code for the customer to scan and pay — tap "Payment Received" once they\'ve paid.',
     ),
     _FAQ(
       category: 'Checkout',
@@ -84,9 +84,9 @@ class _SupportScreenState extends State<SupportScreen> {
     ),
     _FAQ(
       category: 'Settings',
-      question: 'How do I configure Fonepay?',
+      question: 'How do I add a payment mode like eSewa or Fonepay?',
       answer:
-          'Go to More → Settings → Payment → Fonepay Merchant ID. Enter your merchant ID from your Fonepay business account. Contact Fonepay at fonepay.com to register for a merchant account.',
+          'Go to More → Settings → Payment Modes and tap "Add". Give it a name (e.g. "eSewa") and upload a photo of that account\'s QR code — it will then appear as a payment option at checkout.',
     ),
     _FAQ(
       category: 'Account',

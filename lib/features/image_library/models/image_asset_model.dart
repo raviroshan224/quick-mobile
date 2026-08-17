@@ -1,4 +1,4 @@
-enum ImageAssetType { serviceIcon, staffPhoto, productImage, customerPhoto }
+enum ImageAssetType { serviceIcon, staffPhoto, productImage, customerPhoto, paymentQr }
 
 class ImageAsset {
   final String id;
@@ -27,6 +27,7 @@ class ImageAsset {
         'SERVICE_ICON' => ImageAssetType.serviceIcon,
         'STAFF_PHOTO' => ImageAssetType.staffPhoto,
         'PRODUCT_IMAGE' => ImageAssetType.productImage,
+        'PAYMENT_QR' => ImageAssetType.paymentQr,
         _ => ImageAssetType.customerPhoto,
       };
 }

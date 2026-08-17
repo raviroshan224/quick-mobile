@@ -1,6 +1,6 @@
 enum TransactionStatus { pending, completed, partiallyRefunded, refunded, voided }
 
-enum TxPaymentMethod { cash, fonepay, split }
+enum TxPaymentMethod { cash, other }
 
 class TransactionItem {
   const TransactionItem({
@@ -176,12 +176,16 @@ class Transaction {
     this.staffName,
     this.processedByName,
     this.processedByIsOwner = false,
+    this.paymentModeName,
   });
 
   final String id;
   final String? receiptNumber;
   final TransactionStatus status;
   final TxPaymentMethod paymentMethod;
+  // Name of the owner-configured PaymentMode (see payment_modes feature)
+  // used when paymentMethod == other — e.g. "eSewa". Null for cash.
+  final String? paymentModeName;
   final double? subtotal;
   final double total;
   final bool isGuest;
@@ -264,12 +268,14 @@ class Transaction {
     final processedByFirst = processedBy?['firstName'] as String? ?? '';
     final processedByLast = processedBy?['lastName'] as String? ?? '';
     final processedByFullName = '$processedByFirst $processedByLast'.trim();
+    final paymentMode = j['paymentMode'] as Map<String, dynamic>?;
 
     return Transaction(
       id: j['id'] as String,
       receiptNumber: j['receiptNumber'] as String?,
       status: _parseStatus(statusStr),
       paymentMethod: _parseMethod(methodStr),
+      paymentModeName: paymentMode?['name'] as String?,
       subtotal: (j['subtotal'] as num?)?.toDouble(),
       total: (j['total'] as num? ?? 0).toDouble(),
       isGuest: j['isGuest'] as bool? ?? false,
@@ -301,8 +307,7 @@ class Transaction {
       };
 
   static TxPaymentMethod _parseMethod(String s) => switch (s) {
-        'FONEPAY' => TxPaymentMethod.fonepay,
-        'SPLIT' => TxPaymentMethod.split,
+        'OTHER' => TxPaymentMethod.other,
         _ => TxPaymentMethod.cash,
       };
 }

@@ -52,7 +52,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
                       '• Transaction totals and service details associated with a customer\n\n'
                       '2.3  Transaction Data\n'
                       '• Services or products added to each sale\n'
-                      '• Payment method (Cash / Fonepay / Split)\n'
+                      '• Payment method (Cash / an owner-configured payment mode)\n'
                       '• Discount and tip amounts\n'
                       '• Transaction timestamps and status\n\n'
                       '2.4  Operational Data\n'
@@ -75,7 +75,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
                   title: '4. Data Sharing & Third Parties',
                   body:
                       'We do not sell your data. We share information only as follows:\n\n'
-                      '• Fonepay: when a Fonepay payment is initiated, the transaction amount and your merchant ID are passed to Fonepay to process the payment. Fonepay\'s own privacy policy governs data they collect.\n'
+                      '• Payment modes (eSewa, Fonepay, or any other you configure): Quick does not transmit any transaction data to these services — the QR code you upload is shown directly to the customer, who pays through their own app independently of Quick.\n'
                       '• Email delivery: automated OTP and notification emails are sent through a transactional email service. Only the recipient email address and message content are transmitted.\n'
                       '• Legal requirements: we may disclose information if required by applicable Nepalese law or a valid government order.',
                 ),

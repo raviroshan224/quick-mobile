@@ -694,14 +694,9 @@ class _FiltersSheet extends HookConsumerWidget {
                         onTap: () => paymentState.value = 'CASH',
                       ),
                       _FilterChip(
-                        label: 'Fonepay',
-                        selected: paymentState.value == 'FONEPAY',
-                        onTap: () => paymentState.value = 'FONEPAY',
-                      ),
-                      _FilterChip(
-                        label: 'Split',
-                        selected: paymentState.value == 'SPLIT',
-                        onTap: () => paymentState.value = 'SPLIT',
+                        label: 'Other',
+                        selected: paymentState.value == 'OTHER',
+                        onTap: () => paymentState.value = 'OTHER',
                       ),
                     ],
                   ),
@@ -1088,7 +1083,10 @@ class _TransactionRow extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      _PaymentBadge(method: transaction.paymentMethod),
+                      _PaymentBadge(
+                        method: transaction.paymentMethod,
+                        modeName: transaction.paymentModeName,
+                      ),
                     ],
                   ),
                 ],
@@ -1233,16 +1231,15 @@ class _StatusBadge extends StatelessWidget {
 // ─── Payment badge ────────────────────────────────────────────────────────────
 
 class _PaymentBadge extends StatelessWidget {
-  const _PaymentBadge({required this.method});
+  const _PaymentBadge({required this.method, this.modeName});
   final TxPaymentMethod method;
+  final String? modeName;
 
   @override
   Widget build(BuildContext context) {
     final (label, bg, fg) = switch (method) {
-      TxPaymentMethod.fonepay =>
-        ('Fonepay', const Color(0xFFE8EDD6), const Color(0xFF4D5A2C)),
-      TxPaymentMethod.split =>
-        ('Split', AppColors.primaryLight, AppColors.primaryDark),
+      TxPaymentMethod.other =>
+        (modeName ?? 'Other', AppColors.primaryLight, AppColors.primaryDark),
       _ => ('Cash', AppColors.successLight, const Color(0xFF16A34A)),
     };
     return Container(

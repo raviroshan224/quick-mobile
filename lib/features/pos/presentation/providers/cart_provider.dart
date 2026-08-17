@@ -4,36 +4,15 @@ import '../../../pos/domain/pos_models.dart';
 import '../../../services/domain/service_models.dart';
 import '../../../inventory/domain/inventory_models.dart';
 import '../../../customers/domain/customer_models.dart';
-import '../../../pos/presentation/providers/salon_sessions_provider.dart';
 
 const _uuid = Uuid();
 
-/// One cart per salon session — family-keyed by [SalonSession.id], so each
-/// concurrently open session (Ram's customer, Shyam's customer, ...) has a
-/// genuinely independent instance of this notifier with its own state.
-/// Riverpod creates and holds a separate CartNotifier per distinct id
-/// automatically; nothing about the notifier's own logic needed to change
-/// to get that isolation — see cartProvider below. Mirrors the same
-/// StateNotifierProvider.family pattern already used for BookingsNotifier
-/// in calendar_tab.dart.
 class CartNotifier extends StateNotifier<CartState> {
-  CartNotifier(this.sessionId) : super(const CartState());
-  final String sessionId;
-
-  // '' is the "no session assigned" placeholder id (see
-  // selectedSessionIdProvider) — its cart is meant to be permanently empty
-  // and inert, never a real place to stash items, since there's no session
-  // for it to ever be checked out into. Without this guard, items added
-  // while briefly unassigned (e.g. before session data finishes loading)
-  // would sit here forever — this provider isn't autoDispose — and keep
-  // reappearing every time the user has no session, looking like a phantom
-  // cart that can't be cleared.
-  bool get _isThrowaway => sessionId.isEmpty;
+  CartNotifier() : super(const CartState());
 
   // ── Items ─────────────────────────────────────────────────────────────────
 
   void addService(ServiceModel service, {StaffMember? staff}) {
-    if (_isThrowaway) return;
     final id = _uuid.v4();
     final item = CartItem(
       id: id,
@@ -45,7 +24,6 @@ class CartNotifier extends StateNotifier<CartState> {
   }
 
   void addProduct(ProductModel product) {
-    if (_isThrowaway) return;
     final item = CartItem(
       id: _uuid.v4(),
       product: product,
@@ -163,46 +141,17 @@ class CartNotifier extends StateNotifier<CartState> {
   void clear() {
     state = const CartState();
   }
-
-  // ── Restore (app-start session persistence — see salon_sessions_storage.dart) ──
-  // Only ever called once, immediately after this notifier is first created
-  // for a session id being restored from disk, before any UI has read it —
-  // never during normal use, so this is not a general-purpose "overwrite
-  // the cart" escape hatch.
-  void restore(CartState restored) {
-    state = restored;
-  }
 }
 
 // ─── Providers ────────────────────────────────────────────────────────────────
 
-/// One independent CartNotifier per session id — see the class doc comment
-/// above. Not autoDispose: a session (and its cart) must survive the
-/// cashier navigating away from Checkout and back, or switching to another
-/// session and back, exactly like the old single global cart did.
-final cartProvider = StateNotifierProvider.family<CartNotifier, CartState, String>(
-  (ref, sessionId) => CartNotifier(sessionId),
+final cartProvider = StateNotifierProvider<CartNotifier, CartState>(
+  (ref) => CartNotifier(),
 );
 
-// ─── "Active" convenience providers ────────────────────────────────────────
-//
-// The overwhelming majority of the app only ever needs "whatever cart is
-// currently selected in Checkout" — these two exist so call sites can keep
-// the exact same shape they had before sessions existed
-// (`ref.watch(activeCartProvider)` / `ref.read(activeCartNotifierProvider)`)
-// instead of every one of them having to thread a session id through by
-// hand. Restaurant-style single-session use is just the special case where
-// there's only ever one id to resolve to.
+final activeCartProvider = Provider<CartState>((ref) => ref.watch(cartProvider));
 
-final activeCartProvider = Provider<CartState>((ref) {
-  final sessionId = ref.watch(selectedSessionIdProvider);
-  return ref.watch(cartProvider(sessionId));
-});
-
-final activeCartNotifierProvider = Provider<CartNotifier>((ref) {
-  final sessionId = ref.watch(selectedSessionIdProvider);
-  return ref.watch(cartProvider(sessionId).notifier);
-});
+final activeCartNotifierProvider = Provider<CartNotifier>((ref) => ref.watch(cartProvider.notifier));
 
 final cartItemCountProvider = Provider<int>((ref) => ref.watch(activeCartProvider).itemCount);
 

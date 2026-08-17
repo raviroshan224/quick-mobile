@@ -427,8 +427,7 @@ class _SalesTab extends StatelessWidget {
     final s = summary!;
     final total = s.totalRevenue;
     final cash = s.byPaymentMethod['CASH'] ?? 0.0;
-    final fonepay = s.byPaymentMethod['FONEPAY'] ?? 0.0;
-    final split = s.byPaymentMethod['SPLIT'] ?? 0.0;
+    final other = s.byPaymentMethod['OTHER'] ?? 0.0;
 
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
@@ -539,17 +538,10 @@ class _SalesTab extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
               child: _MethodCard(
-                  label: 'Fonepay',
-                  amount: fonepay,
-                  pct: _pct(fonepay, total),
+                  label: 'Other',
+                  amount: other,
+                  pct: _pct(other, total),
                   color: AppColors.primaryDark)),
-          const SizedBox(width: 10),
-          Expanded(
-              child: _MethodCard(
-                  label: 'Split',
-                  amount: split,
-                  pct: _pct(split, total),
-                  color: const Color(0xFFF59E0B))),
         ]),
 
         const SizedBox(height: 20),
@@ -570,12 +562,8 @@ class _SalesTab extends StatelessWidget {
                   color: AppColors.success),
               const SizedBox(height: 14),
               _MethodBar(
-                  label: 'Fonepay', value: fonepay, total: total,
+                  label: 'Other', value: other, total: total,
                   color: AppColors.primaryDark),
-              const SizedBox(height: 14),
-              _MethodBar(
-                  label: 'Split', value: split, total: total,
-                  color: const Color(0xFFF59E0B)),
             ],
           ),
         ),

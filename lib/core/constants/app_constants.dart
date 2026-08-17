@@ -39,6 +39,9 @@ class AppRoutes {
   static const String moreDiscounts = '/more/discounts';
   static const String moreDiscountsNew = '/more/discounts/new';
   static String moreDiscountEdit(String id) => '/more/discounts/$id';
+  static const String morePaymentModes = '/more/payment-modes';
+  static const String morePaymentModesNew = '/more/payment-modes/new';
+  static String morePaymentModeEdit(String id) => '/more/payment-modes/$id';
   static const String moreCustomers = '/more/customers';
   static const String moreDrawers = '/more/drawers';
   static const String moreReports = '/more/reports';

@@ -133,7 +133,10 @@ class _DetailBody extends HookConsumerWidget {
                         children: [
                           _StatusBadge(status: transaction.status),
                           const Spacer(),
-                          _PaymentBadge(method: transaction.paymentMethod),
+                          _PaymentBadge(
+                            method: transaction.paymentMethod,
+                            modeName: transaction.paymentModeName,
+                          ),
                         ],
                       ),
                       const SizedBox(height: 12),
@@ -159,19 +162,6 @@ class _DetailBody extends HookConsumerWidget {
                 ),
 
                 const SizedBox(height: 14),
-
-                // ── Pending Fonepay payment ────────────────────────────────
-                // Safety net for "the app closed/crashed while this sale was
-                // still awaiting Fonepay confirmation" — without this, a
-                // PENDING transaction is only actionable from the checkout
-                // sheet's own local state, which doesn't survive a restart.
-                // Reachable here any time from the transaction list/detail,
-                // independent of how the app got here.
-                if (transaction.status == TransactionStatus.pending &&
-                    transaction.paymentMethod == TxPaymentMethod.fonepay) ...[
-                  _PendingFonepayPanel(transaction: transaction),
-                  const SizedBox(height: 14),
-                ],
 
                 // ── Items ──────────────────────────────────────────────────
                 if (transaction.items != null &&
@@ -323,174 +313,6 @@ class _DetailBody extends HookConsumerWidget {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => _RefundSheet(transaction: tx),
-    );
-  }
-}
-
-// ─── Pending Fonepay action panel ─────────────────────────────────────────────
-
-class _PendingFonepayPanel extends HookConsumerWidget {
-  const _PendingFonepayPanel({required this.transaction});
-  final Transaction transaction;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final refCtrl = useTextEditingController();
-    final verifying = useState(false);
-    final cancelling = useState(false);
-    final error = useState<String?>(null);
-
-    void refreshAfterResolution() {
-      ref.invalidate(transactionDetailProvider(transaction.id));
-      ref.invalidate(transactionListProvider);
-      ref.invalidate(refundHistoryProvider);
-      ref.invalidate(todayRevenueProvider);
-      ref.invalidate(dashboardProvider);
-    }
-
-    Future<void> verify() async {
-      final reference = refCtrl.text.trim();
-      if (reference.isEmpty) {
-        error.value = 'Enter the Fonepay reference number';
-        return;
-      }
-      verifying.value = true;
-      error.value = null;
-      try {
-        await ref
-            .read(_detailRepoProvider)
-            .verifyFonepay(transaction.id, reference);
-        if (!context.mounted) return;
-        refreshAfterResolution();
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Payment verified'),
-          backgroundColor: Colors.black,
-          behavior: SnackBarBehavior.floating,
-        ));
-      } catch (e) {
-        error.value = e.toString();
-      } finally {
-        if (context.mounted) verifying.value = false;
-      }
-    }
-
-    Future<void> cancel() async {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Cancel this sale?'),
-          content: const Text(
-              'This releases the held stock. Only do this if the customer never actually paid.'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Back'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Cancel Sale',
-                  style: TextStyle(color: AppColors.danger)),
-            ),
-          ],
-        ),
-      );
-      if (confirmed != true) return;
-      cancelling.value = true;
-      error.value = null;
-      try {
-        await ref.read(_detailRepoProvider).cancelPendingFonepay(transaction.id);
-        if (!context.mounted) return;
-        refreshAfterResolution();
-      } catch (e) {
-        error.value = e.toString();
-      } finally {
-        if (context.mounted) cancelling.value = false;
-      }
-    }
-
-    final busy = verifying.value || cancelling.value;
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF0FDF4),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFF6BBD44).withValues(alpha: 0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Row(
-            children: [
-              Icon(Icons.hourglass_top_rounded, size: 16, color: Color(0xFF6BBD44)),
-              SizedBox(width: 6),
-              Text('Awaiting Fonepay payment',
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
-            ],
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            'This sale is still pending — it has no receipt and isn\'t counted as '
-            'revenue until verified. Enter the Fonepay reference number once the '
-            'customer has paid.',
-            style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
-          ),
-          const SizedBox(height: 10),
-          TextField(
-            controller: refCtrl,
-            enabled: !busy,
-            textCapitalization: TextCapitalization.characters,
-            decoration: InputDecoration(
-              hintText: 'Fonepay reference number',
-              filled: true,
-              fillColor: Colors.white,
-              errorText: error.value,
-              isDense: true,
-              border: OutlineInputBorder(
-                borderSide: BorderSide.none,
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: busy ? null : cancel,
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.danger,
-                    side: const BorderSide(color: AppColors.danger),
-                  ),
-                  child: cancelling.value
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('Cancel Sale'),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: FilledButton(
-                  onPressed: busy ? null : verify,
-                  style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xFF6BBD44)),
-                  child: verifying.value
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white),
-                        )
-                      : const Text('Verify Payment'),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
     );
   }
 }
@@ -1234,16 +1056,15 @@ class _StatusBadge extends StatelessWidget {
 // ─── Payment badge ────────────────────────────────────────────────────────────
 
 class _PaymentBadge extends StatelessWidget {
-  const _PaymentBadge({required this.method});
+  const _PaymentBadge({required this.method, this.modeName});
   final TxPaymentMethod method;
+  final String? modeName;
 
   @override
   Widget build(BuildContext context) {
     final (label, bg, fg) = switch (method) {
-      TxPaymentMethod.fonepay =>
-        ('Fonepay', const Color(0xFFE8EDD6), const Color(0xFF4D5A2C)),
-      TxPaymentMethod.split =>
-        ('Split', AppColors.primaryLight, AppColors.primaryDark),
+      TxPaymentMethod.other =>
+        (modeName ?? 'Other', AppColors.primaryLight, AppColors.primaryDark),
       _ => ('Cash', AppColors.successLight, const Color(0xFF16A34A)),
     };
     return Container(

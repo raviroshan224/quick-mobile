@@ -13,11 +13,6 @@ class SalonSettings {
   final String salonName;
   final String address;
   final String phone;
-  final String fonepayId;
-  // Never the real secret — the backend never returns it (write-only). This
-  // only reflects whether one has been configured, so the UI can show
-  // "Configured" / "Not set" without ever handling the actual value.
-  final bool fonepaySecretKeySet;
   final String receiptFooter;
   final bool autoPrintReceipt;
   final bool requireCustomer;
@@ -31,8 +26,6 @@ class SalonSettings {
     this.salonName = 'My Salon',
     this.address = 'Kathmandu, Nepal',
     this.phone = '+977-9800000000',
-    this.fonepayId = '',
-    this.fonepaySecretKeySet = false,
     this.receiptFooter = 'Thank you for visiting!',
     this.autoPrintReceipt = false,
     this.requireCustomer = false,
@@ -47,8 +40,6 @@ class SalonSettings {
     String? salonName,
     String? address,
     String? phone,
-    String? fonepayId,
-    bool? fonepaySecretKeySet,
     String? receiptFooter,
     bool? autoPrintReceipt,
     bool? requireCustomer,
@@ -61,8 +52,6 @@ class SalonSettings {
     salonName: salonName ?? this.salonName,
     address: address ?? this.address,
     phone: phone ?? this.phone,
-    fonepayId: fonepayId ?? this.fonepayId,
-    fonepaySecretKeySet: fonepaySecretKeySet ?? this.fonepaySecretKeySet,
     receiptFooter: receiptFooter ?? this.receiptFooter,
     autoPrintReceipt: autoPrintReceipt ?? this.autoPrintReceipt,
     requireCustomer: requireCustomer ?? this.requireCustomer,
@@ -95,16 +84,13 @@ class _SettingsNotifier extends StateNotifier<SalonSettings> {
       final j = await _repo.get();
       state = SalonSettings(
         salonName: j['salonName'] as String? ?? state.salonName,
-        // The backend has no fields for address/fonepayId under those names
-        // (it's salonAddress/fonePayMerchantId), and has no
-        // autoPrintReceipt/requireCustomer/lowStockAlerts/dailySummary at
-        // all yet — those four stay local-only until the backend supports
-        // them, so they intentionally aren't read from the response here.
+        // The backend has no field for address under that name (it's
+        // salonAddress), and has no autoPrintReceipt/requireCustomer/
+        // lowStockAlerts/dailySummary at all yet — those four stay
+        // local-only until the backend supports them, so they intentionally
+        // aren't read from the response here.
         address: j['salonAddress'] as String? ?? state.address,
         phone: j['salonPhone'] as String? ?? state.phone,
-        fonepayId: j['fonePayMerchantId'] as String? ?? state.fonepayId,
-        fonepaySecretKeySet:
-            j['fonePaySecretKeySet'] as bool? ?? state.fonepaySecretKeySet,
         receiptFooter: j['receiptFooter'] as String? ?? state.receiptFooter,
         autoPrintReceipt: state.autoPrintReceipt,
         requireCustomer: state.requireCustomer,
@@ -139,42 +125,18 @@ class _SettingsNotifier extends StateNotifier<SalonSettings> {
     final previous = state;
     state = s;
     try {
-      final response = await _repo.update({
+      await _repo.update({
         'salonName': s.salonName,
         // See the comment in _load() — these four have no backend field yet,
         // so sending them would make the whole request fail (the API
         // rejects any unrecognized property outright).
         'salonAddress': s.address,
         'salonPhone': s.phone,
-        'fonePayMerchantId': s.fonepayId,
         'receiptFooter': s.receiptFooter,
         'currency': s.currency,
         'commissionEnabled': s.commissionEnabled,
         'staffCanViewCustomerDetails': s.staffCanViewCustomerDetails,
       });
-      // Reconcile fonepaySecretKeySet from the real server response rather
-      // than assuming the write succeeded exactly as requested.
-      state = s.copyWith(
-        fonepaySecretKeySet:
-            response['fonePaySecretKeySet'] as bool? ?? s.fonepaySecretKeySet,
-      );
-    } catch (e) {
-      state = previous;
-      rethrow;
-    }
-  }
-
-  /// Sets the Fonepay secret key specifically — kept separate from update()
-  /// since it's the one field the client only ever sends, never reads back
-  /// as a real value (the backend never returns it).
-  Future<void> updateFonepaySecretKey(String secretKey) async {
-    final previous = state;
-    try {
-      final response = await _repo.update({'fonePaySecretKey': secretKey});
-      state = state.copyWith(
-        fonepaySecretKeySet:
-            response['fonePaySecretKeySet'] as bool? ?? secretKey.isNotEmpty,
-      );
     } catch (e) {
       state = previous;
       rethrow;
@@ -220,70 +182,6 @@ class SettingsScreen extends ConsumerWidget {
       }
     }
 
-    void editFonepaySecretKey() {
-      final ctrl = TextEditingController();
-      final error = ValueNotifier<String?>(null);
-      showDialog(
-        context: context,
-        builder: (ctx) => StatefulBuilder(
-          builder: (ctx, setDialogState) => AlertDialog(
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14)),
-            title: const Text('Fonepay Secret Key',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  settings.fonepaySecretKeySet
-                      ? 'A secret key is already configured. Enter a new one to replace it.'
-                      : 'Required to generate real Fonepay QR codes at checkout.',
-                  style: const TextStyle(
-                      fontSize: 12, color: AppColors.textSecondary),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: ctrl,
-                  autofocus: true,
-                  obscureText: true,
-                  decoration: InputDecoration(
-                    filled: true,
-                    fillColor: AppColors.background,
-                    errorText: error.value,
-                    border: OutlineInputBorder(
-                      borderSide: BorderSide.none,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Cancel',
-                    style: TextStyle(color: AppColors.textSecondary)),
-              ),
-              TextButton(
-                onPressed: () async {
-                  final value = ctrl.text.trim();
-                  if (value.isEmpty) {
-                    setDialogState(() => error.value = 'Secret key cannot be empty');
-                    return;
-                  }
-                  Navigator.pop(ctx);
-                  await saveSetting(() => notifier.updateFonepaySecretKey(value));
-                },
-                child: const Text('Save',
-                    style: TextStyle(
-                        fontWeight: FontWeight.w700, color: Colors.black)),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
 
     void edit(String title, String current, void Function(String) onSave,
         {TextInputType keyboard = TextInputType.text}) {
@@ -399,58 +297,12 @@ class SettingsScreen extends ConsumerWidget {
 
                 // ── Payment ────────────────────────────────────────────────
                 _Section(title: 'Payment', tiles: [
-                  _EditTile(
+                  _NavTile(
                     icon: Icons.qr_code_rounded,
-                    label: 'Fonepay Merchant ID',
-                    value: settings.fonepayId.isEmpty
-                        ? 'Not configured'
-                        : settings.fonepayId,
-                    valueColor: settings.fonepayId.isEmpty
-                        ? AppColors.danger
-                        : null,
-                    onTap: () => edit(
-                      'Fonepay Merchant ID',
-                      settings.fonepayId,
-                      (v) {
-                        if (v.isEmpty) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Merchant ID cannot be empty'),
-                              backgroundColor: AppColors.danger,
-                              behavior: SnackBarBehavior.floating,
-                            ),
-                          );
-                          return;
-                        }
-                        saveSetting(() =>
-                            notifier.update(settings.copyWith(fonepayId: v)));
-                      },
-                      keyboard: TextInputType.number,
-                    ),
-                  ),
-                  _EditTile(
-                    icon: Icons.key_outlined,
-                    label: 'Fonepay Secret Key',
-                    value: settings.fonepaySecretKeySet
-                        ? 'Configured'
-                        : 'Not configured',
-                    valueColor: settings.fonepaySecretKeySet
-                        ? AppColors.success
-                        : AppColors.danger,
-                    onTap: editFonepaySecretKey,
+                    label: 'Payment Modes',
+                    onTap: () => context.push(AppRoutes.morePaymentModes),
                   ),
                 ]),
-                if (settings.fonepayId.isNotEmpty &&
-                    !settings.fonepaySecretKeySet)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
-                    child: Text(
-                      'Both a Merchant ID and Secret Key are required before '
-                      'Fonepay QR checkout will work.',
-                      style: const TextStyle(
-                          fontSize: 12, color: AppColors.danger),
-                    ),
-                  ),
                 const SizedBox(height: 16),
 
                 // ── Receipt ────────────────────────────────────────────────

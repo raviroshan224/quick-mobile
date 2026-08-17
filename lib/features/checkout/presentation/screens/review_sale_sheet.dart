@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:qr_flutter/qr_flutter.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../features/customers/domain/customer_models.dart';
 import '../../../../features/discounts/widgets/discount_picker_sheet.dart';
@@ -12,13 +11,14 @@ import '../../../../features/customers/presentation/providers/customers_provider
 import '../../../../features/dashboard/presentation/providers/dashboard_provider.dart';
 import '../../../../features/pos/domain/pos_models.dart';
 import '../../../../features/pos/presentation/providers/cart_provider.dart';
-import '../../../../features/pos/presentation/providers/salon_sessions_provider.dart';
+import '../../../../features/payment_modes/models/payment_mode_model.dart';
+import '../../../../features/payment_modes/providers/payment_modes_provider.dart';
 import '../../../../features/transactions/data/transactions_repository.dart';
-import '../widgets/session_strip.dart' show pickStaffMember;
+import '../widgets/staff_picker.dart';
 import '../../../../features/transactions/presentation/providers/transactions_provider.dart';
 import '../../../../core/theme/app_theme.dart';
 
-enum _Step { currentSale, charge, cash, qr, split, success }
+enum _Step { currentSale, charge, cash, customPayment, success }
 
 final _reviewRepoProvider = Provider.autoDispose<TransactionsRepository>(
   (ref) => TransactionsRepository(ref.read(apiClientProvider)),
@@ -34,6 +34,9 @@ class ReviewSaleSheet extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final step = useState(_Step.currentSale);
     final method = useState(PaymentMethod.cash);
+    // Only set when method == PaymentMethod.other — which owner-configured
+    // mode (see PaymentMode) the customer is paying via.
+    final selectedMode = useState<PaymentMode?>(null);
     final customer = useState<CustomerModel?>(null);
     final cashInput = useState('0');
     final isProcessing = useState(false);
@@ -113,41 +116,24 @@ class ReviewSaleSheet extends HookConsumerWidget {
       if (confirmedQuote == null) return;
       isProcessing.value = true;
 
-      // Captured once, up front — this sheet is modal (isDismissible:
-      // false) for its entire lifetime, so the selected session can't
-      // change out from under it, but reading it explicitly here (rather
-      // than re-deriving inside the success handler) makes that assumption
-      // visible instead of implicit.
-      final sessionId = ref.read(selectedSessionIdProvider);
       final checkoutCart = ref.read(activeCartProvider);
-
-      final splitCash = method.value == PaymentMethod.split
-          ? double.tryParse(cashInput.value)
-          : null;
-      final splitFonepay = splitCash != null
-          ? (confirmedQuote.total - splitCash).clamp(0.0, confirmedQuote.total)
-          : null;
 
       ref
           .read(_reviewRepoProvider)
           .checkout(
             cart: checkoutCart,
             paymentMethod: method.value,
-            splitCash: splitCash,
-            splitFonepay: splitFonepay,
+            paymentModeId: method.value == PaymentMethod.other
+                ? selectedMode.value?.id
+                : null,
             discountId: checkoutCart.discount?.discountId,
             keypadAmount: checkoutCart.items.isEmpty ? keypadAmount : null,
-            primaryStaffId: ref.read(selectedSalonSessionProvider).primaryStaff?.id,
           )
           .then((_) {
             if (!context.mounted) return;
             completedItems.value = checkoutCart.items;
             completedQuote.value = confirmedQuote;
-            // Removes only this session (clearing its cart as part of
-            // that) — every other concurrently open session is untouched.
-            // If this was the only session, a fresh empty one is created
-            // and selected automatically (see SalonSessionsNotifier).
-            ref.read(salonSessionsProvider.notifier).completeSession(sessionId);
+            ref.read(activeCartNotifierProvider).clear();
             ref.read(transactionListProvider.notifier).refresh();
             ref.invalidate(dashboardProvider);
             ref.invalidate(todayRevenueProvider);
@@ -168,111 +154,22 @@ class ReviewSaleSheet extends HookConsumerWidget {
           });
     }
 
-    // ─── Fonepay: create-pending → verify (see _QRStep) ───────────────────────
-    // Fonepay is never self-attested: entering this step creates a real
-    // PENDING transaction (with a real, signed QR — see checkout()/create()
-    // server-side) that only becomes COMPLETED, gets a receipt, and counts
-    // as revenue once fonepay-verify independently confirms it. Cash/Split
-    // are unaffected and still go through done() as before.
-    final pendingFonepayId = useState<String?>(null);
-    final pendingQrData = useState<String?>(null);
-    final creatingPending = useState(false);
-    final pendingCreateError = useState<String?>(null);
-    final verifying = useState(false);
-    final verifyError = useState<String?>(null);
-
-    Future<void> cancelPendingIfAny() async {
-      final id = pendingFonepayId.value;
-      if (id == null) return;
-      pendingFonepayId.value = null;
-      pendingQrData.value = null;
-      try {
-        await ref.read(_reviewRepoProvider).cancelPendingFonepay(id);
-      } catch (_) {
-        // Best-effort — an abandoned PENDING transaction with no receipt
-        // never counts as revenue regardless, so a failed cancel here just
-        // means stock restoration is delayed rather than lost data.
-      }
-    }
-
-    Future<void> createPendingFonepay() async {
-      final confirmedQuote = quote.value;
-      if (confirmedQuote == null || creatingPending.value) return;
-      creatingPending.value = true;
-      pendingCreateError.value = null;
-      try {
-        final cartAtSubmit = ref.read(activeCartProvider);
-        final result = await ref.read(_reviewRepoProvider).checkout(
-              cart: cartAtSubmit,
-              paymentMethod: PaymentMethod.fonepay,
-              discountId: cartAtSubmit.discount?.discountId,
-              keypadAmount: cartAtSubmit.items.isEmpty ? keypadAmount : null,
-              primaryStaffId:
-                  ref.read(selectedSalonSessionProvider).primaryStaff?.id,
-            );
-        pendingFonepayId.value = result['id'] as String?;
-        pendingQrData.value = result['qrData'] as String?;
-        completedItems.value = cartAtSubmit.items;
-        completedQuote.value = confirmedQuote;
-      } catch (e) {
-        pendingCreateError.value = e.toString();
-      } finally {
-        creatingPending.value = false;
-      }
-    }
-
-    Future<void> verifyFonepayPayment(String reference) async {
-      final id = pendingFonepayId.value;
-      if (id == null || verifying.value) return;
-      verifying.value = true;
-      verifyError.value = null;
-      try {
-        await ref.read(_reviewRepoProvider).verifyFonepay(id, reference);
-        if (!context.mounted) return;
-        pendingFonepayId.value = null;
-        pendingQrData.value = null;
-        // Payment is now actually confirmed — only now does this session
-        // get removed (clearing its cart as part of that). Every other
-        // concurrently open session is untouched.
-        ref
-            .read(salonSessionsProvider.notifier)
-            .completeSession(ref.read(selectedSessionIdProvider));
-        ref.read(transactionListProvider.notifier).refresh();
-        ref.invalidate(dashboardProvider);
-        ref.invalidate(todayRevenueProvider);
-        verifying.value = false;
-        step.value = _Step.success;
-      } catch (e) {
-        verifying.value = false;
-        verifyError.value = e.toString();
-      }
-    }
-
-    void go(PaymentMethod m) {
+    void goCash() {
       // Defensive re-check — the Pick step already disables these taps
       // while unquoted, but a payment method must never be reachable
       // without a confirmed, current total to charge.
       if (quote.value == null) return;
-      method.value = m;
-      // Pre-fill so the page opens ready to confirm: cash=exact total, split=50/50
-      cashInput.value = switch (m) {
-        PaymentMethod.cash => total.toStringAsFixed(0),
-        PaymentMethod.split => (total / 2).toStringAsFixed(0),
-        _ => '0',
-      };
-      step.value = switch (m) {
-        PaymentMethod.cash => _Step.cash,
-        PaymentMethod.fonepay => _Step.qr,
-        PaymentMethod.split => _Step.split,
-      };
-      if (m == PaymentMethod.fonepay) createPendingFonepay();
+      method.value = PaymentMethod.cash;
+      selectedMode.value = null;
+      cashInput.value = total.toStringAsFixed(0);
+      step.value = _Step.cash;
     }
 
-    void backFromQr() {
-      cancelPendingIfAny();
-      pendingCreateError.value = null;
-      verifyError.value = null;
-      step.value = _Step.charge;
+    void goCustom(PaymentMode mode) {
+      if (quote.value == null) return;
+      method.value = PaymentMethod.other;
+      selectedMode.value = mode;
+      step.value = _Step.customPayment;
     }
 
     void onCustomerChanged(CustomerModel? c) {
@@ -286,20 +183,12 @@ class ReviewSaleSheet extends HookConsumerWidget {
     }
 
     return PopScope(
-      // Block the system back gesture specifically while a payment/verify
-      // request is in flight — swiping/backing out mid-submit must not be
-      // able to leave the cart in limbo after a sale may have already gone
-      // through server-side. Normal navigation (including at every other
-      // step) is unaffected.
-      canPop: !isProcessing.value && !creatingPending.value && !verifying.value,
-      onPopInvokedWithResult: (didPop, _) {
-        // The system back gesture (unlike the explicit back-arrow, which
-        // calls backFromQr() directly) doesn't step between _Steps — it
-        // dismisses the whole sheet. If that happens while a PENDING
-        // Fonepay transaction exists, it must still be cancelled rather
-        // than left orphaned.
-        if (didPop) cancelPendingIfAny();
-      },
+      // Block the system back gesture specifically while a payment request
+      // is in flight — swiping/backing out mid-submit must not be able to
+      // leave the cart in limbo after a sale may have already gone through
+      // server-side. Normal navigation (including at every other step) is
+      // unaffected.
+      canPop: !isProcessing.value,
       child: Container(
         height: MediaQuery.of(context).size.height * 0.92,
         decoration: const BoxDecoration(
@@ -323,7 +212,8 @@ class ReviewSaleSheet extends HookConsumerWidget {
           cart: cart,
           onBack: () => step.value = _Step.currentSale,
           onClose: () => Navigator.pop(context),
-          onPick: go,
+          onPickCash: goCash,
+          onPickMode: goCustom,
           isQuoting: quoting.value,
           quoteError: quoteError.value,
           onRetryQuote: () => retryTick.value++,
@@ -336,35 +226,20 @@ class ReviewSaleSheet extends HookConsumerWidget {
           onConfirm: done,
           isProcessing: isProcessing.value,
         ),
-        _Step.qr => _QRStep(
+        _Step.customPayment => _CustomPaymentStep(
+          mode: selectedMode.value!,
           total: total,
           customer: customer.value,
-          onBack: backFromQr,
-          qrData: pendingQrData.value,
-          creatingPending: creatingPending.value,
-          createError: pendingCreateError.value,
-          onRetryCreate: createPendingFonepay,
-          onVerify: verifyFonepayPayment,
-          isVerifying: verifying.value,
-          verifyError: verifyError.value,
-        ),
-        _Step.split => _SplitStep(
-          total: total,
-          cashInput: cashInput,
           onBack: () => step.value = _Step.charge,
           onConfirm: done,
           isProcessing: isProcessing.value,
         ),
         _Step.success => _SuccessStep(
           total: total,
-          method: method.value,
+          methodLabel: method.value == PaymentMethod.cash ? 'Cash' : (selectedMode.value?.name ?? 'Other'),
           customer: customer.value,
           change: method.value == PaymentMethod.cash && tendered > total
               ? tendered - total
-              : null,
-          cashPaid: method.value == PaymentMethod.split ? tendered : null,
-          fonepayPaid: method.value == PaymentMethod.split
-              ? (total - tendered).clamp(0.0, total)
               : null,
           items: completedItems.value,
           subtotal: completedQuote.value?.subtotal,
@@ -797,12 +672,8 @@ class _CartItemsList extends ConsumerWidget {
                               item.name,
                               style: const TextStyle(fontSize: 13),
                             ),
-                            // Per-service staff override — defaults to the
-                            // session's primary staff (shown as an implied
-                            // default in a lighter style) until explicitly
-                            // overridden. Reuses the same picker sheet
-                            // session creation/reassignment uses, rather
-                            // than a second implementation.
+                            // Per-service staff override — unassigned until
+                            // explicitly picked.
                             GestureDetector(
                               onTap: () async {
                                 final staff = await pickStaffMember(
@@ -828,10 +699,7 @@ class _CartItemsList extends ConsumerWidget {
                                   Text(
                                     item.assignedStaff != null
                                         ? item.assignedStaff!.firstName
-                                        : (ref.watch(selectedSalonSessionProvider)
-                                                .primaryStaff
-                                                ?.firstName ??
-                                            'Assign staff'),
+                                        : 'Assign staff',
                                     style: TextStyle(
                                       fontSize: 11,
                                       color: item.assignedStaff != null
@@ -937,7 +805,7 @@ class _ActionRow extends StatelessWidget {
 // The editable total plus payment method — Square/Apple-Pay-style: the
 // amount is shown big and is itself the "tap to edit" control (opens an
 // in-place keypad, no separate screen), and Cash is the prominent default
-// action with Fonepay/Split as secondary options underneath.
+// action with owner-configured payment modes as secondary options underneath.
 
 class _ChargeStep extends HookConsumerWidget {
   const _ChargeStep({
@@ -945,7 +813,8 @@ class _ChargeStep extends HookConsumerWidget {
     required this.cart,
     required this.onBack,
     required this.onClose,
-    required this.onPick,
+    required this.onPickCash,
+    required this.onPickMode,
     required this.isQuoting,
     required this.quoteError,
     required this.onRetryQuote,
@@ -954,7 +823,8 @@ class _ChargeStep extends HookConsumerWidget {
   final CartState cart;
   final VoidCallback onBack;
   final VoidCallback onClose;
-  final ValueChanged<PaymentMethod> onPick;
+  final VoidCallback onPickCash;
+  final ValueChanged<PaymentMode> onPickMode;
   final bool isQuoting;
   final String? quoteError;
   final VoidCallback onRetryQuote;
@@ -1097,38 +967,38 @@ class _ChargeStep extends HookConsumerWidget {
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: _BigBtn(
                       label: 'Cash',
-                      onTap: canPay ? () => onPick(PaymentMethod.cash) : null,
+                      onTap: canPay ? onPickCash : null,
                       enabled: canPay,
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        border: Border.all(color: AppColors.divider),
-                        borderRadius: BorderRadius.circular(14),
+                  // Owner-configured payment modes (see Settings > Payment
+                  // Modes) — each just shows a QR the cashier confirms
+                  // against, no gateway integration behind it.
+                  Consumer(builder: (context, ref, _) {
+                    final modes = ref.watch(paymentModesProvider).valueOrNull ?? const [];
+                    if (modes.isEmpty) return const SizedBox.shrink();
+                    return Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          border: Border.all(color: AppColors.divider),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Column(
+                          children: [
+                            for (final (i, mode) in modes.indexed)
+                              _MethodRow(
+                                icon: Icons.qr_code_rounded,
+                                label: mode.name,
+                                color: AppColors.primary,
+                                onTap: canPay ? () => onPickMode(mode) : null,
+                                showDivider: i < modes.length - 1,
+                              ),
+                          ],
+                        ),
                       ),
-                      child: Column(
-                        children: [
-                          _MethodRow(
-                            icon: Icons.qr_code_rounded,
-                            label: 'Fonepay QR',
-                            color: const Color(0xFF6BBD44),
-                            onTap: canPay ? () => onPick(PaymentMethod.fonepay) : null,
-                            showDivider: true,
-                          ),
-                          _MethodRow(
-                            icon: Icons.call_split_rounded,
-                            label: 'Split Payment',
-                            color: AppColors.primary,
-                            onTap: canPay ? () => onPick(PaymentMethod.split) : null,
-                            showDivider: false,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
+                    );
+                  }),
                   const SizedBox(height: 16),
                 ],
               ],
@@ -1857,102 +1727,67 @@ class _Chip extends StatelessWidget {
   );
 }
 
-// ─── Step 2b: Fonepay QR ──────────────────────────────────────────────────────
+// ─── Step 2b: Custom payment mode (eSewa, Fonepay, ...) ────────────────────
+// Self-attested, same trust model as Cash — no gateway integration behind
+// it. Shows the owner-uploaded QR for this mode; the cashier taps "Payment
+// Received" once the customer has visibly paid.
 
-class _QRStep extends HookWidget {
-  const _QRStep({
+class _CustomPaymentStep extends StatelessWidget {
+  const _CustomPaymentStep({
+    required this.mode,
     required this.total,
     required this.customer,
     required this.onBack,
-    required this.qrData,
-    required this.creatingPending,
-    required this.createError,
-    required this.onRetryCreate,
-    required this.onVerify,
-    required this.isVerifying,
-    required this.verifyError,
+    required this.onConfirm,
+    this.isProcessing = false,
   });
+  final PaymentMode mode;
   final double total;
   final CustomerModel? customer;
   final VoidCallback onBack;
-  // Real, signed Fonepay QR payload from the backend — null while it's
-  // still being created or if creation failed. There is deliberately no
-  // "Payment Received" self-attest button anymore: the only way past this
-  // step is entering the Fonepay reference number below and having
-  // fonepay-verify independently confirm it.
-  final String? qrData;
-  final bool creatingPending;
-  final String? createError;
-  final VoidCallback onRetryCreate;
-  final ValueChanged<String> onVerify;
-  final bool isVerifying;
-  final String? verifyError;
+  final VoidCallback onConfirm;
+  final bool isProcessing;
 
   @override
   Widget build(BuildContext context) {
-    final pulse = useAnimationController(
-      duration: const Duration(milliseconds: 1000),
-    )..repeat(reverse: true);
-    final refCtrl = useTextEditingController();
-
     return Column(
       children: [
-        _BackHeader(title: 'Fonepay QR', onBack: onBack),
+        _BackHeader(title: mode.name, onBack: onBack),
         Expanded(
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 24),
             child: Column(
               children: [
                 const SizedBox(height: 20),
-                // QR card
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(28),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF0FDF4),
+                    color: AppColors.primaryLight,
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
-                      color: const Color(0xFF6BBD44).withValues(alpha: 0.25),
+                      color: AppColors.primary.withValues(alpha: 0.25),
                     ),
                   ),
                   child: Column(
                     children: [
-                      // Header
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Container(
-                            width: 8,
-                            height: 8,
-                            decoration: const BoxDecoration(
-                              color: Color(0xFF6BBD44),
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          const Text(
-                            'FONEPAY',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                              color: Color(0xFF6BBD44),
-                              letterSpacing: 1.5,
-                            ),
-                          ),
-                        ],
+                      Text(
+                        mode.name.toUpperCase(),
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.primary,
+                          letterSpacing: 1.5,
+                        ),
                       ),
                       const SizedBox(height: 20),
-                      // QR code box
                       Container(
-                        width: 190,
-                        height: 190,
+                        width: 220,
+                        height: 220,
                         decoration: BoxDecoration(
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: AppColors.divider,
-                            width: 2,
-                          ),
+                          border: Border.all(color: AppColors.divider, width: 2),
                           boxShadow: [
                             BoxShadow(
                               color: Colors.black.withValues(alpha: 0.06),
@@ -1961,34 +1796,30 @@ class _QRStep extends HookWidget {
                             ),
                           ],
                         ),
-                        child: creatingPending
-                            ? const Center(
-                                child: SizedBox(
-                                  width: 28,
-                                  height: 28,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
-                                ),
-                              )
-                            : createError != null
-                                ? Center(
-                                    child: IconButton(
-                                      icon: const Icon(Icons.refresh_rounded,
-                                          color: AppColors.danger, size: 32),
-                                      onPressed: onRetryCreate,
-                                      tooltip: 'Retry generating QR',
-                                    ),
-                                  )
-                                : qrData != null
-                                    ? Padding(
-                                        padding: const EdgeInsets.all(8),
-                                        child: QrImageView(
-                                          data: qrData!,
-                                          size: 174,
-                                          backgroundColor: Colors.white,
+                        child: Padding(
+                          padding: const EdgeInsets.all(8),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(6),
+                            child: Image.network(
+                              mode.qrImageUrl,
+                              fit: BoxFit.contain,
+                              errorBuilder: (_, _, _) => const Center(
+                                child: Icon(Icons.qr_code_2_rounded,
+                                    size: 150, color: Colors.black87),
+                              ),
+                              loadingBuilder: (context, child, progress) =>
+                                  progress == null
+                                      ? child
+                                      : const Center(
+                                          child: SizedBox(
+                                            width: 28,
+                                            height: 28,
+                                            child: CircularProgressIndicator(strokeWidth: 2),
+                                          ),
                                         ),
-                                      )
-                                    : const Icon(Icons.qr_code_2_rounded,
-                                        size: 150, color: Colors.black87),
+                            ),
+                          ),
+                        ),
                       ),
                       const SizedBox(height: 20),
                       Text(
@@ -1996,7 +1827,7 @@ class _QRStep extends HookWidget {
                         style: const TextStyle(
                           fontSize: 30,
                           fontWeight: FontWeight.w700,
-                          color: Color(0xFF6BBD44),
+                          color: AppColors.primary,
                           letterSpacing: -0.5,
                         ),
                       ),
@@ -2014,264 +1845,20 @@ class _QRStep extends HookWidget {
                   ),
                 ),
                 const SizedBox(height: 24),
-                if (createError != null)
-                  Text(
-                    'Could not generate QR: $createError',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 13, color: AppColors.danger),
-                  )
-                else if (creatingPending)
-                  const Text(
-                    'Generating secure QR code…',
-                    style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
-                  )
-                else ...[
-                  // Waiting pulse
-                  AnimatedBuilder(
-                    animation: pulse,
-                    builder: (_, child) =>
-                        Opacity(opacity: 0.4 + 0.6 * pulse.value, child: child),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: const Color(0xFF6BBD44),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        const Text(
-                          'Waiting for payment…',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  // Steps
-                  ...[
-                    ('1', 'Open Fonepay app'),
-                    ('2', 'Tap "Scan QR" and point camera here'),
-                    ('3', 'Confirm Rs ${total.toStringAsFixed(2)} in the app'),
-                  ].map(
-                    (s) => Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 20,
-                            height: 20,
-                            decoration: BoxDecoration(
-                              color: AppColors.surfaceVariant,
-                              shape: BoxShape.circle,
-                            ),
-                            child: Center(
-                              child: Text(
-                                s.$1,
-                                style: const TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              s.$2,
-                              style: const TextStyle(
-                                fontSize: 13,
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  // The cashier reads this off the Fonepay payment
-                  // notification/app after the customer pays — this is what
-                  // fonepay-verify actually checks against, replacing what
-                  // used to be an unchecked "Payment Received" tap.
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'FONEPAY REFERENCE NUMBER',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textSecondary,
-                        letterSpacing: 0.6,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: refCtrl,
-                    enabled: !isVerifying,
-                    textCapitalization: TextCapitalization.characters,
-                    decoration: InputDecoration(
-                      hintText: 'e.g. FP24081512345',
-                      filled: true,
-                      fillColor: AppColors.background,
-                      errorText: verifyError,
-                      border: OutlineInputBorder(
-                        borderSide: BorderSide.none,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                  ),
-                ],
+                Text(
+                  'Show this to the customer and confirm once they\'ve paid.',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                ),
                 const SizedBox(height: 12),
               ],
             ),
           ),
         ),
         _BigBtn(
-          label: isVerifying ? 'Verifying…' : 'Verify Payment',
-          onTap: (qrData == null || isVerifying)
-              ? null
-              : () {
-                  final ref = refCtrl.text.trim();
-                  if (ref.isEmpty) return;
-                  onVerify(ref);
-                },
-          color: const Color(0xFF6BBD44),
-          isLoading: isVerifying,
-        ),
-        const SizedBox(height: 16),
-      ],
-    );
-  }
-}
-
-// ─── Step 2c: Split ───────────────────────────────────────────────────────────
-
-class _SplitStep extends HookWidget {
-  const _SplitStep({
-    required this.total,
-    required this.cashInput,
-    required this.onBack,
-    required this.onConfirm,
-    this.isProcessing = false,
-  });
-  final double total;
-  final ValueNotifier<String> cashInput;
-  final VoidCallback onBack;
-  final VoidCallback onConfirm;
-  final bool isProcessing;
-
-  @override
-  Widget build(BuildContext context) {
-    final cash = double.tryParse(cashInput.value) ?? 0;
-    final fonepay = (total - cash).clamp(0.0, total);
-    final ok = cash > 0 && fonepay > 0 && cash <= total;
-
-    return Column(
-      children: [
-        _BackHeader(
-          title: 'Split Payment',
-          onBack: onBack,
-          right: Text(
-            'Rs ${total.toStringAsFixed(2)}',
-            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-          ),
-        ),
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Column(
-              children: [
-                const SizedBox(height: 16),
-                // Cash input tile
-                _SplitTile(
-                  icon: Icons.payments_outlined,
-                  label: 'Cash',
-                  valueText: cashInput.value == '0'
-                      ? '—'
-                      : 'Rs ${cashInput.value}',
-                  isActive: true,
-                  color: Colors.black,
-                ),
-                const SizedBox(height: 8),
-                // Fonepay tile (auto)
-                _SplitTile(
-                  icon: Icons.qr_code_rounded,
-                  label: 'Fonepay QR',
-                  valueText: cash > 0
-                      ? 'Rs ${fonepay.toStringAsFixed(2)}'
-                      : '—',
-                  isActive: false,
-                  color: const Color(0xFF6BBD44),
-                  note: 'Auto-calculated',
-                ),
-                if (cash > total)
-                  const Padding(
-                    padding: EdgeInsets.only(top: 8),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.warning_amber_rounded,
-                          size: 14,
-                          color: AppColors.danger,
-                        ),
-                        SizedBox(width: 6),
-                        Text(
-                          'Exceeds total',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: AppColors.danger,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                const SizedBox(height: 10),
-                // Quick split chips
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      _Chip(
-                        label: '50 / 50',
-                        onTap: () =>
-                            cashInput.value = (total / 2).toStringAsFixed(0),
-                      ),
-                      _Chip(
-                        label: '25 cash',
-                        onTap: () =>
-                            cashInput.value = (total * 0.25).toStringAsFixed(0),
-                      ),
-                      _Chip(
-                        label: '75 cash',
-                        onTap: () =>
-                            cashInput.value = (total * 0.75).toStringAsFixed(0),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Expanded(
-                  child: _FlexNumpad(
-                    onKey: (k) =>
-                        cashInput.value = _applyKey(cashInput.value, k),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        _BigBtn(
-          label: ok ? 'Process Split Payment' : 'Enter Cash Amount',
-          onTap: onConfirm,
-          enabled: ok,
+          label: isProcessing ? 'Processing…' : 'Payment Received',
+          onTap: isProcessing ? null : onConfirm,
+          color: AppColors.primary,
           isLoading: isProcessing,
         ),
         const SizedBox(height: 16),
@@ -2280,93 +1867,23 @@ class _SplitStep extends HookWidget {
   }
 }
 
-class _SplitTile extends StatelessWidget {
-  const _SplitTile({
-    required this.icon,
-    required this.label,
-    required this.valueText,
-    required this.isActive,
-    required this.color,
-    this.note,
-  });
-  final IconData icon;
-  final String label;
-  final String valueText;
-  final bool isActive;
-  final Color color;
-  final String? note;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-    decoration: BoxDecoration(
-      color: isActive ? Colors.white : AppColors.background,
-      borderRadius: BorderRadius.circular(12),
-      border: Border.all(
-        color: isActive ? color : AppColors.divider,
-        width: isActive ? 1.5 : 1,
-      ),
-    ),
-    child: Row(
-      children: [
-        Icon(icon, size: 18, color: color),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 13,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-              if (note != null)
-                Text(
-                  note!,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: AppColors.textTertiary,
-                  ),
-                ),
-            ],
-          ),
-        ),
-        Text(
-          valueText,
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-            color: isActive ? Colors.black : AppColors.textSecondary,
-          ),
-        ),
-      ],
-    ),
-  );
-}
-
 // ─── Step 3: Success ──────────────────────────────────────────────────────────
 
 class _SuccessStep extends StatelessWidget {
   const _SuccessStep({
     required this.total,
-    required this.method,
+    required this.methodLabel,
     required this.customer,
     required this.change,
-    required this.cashPaid,
-    required this.fonepayPaid,
     required this.items,
     required this.subtotal,
     required this.manualAdjustment,
     required this.onNewSale,
   });
   final double total;
-  final PaymentMethod method;
+  final String methodLabel;
   final CustomerModel? customer;
   final double? change;
-  final double? cashPaid;
-  final double? fonepayPaid;
   // Services / Subtotal / Manual Adjustment breakdown — snapshotted at the
   // moment checkout() succeeded (see ReviewSaleSheet.build's completedItems/
   // completedQuote), since the live cart is cleared right after. Empty
@@ -2426,22 +1943,10 @@ class _SuccessStep extends StatelessWidget {
               ),
               child: Column(
                 children: [
-                  _Row('Method', switch (method) {
-                    PaymentMethod.cash => 'Cash',
-                    PaymentMethod.fonepay => 'Fonepay QR',
-                    PaymentMethod.split => 'Split',
-                  }),
+                  _Row('Method', methodLabel),
                   if (customer != null) ...[
                     const SizedBox(height: 10),
                     _Row('Customer', customer!.fullName),
-                  ],
-                  if (method == PaymentMethod.split &&
-                      cashPaid != null &&
-                      fonepayPaid != null) ...[
-                    const SizedBox(height: 10),
-                    _Row('Cash', 'Rs ${cashPaid!.toStringAsFixed(2)}'),
-                    const SizedBox(height: 6),
-                    _Row('Fonepay', 'Rs ${fonepayPaid!.toStringAsFixed(2)}'),
                   ],
                   // Services / Subtotal / Manual Adjustment / Grand Total —
                   // omitted for a keypad-only custom charge, which has no

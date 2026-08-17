@@ -94,25 +94,18 @@ class TransactionsRepository {
   Future<Map<String, dynamic>> checkout({
     required CartState cart,
     required PaymentMethod paymentMethod,
-    double? splitCash,
-    double? splitFonepay,
+    // Required when paymentMethod == PaymentMethod.other — which
+    // owner-configured PaymentMode (see payment_modes feature) the
+    // customer paid via.
+    String? paymentModeId,
     String? discountId,
     double? keypadAmount,
-    // The salon session's primary staff — sent as the transaction-level
-    // staffId so revenue/commission attribute to whoever actually served
-    // the customer, not whoever happens to be logged into the shared
-    // reception tablet (the backend auto-attributes to the logged-in user
-    // only when no staffId is provided at all — see
-    // TransactionsService.create()). Line items with their own explicit
-    // override (CartItem.assignedStaff, see _itemsFor above) still take
-    // precedence over this for that specific line.
-    String? primaryStaffId,
   }) async {
     final body = <String, dynamic>{
       'items': _itemsFor(cart, keypadAmount),
       'paymentMethod': _methodToString(paymentMethod),
+      'paymentModeId': ?paymentModeId,
       'isGuest': cart.isGuest || cart.customer == null,
-      'staffId': ?primaryStaffId,
       if (cart.customer != null) 'customerId': cart.customer!.id,
       if (cart.isGuest && cart.guestName != null) 'guestName': cart.guestName,
       if (cart.isGuest && cart.guestPhone != null) 'guestPhone': cart.guestPhone,
@@ -125,10 +118,6 @@ class TransactionsRepository {
       if (cart.tipAmount > 0) 'tipAmount': cart.tipAmount,
       if (cart.finalPayable != null) 'finalPayableAmount': cart.finalPayable,
       if (cart.notes != null) 'notes': cart.notes,
-      if (paymentMethod == PaymentMethod.split && splitCash != null)
-        'splitCash': splitCash,
-      if (paymentMethod == PaymentMethod.split && splitFonepay != null)
-        'splitFonepay': splitFonepay,
     };
 
     // Stable per checkout attempt — dedupes a resubmit if Dio's
@@ -141,29 +130,6 @@ class TransactionsRepository {
       data: body,
       headers: {'Idempotency-Key': idempotencyKey},
     ) as Map<String, dynamic>;
-  }
-
-  /// Independently confirms a PENDING Fonepay sale — the sale is not
-  /// COMPLETED, has no receipt, and doesn't count anywhere as revenue until
-  /// this succeeds. [fonepayTransactionId] is the reference number the
-  /// cashier reads off the actual Fonepay payment notification.
-  Future<Map<String, dynamic>> verifyFonepay(
-    String transactionId,
-    String fonepayTransactionId,
-  ) async {
-    final idempotencyKey = _uuid.v4();
-    return await _api.post(
-      '/transactions/$transactionId/fonepay-verify',
-      data: {'fonepayTransactionId': fonepayTransactionId},
-      headers: {'Idempotency-Key': idempotencyKey},
-    ) as Map<String, dynamic>;
-  }
-
-  /// Best-effort cancellation of a PENDING Fonepay sale that was abandoned
-  /// before payment was confirmed (cashier backed out, closed the sheet).
-  /// Restores the stock committed when the pending sale was created.
-  Future<void> cancelPendingFonepay(String transactionId) async {
-    await _api.patch('/transactions/$transactionId/cancel');
   }
 
   Future<({List<Transaction> items, bool hasMore})> getAll({
@@ -254,7 +220,6 @@ class TransactionsRepository {
 
   String _methodToString(PaymentMethod m) => switch (m) {
         PaymentMethod.cash => 'CASH',
-        PaymentMethod.fonepay => 'FONEPAY',
-        PaymentMethod.split => 'SPLIT',
+        PaymentMethod.other => 'OTHER',
       };
 }

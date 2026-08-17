@@ -5,15 +5,10 @@ import '../../inventory/domain/inventory_models.dart';
 
 // ─── Payment ──────────────────────────────────────────────────────────────────
 
-enum PaymentMethod { cash, fonepay, split }
-
-extension PaymentMethodExt on PaymentMethod {
-  String get label => switch (this) {
-        PaymentMethod.cash => 'Cash',
-        PaymentMethod.fonepay => 'Fonepay QR',
-        PaymentMethod.split => 'Split',
-      };
-}
+// `other` covers any owner-configured payment mode (see PaymentMode) — a
+// name + QR image the cashier shows the customer, self-attested the same
+// way `cash` already is, with no gateway integration behind it.
+enum PaymentMethod { cash, other }
 
 // ─── Cart Item ────────────────────────────────────────────────────────────────
 
@@ -45,45 +40,6 @@ class CartItem {
         quantity: quantity ?? this.quantity,
         unitPrice: unitPrice ?? this.unitPrice,
       );
-
-  // ── Local persistence (session survives an app restart) ────────────────────
-  // Round-trips through device storage only — never sent to or read from the
-  // backend this way (checkout still builds its own request body from these
-  // fields directly; see TransactionsRepository._itemsFor). assignedStaff is
-  // stored as a minimal id+name stub rather than via a StaffModel.toJson()
-  // that doesn't exist — the full record is only ever needed again for its
-  // id at checkout, and its name for display, both covered here.
-
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'service': service?.toJson(),
-        'product': product?.toJson(),
-        'assignedStaffId': assignedStaff?.id,
-        'assignedStaffFirstName': assignedStaff?.firstName,
-        'assignedStaffLastName': assignedStaff?.lastName,
-        'quantity': quantity,
-        'unitPrice': unitPrice,
-      };
-
-  factory CartItem.fromJson(Map<String, dynamic> j) => CartItem(
-        id: j['id'] as String,
-        service: j['service'] == null
-            ? null
-            : ServiceModel.fromJson(j['service'] as Map<String, dynamic>),
-        product: j['product'] == null
-            ? null
-            : ProductModel.fromJson(j['product'] as Map<String, dynamic>),
-        assignedStaff: j['assignedStaffId'] == null
-            ? null
-            : StaffMember(
-                id: j['assignedStaffId'] as String,
-                userId: '',
-                firstName: j['assignedStaffFirstName'] as String? ?? '',
-                lastName: j['assignedStaffLastName'] as String? ?? '',
-              ),
-        quantity: j['quantity'] as int? ?? 1,
-        unitPrice: (j['unitPrice'] as num).toDouble(),
-      );
 }
 
 // ─── Cart State ───────────────────────────────────────────────────────────────
@@ -108,27 +64,6 @@ class DiscountEntry {
   final String? discountId;
   final DiscountEntryScope scope;
   final String? serviceId; // set when scope == service
-
-  Map<String, dynamic> toJson() => {
-        'label': label,
-        'amount': amount,
-        'isPercentage': isPercentage,
-        'discountId': discountId,
-        'scope': scope.name,
-        'serviceId': serviceId,
-      };
-
-  factory DiscountEntry.fromJson(Map<String, dynamic> j) => DiscountEntry(
-        label: j['label'] as String,
-        amount: (j['amount'] as num).toDouble(),
-        isPercentage: j['isPercentage'] as bool? ?? true,
-        discountId: j['discountId'] as String?,
-        scope: DiscountEntryScope.values.firstWhere(
-          (s) => s.name == j['scope'],
-          orElse: () => DiscountEntryScope.all,
-        ),
-        serviceId: j['serviceId'] as String?,
-      );
 }
 
 class CartState {
@@ -220,39 +155,6 @@ class CartState {
         tipAmount: tipAmount ?? this.tipAmount,
         finalPayable: clearFinalPayable ? null : (finalPayable ?? this.finalPayable),
         notes: notes ?? this.notes,
-      );
-
-  // Local persistence only (session survives an app restart) — see
-  // SalonSessionsStorage. Never sent to or read from the backend directly;
-  // checkout/quote build their own request bodies from live CartState.
-  Map<String, dynamic> toJson() => {
-        'items': items.map((i) => i.toJson()).toList(),
-        'customer': customer?.toJson(),
-        'isGuest': isGuest,
-        'guestName': guestName,
-        'guestPhone': guestPhone,
-        'discount': discount?.toJson(),
-        'tipAmount': tipAmount,
-        'finalPayable': finalPayable,
-        'notes': notes,
-      };
-
-  factory CartState.fromJson(Map<String, dynamic> j) => CartState(
-        items: (j['items'] as List<dynamic>? ?? [])
-            .map((e) => CartItem.fromJson(e as Map<String, dynamic>))
-            .toList(),
-        customer: j['customer'] == null
-            ? null
-            : CustomerModel.fromJson(j['customer'] as Map<String, dynamic>),
-        isGuest: j['isGuest'] as bool? ?? false,
-        guestName: j['guestName'] as String?,
-        guestPhone: j['guestPhone'] as String?,
-        discount: j['discount'] == null
-            ? null
-            : DiscountEntry.fromJson(j['discount'] as Map<String, dynamic>),
-        tipAmount: (j['tipAmount'] as num?)?.toDouble() ?? 0,
-        finalPayable: (j['finalPayable'] as num?)?.toDouble(),
-        notes: j['notes'] as String?,
       );
 }
 

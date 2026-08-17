@@ -44,7 +44,7 @@ class TermsScreen extends StatelessWidget {
                   body:
                       'Quick is a point-of-sale application for salons and beauty businesses. It provides the following features:\n\n'
                       '• Sales checkout with service and product selection\n'
-                      '• Cash and Fonepay payment processing\n'
+                      '• Cash and QR-based payment modes you configure (eSewa, Fonepay, etc.)\n'
                       '• Customer management and visit history\n'
                       '• Staff management and commission tracking\n'
                       '• Cash drawer management\n'
@@ -76,7 +76,7 @@ class TermsScreen extends StatelessWidget {
                   title: '5. Payment Processing',
                   body:
                       '5.1  Cash transactions are recorded by the App but are the sole responsibility of your business. Quick is not liable for discrepancies in cash handling.\n\n'
-                      '5.2  Fonepay payments are processed through Fonepay\'s network. Your use of Fonepay is subject to Fonepay\'s own terms and conditions. Quick is not a payment processor and does not handle or store payment card details.\n\n'
+                      '5.2  Payment modes you configure (eSewa, Fonepay, or any other QR-based method) display a QR code you provide for the customer to pay directly to your own account — Quick is not a payment processor, is not involved in the transfer, and does not handle, verify, or store any payment credentials. Confirming a sale marked as paid via one of these modes is solely your business\'s responsibility.\n\n'
                       '5.3  All transaction amounts are in Nepalese Rupees (Rs) unless otherwise specified in your settings.',
                 ),
                 _Section(

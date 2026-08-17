@@ -49,9 +49,6 @@ class AppColors {
   // POS-specific
   static const Color cartBg = Color(0xFFF8F8F5);
   static const Color cartItemBg = Color(0xFFFFFFFF);
-  static const Color fonepayColor = Color(0xFF6BBD44);    // Fonepay brand green (keep as-is)
-  static const Color cashColor = Color(0xFF10B981);
-  static const Color splitColor = Color(0xFF6B7A3D);      // olive
 
   // Aliases
   static const Color accent = primary;

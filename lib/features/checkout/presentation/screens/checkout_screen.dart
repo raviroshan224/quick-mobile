@@ -4,7 +4,6 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../../../features/pos/domain/pos_models.dart';
 import '../../../../features/pos/presentation/providers/cart_provider.dart';
-import '../../../../features/pos/presentation/providers/salon_sessions_provider.dart';
 import '../../../../features/services/domain/service_colors.dart';
 import '../../../../features/services/domain/service_models.dart';
 import '../../../../features/services/presentation/providers/services_provider.dart';
@@ -13,7 +12,6 @@ import '../../../../features/inventory/presentation/providers/inventory_provider
 import '../../../../core/theme/app_theme.dart';
 import 'review_sale_sheet.dart';
 import 'calendar_tab.dart';
-import '../widgets/session_strip.dart';
 import '../../../../shared/widgets/pull_to_refresh.dart';
 
 // Aliases so _ServicesView/_ItemsView don't need to know real provider names.
@@ -35,7 +33,6 @@ class CheckoutScreen extends HookConsumerWidget {
       body: SafeArea(
         child: Column(
           children: [
-            const SessionStrip(),
             _SegmentedHeader(
               selected: tabIndex.value,
               onChanged: (i) => tabIndex.value = i,
@@ -877,10 +874,6 @@ class _ServiceGridCard extends ConsumerWidget {
     }
 
     void addOne() {
-      if (ref.read(selectedSessionIdProvider).isEmpty) {
-        showToast('No session assigned — ask the front desk to start one for you');
-        return;
-      }
       HapticFeedback.selectionClick();
       ref.read(activeCartNotifierProvider).addService(service);
       showToast('${service.name} added');
@@ -1016,10 +1009,6 @@ class _ProductGridCard extends ConsumerWidget {
     void addOne() {
       if (outOfStock) {
         showToast('${product.name} is out of stock');
-        return;
-      }
-      if (ref.read(selectedSessionIdProvider).isEmpty) {
-        showToast('No session assigned — ask the front desk to start one for you');
         return;
       }
       HapticFeedback.selectionClick();

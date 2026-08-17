@@ -54,7 +54,6 @@ dependencies:
   shimmer: ^3.0.0
   gap: ^3.0.1
   connectivity_plus: ^7.2.0
-  qr_flutter: ^4.1.0
 
 dev_dependencies:
   flutter_test:

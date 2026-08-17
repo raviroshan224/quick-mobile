@@ -29,7 +29,7 @@ class SalesSummary {
   final double serviceValue;
   final double manualAdjustments;
   final double finalCollectedAmount;
-  final Map<String, double> byPaymentMethod; // keys: CASH, FONEPAY, SPLIT
+  final Map<String, double> byPaymentMethod; // keys: CASH, OTHER
 
   factory SalesSummary.fromJson(Map<String, dynamic> j) {
     // byPaymentMethod arrives as a List from groupBy: [{paymentMethod:'CASH', _sum:{total:100}}, ...]
