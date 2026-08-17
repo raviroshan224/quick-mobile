@@ -332,7 +332,7 @@ class _NoteSheet extends HookConsumerWidget {
       // a customer has already been handed to the owner, since a cash sale
       // a staff member processes isn't otherwise distinguishable from one
       // the owner already has in hand.
-      'Paid to owner', 'Owner payment pending',
+      'Bhuktani gariyo', 'Bhuktani gariyo baki',
     ];
 
     return Container(
