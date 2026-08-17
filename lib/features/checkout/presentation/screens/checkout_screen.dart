@@ -326,7 +326,14 @@ class _NoteSheet extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final ctrl = useTextEditingController();
-    const quickTags = ['Tip', '#cash', '#card', '#online', 'staff', 'gst'];
+    const quickTags = [
+      'Tip', '#cash', '#card', '#online', 'staff', 'gst',
+      // Cash handover tracking — lets staff flag whether cash collected from
+      // a customer has already been handed to the owner, since a cash sale
+      // a staff member processes isn't otherwise distinguishable from one
+      // the owner already has in hand.
+      'Paid to owner', 'Owner payment pending',
+    ];
 
     return Container(
       decoration: const BoxDecoration(
