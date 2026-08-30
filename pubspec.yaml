@@ -56,6 +56,9 @@ dependencies:
   gap: ^3.0.1
   connectivity_plus: ^7.2.0
 
+  # Cash drawer (via ESC/POS printer over USB or network)
+  unified_esc_pos_printer: ^3.4.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

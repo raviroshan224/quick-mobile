@@ -7,6 +7,7 @@ import 'core/theme/app_theme.dart';
 import 'core/utils/env_config.dart';
 import 'core/widgets/app_error_fallback.dart';
 import 'core/widgets/offline_banner.dart';
+import 'features/cash_drawer_hardware/presentation/widgets/cash_drawer_overlay.dart';
 
 void main() {
   // Previously there was no top-level error boundary at all: an uncaught
@@ -64,8 +65,9 @@ class SalonPosApp extends ConsumerWidget {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       routerConfig: router,
-      builder: (context, child) =>
-          OfflineBanner(child: child ?? const SizedBox.shrink()),
+      builder: (context, child) => CashDrawerOverlay(
+        child: OfflineBanner(child: child ?? const SizedBox.shrink()),
+      ),
     );
   }
 }

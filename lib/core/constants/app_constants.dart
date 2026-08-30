@@ -46,6 +46,7 @@ class AppRoutes {
   static const String moreDrawers = '/more/drawers';
   static const String moreReports = '/more/reports';
   static const String moreSettings = '/more/settings';
+  static const String moreCashDrawer = '/more/cash-drawer';
   static const String moreSupport = '/more/support';
   static const String morePrivacyPolicy = '/more/privacy-policy';
   static const String moreTerms = '/more/terms';

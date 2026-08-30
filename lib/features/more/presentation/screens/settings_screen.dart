@@ -385,6 +385,16 @@ class SettingsScreen extends ConsumerWidget {
                 ]),
                 const SizedBox(height: 16),
 
+                // ── Hardware ───────────────────────────────────────────────
+                _Section(title: 'Hardware', tiles: [
+                  _NavTile(
+                    icon: Icons.point_of_sale_rounded,
+                    label: 'Cash Drawer',
+                    onTap: () => context.push(AppRoutes.moreCashDrawer),
+                  ),
+                ]),
+                const SizedBox(height: 16),
+
                 // ── Support ────────────────────────────────────────────────
                 _Section(title: 'Help', tiles: [
                   _NavTile(

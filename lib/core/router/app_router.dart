@@ -30,6 +30,7 @@ import '../../features/more/presentation/screens/customer_form_screen.dart';
 import '../../features/more/presentation/screens/drawers_screen.dart';
 import '../../features/more/presentation/screens/reports_screen.dart';
 import '../../features/more/presentation/screens/settings_screen.dart';
+import '../../features/cash_drawer_hardware/presentation/screens/cash_drawer_settings_screen.dart';
 import '../../features/more/presentation/screens/support_screen.dart';
 import '../../features/more/presentation/screens/privacy_policy_screen.dart';
 import '../../features/more/presentation/screens/terms_screen.dart';
@@ -101,6 +102,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           '/more/staff',
           '/more/reports',
           '/more/settings',
+          '/more/cash-drawer',
           '/more/image-library',
           '/more/stock-movement',
         ];
@@ -214,6 +216,9 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
               path: AppRoutes.moreSettings,
               builder: (_, _) => const SettingsScreen()),
+          GoRoute(
+              path: AppRoutes.moreCashDrawer,
+              builder: (_, _) => const CashDrawerSettingsScreen()),
           GoRoute(
               path: AppRoutes.moreSupport,
               builder: (_, _) => const SupportScreen()),
