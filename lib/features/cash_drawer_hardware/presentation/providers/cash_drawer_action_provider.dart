@@ -18,8 +18,6 @@ class CashDrawerActionState {
   final CashDrawerResult? result;
 }
 
-final _cashDrawerServiceProvider = Provider<CashDrawerService>((ref) => CashDrawerService());
-
 class CashDrawerActionNotifier extends StateNotifier<CashDrawerActionState> {
   CashDrawerActionNotifier(this._ref) : super(const CashDrawerActionState());
 
@@ -35,7 +33,7 @@ class CashDrawerActionNotifier extends StateNotifier<CashDrawerActionState> {
     state = const CashDrawerActionState(status: CashDrawerActionStatus.sending);
 
     final connection = _ref.read(cashDrawerSettingsProvider).connection;
-    final result = await _ref.read(_cashDrawerServiceProvider).openDrawer(connection);
+    final result = await _ref.read(cashDrawerServiceProvider).openDrawer(connection);
 
     state = CashDrawerActionState(
       status: result.success ? CashDrawerActionStatus.success : CashDrawerActionStatus.error,

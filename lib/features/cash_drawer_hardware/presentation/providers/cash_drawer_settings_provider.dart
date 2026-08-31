@@ -27,6 +27,11 @@ class _CashDrawerSettingsNotifier extends StateNotifier<CashDrawerSettings> {
     await _repo.saveConnection(connection);
   }
 
+  Future<void> setAutoOpenOnCashPayment(bool value) async {
+    state = state.copyWith(autoOpenOnCashPayment: value);
+    await _repo.saveAutoOpenOnCashPayment(value);
+  }
+
   Future<void> setButtonPosition(CashDrawerButtonPosition position) async {
     state = state.copyWith(buttonPosition: position);
     await _repo.saveButtonPosition(position);

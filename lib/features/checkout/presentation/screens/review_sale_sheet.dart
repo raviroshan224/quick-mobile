@@ -5,10 +5,16 @@ import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../../../core/network/api_client.dart';
+import '../../../../features/cash_drawer_hardware/data/cash_drawer_service.dart';
+import '../../../../features/cash_drawer_hardware/domain/printer_connection_config.dart';
+import '../../../../features/cash_drawer_hardware/domain/receipt_data.dart';
+import '../../../../features/cash_drawer_hardware/presentation/providers/cash_drawer_action_provider.dart';
+import '../../../../features/cash_drawer_hardware/presentation/providers/cash_drawer_settings_provider.dart';
 import '../../../../features/customers/domain/customer_models.dart';
 import '../../../../features/discounts/widgets/discount_picker_sheet.dart';
 import '../../../../features/customers/presentation/providers/customers_provider.dart';
 import '../../../../features/dashboard/presentation/providers/dashboard_provider.dart';
+import '../../../../features/more/presentation/screens/settings_screen.dart' show salonSettingsProvider;
 import '../../../../features/pos/domain/pos_models.dart';
 import '../../../../features/pos/presentation/providers/cart_provider.dart';
 import '../../../../features/payment_modes/models/payment_mode_model.dart';
@@ -46,6 +52,9 @@ class ReviewSaleSheet extends HookConsumerWidget {
     // the now-empty live cart.
     final completedItems = useState<List<CartItem>>(const []);
     final completedQuote = useState<CartQuote?>(null);
+    final completedTransactionId = useState<String?>(null);
+    final completedAt = useState<DateTime?>(null);
+    final isPrintingReceipt = useState(false);
 
     useEffect(() => null, const []);
 
@@ -129,16 +138,33 @@ class ReviewSaleSheet extends HookConsumerWidget {
             discountId: checkoutCart.discount?.discountId,
             keypadAmount: checkoutCart.items.isEmpty ? keypadAmount : null,
           )
-          .then((_) {
+          .then((response) {
             if (!context.mounted) return;
             completedItems.value = checkoutCart.items;
             completedQuote.value = confirmedQuote;
+            completedTransactionId.value = response['id'] as String?;
+            final createdAtRaw = response['createdAt'] as String?;
+            completedAt.value =
+                createdAtRaw != null ? DateTime.tryParse(createdAtRaw)?.toLocal() : null;
             ref.read(activeCartNotifierProvider).clear();
             ref.read(transactionListProvider.notifier).refresh();
             ref.invalidate(dashboardProvider);
             ref.invalidate(todayRevenueProvider);
             isProcessing.value = false;
             step.value = _Step.success;
+
+            // Auto-pop the physical cash drawer for cash-tender sales, if
+            // the owner opted in (Settings > Hardware > Cash Drawer). Fired
+            // and forgotten — a failure here must never disrupt a checkout
+            // that has already succeeded; the floating overlay button (if
+            // shown) surfaces the failure snackbar via its own listener on
+            // this same action provider.
+            final drawerSettings = ref.read(cashDrawerSettingsProvider);
+            if (method.value == PaymentMethod.cash &&
+                drawerSettings.autoOpenOnCashPayment &&
+                (drawerSettings.connection?.isValid ?? false)) {
+              ref.read(cashDrawerActionProvider.notifier).open();
+            }
           })
           .catchError((dynamic e) {
             isProcessing.value = false;
@@ -152,6 +178,58 @@ class ReviewSaleSheet extends HookConsumerWidget {
               );
             }
           });
+    }
+
+    Future<void> printReceipt() async {
+      if (isPrintingReceipt.value) return;
+      isPrintingReceipt.value = true;
+
+      final salon = ref.read(salonSettingsProvider);
+      final connection = ref.read(cashDrawerSettingsProvider).connection;
+      final quoteSnapshot = completedQuote.value;
+      final methodLabelValue =
+          method.value == PaymentMethod.cash ? 'Cash' : (selectedMode.value?.name ?? 'Other');
+      final changeValue =
+          method.value == PaymentMethod.cash && tendered > total ? tendered - total : null;
+
+      final receipt = ReceiptData(
+        salonName: salon.salonName,
+        address: salon.address,
+        phone: salon.phone,
+        currency: salon.currency,
+        footer: salon.receiptFooter,
+        items: completedItems.value
+            .map((i) => ReceiptLineItem(name: i.name, quantity: i.quantity, totalPrice: i.totalPrice))
+            .toList(),
+        subtotal: quoteSnapshot?.subtotal,
+        discountAmount: quoteSnapshot?.discountAmount ?? 0,
+        tax: quoteSnapshot?.totalTax ?? 0,
+        tip: quoteSnapshot?.tipAmount ?? 0,
+        manualAdjustment: quoteSnapshot?.manualAdjustment ?? 0,
+        total: quoteSnapshot?.total ?? total,
+        paymentMethodLabel: methodLabelValue,
+        change: changeValue,
+        customerName: customer.value?.fullName,
+        transactionId: completedTransactionId.value,
+        dateTime: completedAt.value ?? DateTime.now(),
+      );
+
+      final result = await ref.read(cashDrawerServiceProvider).printReceipt(connection, receipt);
+      isPrintingReceipt.value = false;
+      if (!context.mounted) return;
+      if (!result.success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              result.reason == CashDrawerFailureReason.notConfigured
+                  ? 'No printer set up — add one in Settings > Hardware > Cash Drawer.'
+                  : (result.message ?? "Couldn't reach the printer."),
+            ),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     }
 
     void goCash() {
@@ -245,6 +323,8 @@ class ReviewSaleSheet extends HookConsumerWidget {
           subtotal: completedQuote.value?.subtotal,
           manualAdjustment: completedQuote.value?.manualAdjustment ?? 0,
           onNewSale: () => Navigator.pop(context),
+          onPrintReceipt: printReceipt,
+          isPrintingReceipt: isPrintingReceipt.value,
         ),
         },
       ),
@@ -336,12 +416,14 @@ class _BigBtn extends StatelessWidget {
           ),
           child: Center(
             child: isLoading
-                ? const SizedBox(
+                ? SizedBox(
                     width: 22,
                     height: 22,
                     child: CircularProgressIndicator(
                       strokeWidth: 2.5,
-                      valueColor: AlwaysStoppedAnimation(Colors.white),
+                      // Matches `fg` — a hardcoded white spinner would be
+                      // invisible on an outlined (white-background) button.
+                      valueColor: AlwaysStoppedAnimation(fg),
                     ),
                   )
                 : Text(
@@ -1879,6 +1961,8 @@ class _SuccessStep extends StatelessWidget {
     required this.subtotal,
     required this.manualAdjustment,
     required this.onNewSale,
+    required this.onPrintReceipt,
+    required this.isPrintingReceipt,
   });
   final double total;
   final String methodLabel;
@@ -1893,6 +1977,8 @@ class _SuccessStep extends StatelessWidget {
   final double? subtotal;
   final double manualAdjustment;
   final VoidCallback onNewSale;
+  final VoidCallback onPrintReceipt;
+  final bool isPrintingReceipt;
 
   @override
   Widget build(BuildContext context) {
@@ -2006,7 +2092,12 @@ class _SuccessStep extends StatelessWidget {
             ),
             const Spacer(),
             // Print Receipt
-            _BigBtn(label: 'Print Receipt', onTap: () {}, outlined: true),
+            _BigBtn(
+              label: 'Print Receipt',
+              onTap: onPrintReceipt,
+              isLoading: isPrintingReceipt,
+              outlined: true,
+            ),
             const SizedBox(height: 8),
             _BigBtn(label: 'New Sale', onTap: onNewSale),
             const SizedBox(height: 20),

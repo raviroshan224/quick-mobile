@@ -18,6 +18,7 @@ class CashDrawerSettings {
     this.enabled = false,
     this.connection,
     this.buttonPosition,
+    this.autoOpenOnCashPayment = false,
   });
 
   final bool enabled;
@@ -27,16 +28,23 @@ class CashDrawerSettings {
   /// falls back to a sensible default position in that case.
   final CashDrawerButtonPosition? buttonPosition;
 
+  /// When true, a cash-tender checkout completing successfully fires the
+  /// drawer kick automatically — independent of whether the floating
+  /// button itself (`enabled`) is shown.
+  final bool autoOpenOnCashPayment;
+
   CashDrawerSettings copyWith({
     bool? enabled,
     PrinterConnectionConfig? connection,
     bool clearConnection = false,
     CashDrawerButtonPosition? buttonPosition,
+    bool? autoOpenOnCashPayment,
   }) =>
       CashDrawerSettings(
         enabled: enabled ?? this.enabled,
         connection: clearConnection ? null : (connection ?? this.connection),
         buttonPosition: buttonPosition ?? this.buttonPosition,
+        autoOpenOnCashPayment: autoOpenOnCashPayment ?? this.autoOpenOnCashPayment,
       );
 }
 
@@ -51,6 +59,7 @@ class CashDrawerSettingsRepository {
   static const _kConnection = 'cash_drawer_connection';
   static const _kPosDx = 'cash_drawer_button_dx';
   static const _kPosDy = 'cash_drawer_button_dy';
+  static const _kAutoOpenCash = 'cash_drawer_auto_open_cash';
 
   Future<CashDrawerSettings> load() async {
     final prefs = await SharedPreferences.getInstance();
@@ -75,12 +84,18 @@ class CashDrawerSettingsRepository {
       connection: connection,
       buttonPosition:
           (dx != null && dy != null) ? CashDrawerButtonPosition(dx: dx, dy: dy) : null,
+      autoOpenOnCashPayment: prefs.getBool(_kAutoOpenCash) ?? false,
     );
   }
 
   Future<void> saveEnabled(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_kEnabled, enabled);
+  }
+
+  Future<void> saveAutoOpenOnCashPayment(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_kAutoOpenCash, value);
   }
 
   Future<void> saveConnection(PrinterConnectionConfig? connection) async {

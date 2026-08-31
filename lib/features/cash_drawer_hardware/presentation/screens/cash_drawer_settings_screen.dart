@@ -10,8 +10,6 @@ import '../../data/cash_drawer_service.dart';
 import '../../domain/printer_connection_config.dart';
 import '../providers/cash_drawer_settings_provider.dart';
 
-final _cashDrawerServiceProvider = Provider<CashDrawerService>((ref) => CashDrawerService());
-
 class CashDrawerSettingsScreen extends ConsumerStatefulWidget {
   const CashDrawerSettingsScreen({super.key});
 
@@ -67,7 +65,7 @@ class _CashDrawerSettingsScreenState extends ConsumerState<CashDrawerSettingsScr
       _scanningUsb = true;
       _testMessage = null;
     });
-    final devices = await ref.read(_cashDrawerServiceProvider).scanUsbDevices();
+    final devices = await ref.read(cashDrawerServiceProvider).scanUsbDevices();
     if (!mounted) return;
     setState(() {
       _usbDevices = devices;
@@ -84,7 +82,7 @@ class _CashDrawerSettingsScreenState extends ConsumerState<CashDrawerSettingsScr
       _scanningNetwork = true;
       _testMessage = null;
     });
-    final devices = await ref.read(_cashDrawerServiceProvider).scanNetworkDevices();
+    final devices = await ref.read(cashDrawerServiceProvider).scanNetworkDevices();
     if (!mounted) return;
     setState(() {
       _networkDevices = devices;
@@ -113,7 +111,7 @@ class _CashDrawerSettingsScreenState extends ConsumerState<CashDrawerSettingsScr
       _testing = true;
       _testMessage = null;
     });
-    final result = await ref.read(_cashDrawerServiceProvider).openDrawer(config);
+    final result = await ref.read(cashDrawerServiceProvider).openDrawer(config);
     if (!mounted) return;
     setState(() {
       _testing = false;
@@ -189,6 +187,44 @@ class _CashDrawerSettingsScreenState extends ConsumerState<CashDrawerSettingsScr
                       value: settings.enabled,
                       onChanged: canEnable
                           ? (v) => notifier.setEnabled(v)
+                          : (v) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Configure and save a printer connection first.'),
+                                  behavior: SnackBarBehavior.floating,
+                                  margin: EdgeInsets.fromLTRB(16, 0, 16, 16),
+                                ),
+                              );
+                            },
+                      activeThumbColor: Colors.white,
+                      activeTrackColor: Colors.black,
+                    ),
+                  ]),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: AppColors.divider),
+                  ),
+                  child: Row(children: [
+                    const Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text('Auto-open on cash payment',
+                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500)),
+                        SizedBox(height: 2),
+                        Text(
+                          'Pop the drawer automatically when a cash checkout completes',
+                          style: TextStyle(fontSize: 12, color: AppColors.textTertiary),
+                        ),
+                      ]),
+                    ),
+                    Switch.adaptive(
+                      value: settings.autoOpenOnCashPayment,
+                      onChanged: canEnable
+                          ? (v) => notifier.setAutoOpenOnCashPayment(v)
                           : (v) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
