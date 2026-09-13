@@ -60,10 +60,15 @@ class InventoryRepository {
       'name': ?name,
       'price': ?price,
       'stock': ?stock,
-      'cost': ?cost,
-      'sku': ?sku,
-      'description': ?description,
-      'category': ?category,
+      // Sent as an explicit key even when null (not omitted) — the only
+      // caller (item_form_screen._save) always submits the form's full
+      // current state, so a field the user cleared must actually clear on
+      // the backend rather than silently keeping its old value (an omitted
+      // key means "leave unchanged" in this PATCH).
+      'cost': cost,
+      'sku': sku,
+      'description': description,
+      'category': category,
       'lowStockThreshold': ?lowStockThreshold,
       'isActive': ?isActive,
     }) as Map<String, dynamic>;

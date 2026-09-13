@@ -22,6 +22,7 @@ class AppRoutes {
   static const String login = '/login';
   static const String signup = '/signup';
   static const String forgotPassword = '/forgot-password';
+  static const String verifyResetCode = '/verify-reset-code';
   static const String resetPassword = '/reset-password';
 
   // Bottom nav tabs
@@ -43,6 +44,7 @@ class AppRoutes {
   static const String morePaymentModesNew = '/more/payment-modes/new';
   static String morePaymentModeEdit(String id) => '/more/payment-modes/$id';
   static const String moreCustomers = '/more/customers';
+  static const String moreBookings = '/more/bookings';
   static const String moreDrawers = '/more/drawers';
   static const String moreReports = '/more/reports';
   static const String moreSettings = '/more/settings';

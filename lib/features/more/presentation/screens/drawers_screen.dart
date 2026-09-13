@@ -93,7 +93,15 @@ class _ClosedState extends StatelessWidget {
       ),
     );
     if (confirmed != true || !context.mounted) return;
-    final amount = double.tryParse(amountCtrl.text.trim()) ?? 0;
+    final amount = double.tryParse(amountCtrl.text.trim());
+    if (amount == null || amount < 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Enter a valid opening balance'),
+            backgroundColor: Colors.red),
+      );
+      return;
+    }
     try {
       await ref
           .read(cashDrawerNotifierProvider.notifier)
@@ -192,8 +200,15 @@ class _OpenState extends StatelessWidget {
       ),
     );
     if (confirmed != true || !context.mounted) return;
-    final amount = double.tryParse(amountCtrl.text.trim()) ?? 0;
-    if (amount <= 0) return;
+    final amount = double.tryParse(amountCtrl.text.trim());
+    if (amount == null || amount <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Enter a valid amount greater than zero'),
+            backgroundColor: Colors.red),
+      );
+      return;
+    }
     try {
       await ref.read(cashDrawerNotifierProvider.notifier).recordMovement(
             type: type,

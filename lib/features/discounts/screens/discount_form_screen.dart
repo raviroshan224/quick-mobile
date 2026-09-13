@@ -33,31 +33,30 @@ class _DiscountFormScreenState extends ConsumerState<DiscountFormScreen> {
   String? _selectedServiceName;
 
   Discount? _original;
+  bool _loadedExisting = false;
 
-  @override
-  void initState() {
-    super.initState();
-    if (widget.isEditing) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _load());
-    }
-  }
-
-  void _load() {
-    final asyncValue = ref.read(discountsProvider);
-    final all = asyncValue.valueOrNull ?? [];
+  // Reactive on purpose (called from build() via ref.watch(...).whenData
+  // below) rather than a one-shot ref.read in a postFrameCallback: if
+  // discountsProvider is still loading the first time this screen builds
+  // (e.g. a cold start straight into the edit route), a one-shot read would
+  // see an empty list, never find `_original`, and _save() would silently
+  // fall through to *creating* a brand-new discount instead of updating
+  // this one. Watching means it re-runs as soon as the data actually
+  // arrives. _loadedExisting guards against clobbering the user's in-progress
+  // edits on later rebuilds.
+  void _loadExistingIfNeeded(List<Discount> all) {
+    if (_loadedExisting || !widget.isEditing) return;
     final d = all.where((d) => d.id == widget.discountId).firstOrNull;
     if (d == null) return;
     _original = d;
     _nameCtrl.text = d.name;
-    _valueCtrl.text =
-        d.value.toStringAsFixed(d.value % 1 == 0 ? 0 : 2);
-    setState(() {
-      _type = d.type;
-      _isActive = d.isActive;
-      _scope = d.scope;
-      _selectedServiceId = d.serviceId;
-      _selectedServiceName = d.serviceName;
-    });
+    _valueCtrl.text = d.value.toStringAsFixed(d.value % 1 == 0 ? 0 : 2);
+    _type = d.type;
+    _isActive = d.isActive;
+    _scope = d.scope;
+    _selectedServiceId = d.serviceId;
+    _selectedServiceName = d.serviceName;
+    _loadedExisting = true;
   }
 
   @override
@@ -194,6 +193,7 @@ class _DiscountFormScreenState extends ConsumerState<DiscountFormScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(discountsProvider).whenData(_loadExistingIfNeeded);
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -224,6 +224,7 @@ class _DiscountFormScreenState extends ConsumerState<DiscountFormScreen> {
       ),
       body: Form(
         key: _formKey,
+        autovalidateMode: AutovalidateMode.onUserInteraction,
         child: ListView(
           padding: const EdgeInsets.only(bottom: 120),
           children: [

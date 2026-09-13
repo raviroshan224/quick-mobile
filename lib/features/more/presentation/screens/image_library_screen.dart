@@ -452,6 +452,29 @@ class _GridItem extends StatelessWidget {
     );
   }
 
+  void _confirmDelete(BuildContext context, String name, VoidCallback onDelete) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Image'),
+        content: Text('Remove "$name"? This cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              onDelete();
+            },
+            child: const Text('Delete', style: TextStyle(color: AppColors.danger)),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showSheet(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -490,7 +513,7 @@ class _GridItem extends StatelessWidget {
             GestureDetector(
               onTap: () {
                 Navigator.pop(context);
-                onDelete();
+                _confirmDelete(context, asset.name, onDelete);
               },
               child: Container(
                 height: 52,

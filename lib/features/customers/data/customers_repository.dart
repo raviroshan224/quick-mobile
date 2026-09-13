@@ -55,10 +55,16 @@ class CustomersRepository {
     final data = await _api.patch('/customers/$id', data: {
       'firstName': ?firstName,
       'lastName': ?lastName,
-      'email': ?email,
-      'phone': ?phone,
-      'address': ?address,
-      'notes': ?notes,
+      // email/phone/address/notes are sent as an explicit key even when
+      // null (never omitted like firstName/lastName above) — the only
+      // caller (customer_form_screen) always submits the form's full
+      // current state, and a cleared field must actually clear on the
+      // backend rather than silently leaving the old value in place
+      // (an omitted key means "leave unchanged" in this PATCH).
+      'email': email,
+      'phone': phone,
+      'address': address,
+      'notes': notes,
     }) as Map<String, dynamic>;
     return CustomerModel.fromJson(data);
   }

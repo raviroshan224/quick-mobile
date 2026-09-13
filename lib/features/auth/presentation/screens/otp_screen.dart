@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_constants.dart';
+import '../../../../core/models/app_exception.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../providers/auth_provider.dart';
 
@@ -75,12 +76,24 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
             duration: Duration(seconds: 2),
           ),
         );
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _resending = false);
         _startCooldown();
       }
+    } catch (e) {
+      // Don't restart the cooldown here — the resend didn't go through, so
+      // don't lock the user out of retrying it right away.
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              e is AppException ? e.message : 'Could not resend the code. Try again.',
+            ),
+            backgroundColor: AppColors.danger,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _resending = false);
     }
   }
 

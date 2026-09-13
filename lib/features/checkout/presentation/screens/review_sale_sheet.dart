@@ -15,7 +15,8 @@ import '../../../../features/customers/domain/customer_models.dart';
 import '../../../../features/discounts/widgets/discount_picker_sheet.dart';
 import '../../../../features/customers/presentation/providers/customers_provider.dart';
 import '../../../../features/dashboard/presentation/providers/dashboard_provider.dart';
-import '../../../../features/more/presentation/screens/settings_screen.dart' show salonSettingsProvider;
+import '../../../../features/more/presentation/screens/settings_screen.dart'
+    show salonSettingsProvider;
 import '../../../../features/pos/domain/pos_models.dart';
 import '../../../../features/pos/presentation/providers/cart_provider.dart';
 import '../../../../features/payment_modes/models/payment_mode_model.dart';
@@ -80,40 +81,50 @@ class ReviewSaleSheet extends HookConsumerWidget {
     // change.
     final retryTick = useState(0);
 
-    useEffect(() {
-      var cancelled = false;
-      final hasKeypadAmount = cart.items.isEmpty && keypadAmount > 0;
-      if (cart.items.isEmpty && !hasKeypadAmount) {
-        // Nothing to price yet — leave any prior quote cleared.
+    useEffect(
+      () {
+        var cancelled = false;
+        final hasKeypadAmount = cart.items.isEmpty && keypadAmount > 0;
+        if (cart.items.isEmpty && !hasKeypadAmount) {
+          // Nothing to price yet — leave any prior quote cleared.
+          quote.value = null;
+          quoteError.value = null;
+          quoting.value = false;
+          return null;
+        }
+        // Clear immediately (not just on response) so a stale total can never
+        // be shown/charged while a fresher quote is in flight.
         quote.value = null;
         quoteError.value = null;
-        quoting.value = false;
-        return null;
-      }
-      // Clear immediately (not just on response) so a stale total can never
-      // be shown/charged while a fresher quote is in flight.
-      quote.value = null;
-      quoteError.value = null;
-      quoting.value = true;
-      ref
-          .read(_reviewRepoProvider)
-          .quote(
-            cart: cart,
-            discountId: cart.discount?.discountId,
-            keypadAmount: hasKeypadAmount ? keypadAmount : null,
-          )
-          .then((q) {
-            if (cancelled) return;
-            quote.value = q;
-            quoting.value = false;
-          })
-          .catchError((dynamic e) {
-            if (cancelled) return;
-            quoteError.value = e.toString();
-            quoting.value = false;
-          });
-      return () => cancelled = true;
-    }, [cart.items, cart.discount, cart.tipAmount, cart.finalPayable, keypadAmount, retryTick.value]);
+        quoting.value = true;
+        ref
+            .read(_reviewRepoProvider)
+            .quote(
+              cart: cart,
+              discountId: cart.discount?.discountId,
+              keypadAmount: hasKeypadAmount ? keypadAmount : null,
+            )
+            .then((q) {
+              if (cancelled) return;
+              quote.value = q;
+              quoting.value = false;
+            })
+            .catchError((dynamic e) {
+              if (cancelled) return;
+              quoteError.value = e.toString();
+              quoting.value = false;
+            });
+        return () => cancelled = true;
+      },
+      [
+        cart.items,
+        cart.discount,
+        cart.tipAmount,
+        cart.finalPayable,
+        keypadAmount,
+        retryTick.value,
+      ],
+    );
 
     final total = quote.value?.total ?? estimatedTotal;
     final tendered = double.tryParse(cashInput.value) ?? 0;
@@ -134,6 +145,15 @@ class ReviewSaleSheet extends HookConsumerWidget {
       isProcessing.value = true;
 
       final checkoutCart = ref.read(activeCartProvider);
+      // Grabbed now, while this widget is definitely still mounted, so the
+      // sale can still be cleared out of the cart and reflected app-wide
+      // even if this sheet gets closed/disposed while checkout() is in
+      // flight (`ref` itself becomes unusable once that happens). The sale
+      // has already been created server-side by the time the .then() below
+      // runs, so skipping the cart clear on a stale `context.mounted` check
+      // would leave the same items in the cart and risk charging for them
+      // again on the next checkout.
+      final container = ProviderScope.containerOf(context, listen: false);
 
       ref
           .read(_reviewRepoProvider)
@@ -147,17 +167,19 @@ class ReviewSaleSheet extends HookConsumerWidget {
             keypadAmount: checkoutCart.items.isEmpty ? keypadAmount : null,
           )
           .then((response) {
+            container.read(activeCartNotifierProvider).clear();
+            container.read(transactionListProvider.notifier).refresh();
+            container.invalidate(dashboardProvider);
+            container.invalidate(todayRevenueProvider);
+
             if (!context.mounted) return;
             completedItems.value = checkoutCart.items;
             completedQuote.value = confirmedQuote;
             completedTransactionId.value = response['id'] as String?;
             final createdAtRaw = response['createdAt'] as String?;
-            completedAt.value =
-                createdAtRaw != null ? DateTime.tryParse(createdAtRaw)?.toLocal() : null;
-            ref.read(activeCartNotifierProvider).clear();
-            ref.read(transactionListProvider.notifier).refresh();
-            ref.invalidate(dashboardProvider);
-            ref.invalidate(todayRevenueProvider);
+            completedAt.value = createdAtRaw != null
+                ? DateTime.tryParse(createdAtRaw)?.toLocal()
+                : null;
             isProcessing.value = false;
             step.value = _Step.success;
 
@@ -195,9 +217,11 @@ class ReviewSaleSheet extends HookConsumerWidget {
       final salon = ref.read(salonSettingsProvider);
       final connection = ref.read(cashDrawerSettingsProvider).connection;
       final quoteSnapshot = completedQuote.value;
-      final methodLabelValue =
-          method.value == PaymentMethod.cash ? 'Cash' : (selectedMode.value?.name ?? 'Other');
-      final changeValue = method.value == PaymentMethod.cash && tendered > settledTotal
+      final methodLabelValue = method.value == PaymentMethod.cash
+          ? 'Cash'
+          : (selectedMode.value?.name ?? 'Other');
+      final changeValue =
+          method.value == PaymentMethod.cash && tendered > settledTotal
           ? tendered - settledTotal
           : null;
 
@@ -208,7 +232,13 @@ class ReviewSaleSheet extends HookConsumerWidget {
         currency: salon.currency,
         footer: salon.receiptFooter,
         items: completedItems.value
-            .map((i) => ReceiptLineItem(name: i.name, quantity: i.quantity, totalPrice: i.totalPrice))
+            .map(
+              (i) => ReceiptLineItem(
+                name: i.name,
+                quantity: i.quantity,
+                totalPrice: i.totalPrice,
+              ),
+            )
             .toList(),
         subtotal: quoteSnapshot?.subtotal,
         discountAmount: quoteSnapshot?.discountAmount ?? 0,
@@ -223,7 +253,9 @@ class ReviewSaleSheet extends HookConsumerWidget {
         dateTime: completedAt.value ?? DateTime.now(),
       );
 
-      final result = await ref.read(cashDrawerServiceProvider).printReceipt(connection, receipt);
+      final result = await ref
+          .read(cashDrawerServiceProvider)
+          .printReceipt(connection, receipt);
       isPrintingReceipt.value = false;
       if (!context.mounted) return;
       if (!result.success) {
@@ -283,61 +315,64 @@ class ReviewSaleSheet extends HookConsumerWidget {
           borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
         child: switch (step.value) {
-        _Step.currentSale => _CurrentSaleStep(
-          total: total,
-          cart: cart,
-          customer: customer.value,
-          onCustomerChanged: onCustomerChanged,
-          onCharge: () => step.value = _Step.charge,
-          onClose: () => Navigator.pop(context),
-          isQuoting: quoting.value,
-          quoteError: quoteError.value,
-          onRetryQuote: () => retryTick.value++,
-        ),
-        _Step.charge => _ChargeStep(
-          total: total,
-          cart: cart,
-          onBack: () => step.value = _Step.currentSale,
-          onClose: () => Navigator.pop(context),
-          onPickCash: goCash,
-          onPickMode: goCustom,
-          isQuoting: quoting.value,
-          quoteError: quoteError.value,
-          onRetryQuote: () => retryTick.value++,
-        ),
-        _Step.cash => _CashStep(
-          total: total,
-          cashInput: cashInput,
-          tendered: tendered,
-          onBack: () => step.value = _Step.charge,
-          onConfirm: done,
-          isProcessing: isProcessing.value,
-        ),
-        _Step.customPayment => _CustomPaymentStep(
-          mode: selectedMode.value!,
-          total: total,
-          customer: customer.value,
-          onBack: () => step.value = _Step.charge,
-          onConfirm: done,
-          isProcessing: isProcessing.value,
-        ),
-        _Step.success => _SuccessStep(
-          total: settledTotal,
-          methodLabel: method.value == PaymentMethod.cash ? 'Cash' : (selectedMode.value?.name ?? 'Other'),
-          customer: customer.value,
-          change: method.value == PaymentMethod.cash && tendered > settledTotal
-              ? tendered - settledTotal
-              : null,
-          items: completedItems.value,
-          subtotal: completedQuote.value?.subtotal,
-          discountAmount: completedQuote.value?.discountAmount ?? 0,
-          tax: completedQuote.value?.totalTax ?? 0,
-          tip: completedQuote.value?.tipAmount ?? 0,
-          manualAdjustment: completedQuote.value?.manualAdjustment ?? 0,
-          onNewSale: () => Navigator.pop(context),
-          onPrintReceipt: printReceipt,
-          isPrintingReceipt: isPrintingReceipt.value,
-        ),
+          _Step.currentSale => _CurrentSaleStep(
+            total: total,
+            cart: cart,
+            customer: customer.value,
+            onCustomerChanged: onCustomerChanged,
+            onCharge: () => step.value = _Step.charge,
+            onClose: () => Navigator.pop(context),
+            isQuoting: quoting.value,
+            quoteError: quoteError.value,
+            onRetryQuote: () => retryTick.value++,
+          ),
+          _Step.charge => _ChargeStep(
+            total: total,
+            cart: cart,
+            onBack: () => step.value = _Step.currentSale,
+            onClose: () => Navigator.pop(context),
+            onPickCash: goCash,
+            onPickMode: goCustom,
+            isQuoting: quoting.value,
+            quoteError: quoteError.value,
+            onRetryQuote: () => retryTick.value++,
+          ),
+          _Step.cash => _CashStep(
+            total: total,
+            cashInput: cashInput,
+            tendered: tendered,
+            onBack: () => step.value = _Step.charge,
+            onConfirm: done,
+            isProcessing: isProcessing.value,
+          ),
+          _Step.customPayment => _CustomPaymentStep(
+            mode: selectedMode.value!,
+            total: total,
+            customer: customer.value,
+            onBack: () => step.value = _Step.charge,
+            onConfirm: done,
+            isProcessing: isProcessing.value,
+          ),
+          _Step.success => _SuccessStep(
+            total: settledTotal,
+            methodLabel: method.value == PaymentMethod.cash
+                ? 'Cash'
+                : (selectedMode.value?.name ?? 'Other'),
+            customer: customer.value,
+            change:
+                method.value == PaymentMethod.cash && tendered > settledTotal
+                ? tendered - settledTotal
+                : null,
+            items: completedItems.value,
+            subtotal: completedQuote.value?.subtotal,
+            discountAmount: completedQuote.value?.discountAmount ?? 0,
+            tax: completedQuote.value?.totalTax ?? 0,
+            tip: completedQuote.value?.tipAmount ?? 0,
+            manualAdjustment: completedQuote.value?.manualAdjustment ?? 0,
+            onNewSale: () => Navigator.pop(context),
+            onPrintReceipt: printReceipt,
+            isPrintingReceipt: isPrintingReceipt.value,
+          ),
         },
       ),
     );
@@ -630,7 +665,10 @@ class _CurrentSaleStep extends ConsumerWidget {
                     padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                     child: Text(
                       'Custom amount',
-                      style: TextStyle(fontSize: 13, color: AppColors.textTertiary),
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: AppColors.textTertiary,
+                      ),
                     ),
                   ),
                 const SizedBox(height: 8),
@@ -645,13 +683,16 @@ class _CurrentSaleStep extends ConsumerWidget {
                     icon: Icons.local_offer_outlined,
                     label: cart.discount?.label ?? 'Add discount',
                     color: AppColors.primary,
-                    onTap: () =>
-                        DiscountPickerSheet.show(context, subtotal: cart.subtotal),
+                    onTap: () => DiscountPickerSheet.show(
+                      context,
+                      subtotal: cart.subtotal,
+                    ),
                     trailing: cart.discount == null
                         ? null
                         : GestureDetector(
-                            onTap: () =>
-                                ref.read(activeCartNotifierProvider).clearDiscount(),
+                            onTap: () => ref
+                                .read(activeCartNotifierProvider)
+                                .clearDiscount(),
                             child: const Icon(
                               Icons.close,
                               size: 16,
@@ -669,7 +710,9 @@ class _CurrentSaleStep extends ConsumerWidget {
                 ),
                 const Divider(height: 1, color: AppColors.divider),
                 if (cart.manualAdjustment.abs() >= 0.005) ...[
-                  _ManualAdjustmentSummaryRow(adjustment: cart.manualAdjustment),
+                  _ManualAdjustmentSummaryRow(
+                    adjustment: cart.manualAdjustment,
+                  ),
                   const Divider(height: 1, color: AppColors.divider),
                 ],
                 const SizedBox(height: 12),
@@ -687,20 +730,30 @@ class _CurrentSaleStep extends ConsumerWidget {
                         SizedBox(width: 8),
                         Text(
                           'Confirming total…',
-                          style: TextStyle(fontSize: 12, color: AppColors.textTertiary),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textTertiary,
+                          ),
                         ),
                       ],
                     ),
                   )
                 else if (quoteError != null)
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 4,
+                    ),
                     child: InkWell(
                       onTap: onRetryQuote,
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Icon(Icons.error_outline_rounded, size: 14, color: AppColors.danger),
+                          const Icon(
+                            Icons.error_outline_rounded,
+                            size: 14,
+                            color: AppColors.danger,
+                          ),
                           const SizedBox(width: 6),
                           const Flexible(
                             child: Text(
@@ -775,6 +828,7 @@ class _CartItemsList extends ConsumerWidget {
                                   ref,
                                   title: 'Staff for ${item.name}',
                                 );
+                                if (!context.mounted) return;
                                 ref
                                     .read(activeCartNotifierProvider)
                                     .assignStaff(item.id, staff);
@@ -821,11 +875,15 @@ class _CartItemsList extends ConsumerWidget {
                       ),
                       const SizedBox(width: 8),
                       GestureDetector(
-                        onTap: () =>
-                            ref.read(activeCartNotifierProvider).removeItem(item.id),
+                        onTap: () => ref
+                            .read(activeCartNotifierProvider)
+                            .removeItem(item.id),
                         behavior: HitTestBehavior.opaque,
                         child: const Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 2, vertical: 4),
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 2,
+                            vertical: 4,
+                          ),
                           child: Icon(
                             Icons.close_rounded,
                             size: 16,
@@ -887,7 +945,11 @@ class _ActionRow extends StatelessWidget {
               ),
             ),
             trailing ??
-                Icon(Icons.arrow_forward_ios_rounded, size: 13, color: color.withValues(alpha: 0.6)),
+                Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  size: 13,
+                  color: color.withValues(alpha: 0.6),
+                ),
           ],
         ),
       ),
@@ -956,7 +1018,11 @@ class _ChargeStep extends HookConsumerWidget {
           onBack: editing.value ? () => editing.value = false : onBack,
           right: GestureDetector(
             onTap: onClose,
-            child: const Icon(Icons.close, size: 20, color: AppColors.textTertiary),
+            child: const Icon(
+              Icons.close,
+              size: 20,
+              color: AppColors.textTertiary,
+            ),
           ),
         ),
         Expanded(
@@ -1004,14 +1070,20 @@ class _ChargeStep extends HookConsumerWidget {
                         SizedBox(width: 8),
                         Text(
                           'Confirming total…',
-                          style: TextStyle(fontSize: 12, color: AppColors.textTertiary),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textTertiary,
+                          ),
                         ),
                       ],
                     ),
                   )
                 else if (!editing.value && quoteError != null)
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 4,
+                    ),
                     child: InkWell(
                       onTap: onRetryQuote,
                       child: const Text(
@@ -1032,7 +1104,8 @@ class _ChargeStep extends HookConsumerWidget {
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       child: _FlexNumpad(
-                        onKey: (k) => amountInput.value = _applyKey(amountInput.value, k),
+                        onKey: (k) =>
+                            amountInput.value = _applyKey(amountInput.value, k),
                       ),
                     ),
                   ),
@@ -1068,31 +1141,35 @@ class _ChargeStep extends HookConsumerWidget {
                   // Owner-configured payment modes (see Settings > Payment
                   // Modes) — each just shows a QR the cashier confirms
                   // against, no gateway integration behind it.
-                  Consumer(builder: (context, ref, _) {
-                    final modes = ref.watch(paymentModesProvider).valueOrNull ?? const [];
-                    if (modes.isEmpty) return const SizedBox.shrink();
-                    return Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          border: Border.all(color: AppColors.divider),
-                          borderRadius: BorderRadius.circular(14),
+                  Consumer(
+                    builder: (context, ref, _) {
+                      final modes =
+                          ref.watch(paymentModesProvider).valueOrNull ??
+                          const [];
+                      if (modes.isEmpty) return const SizedBox.shrink();
+                      return Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            border: Border.all(color: AppColors.divider),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: Column(
+                            children: [
+                              for (final (i, mode) in modes.indexed)
+                                _MethodRow(
+                                  icon: Icons.qr_code_rounded,
+                                  label: mode.name,
+                                  color: AppColors.primary,
+                                  onTap: canPay ? () => onPickMode(mode) : null,
+                                  showDivider: i < modes.length - 1,
+                                ),
+                            ],
+                          ),
                         ),
-                        child: Column(
-                          children: [
-                            for (final (i, mode) in modes.indexed)
-                              _MethodRow(
-                                icon: Icons.qr_code_rounded,
-                                label: mode.name,
-                                color: AppColors.primary,
-                                onTap: canPay ? () => onPickMode(mode) : null,
-                                showDivider: i < modes.length - 1,
-                              ),
-                          ],
-                        ),
-                      ),
-                    );
-                  }),
+                      );
+                    },
+                  ),
                   const SizedBox(height: 16),
                 ],
               ],
@@ -1323,196 +1400,206 @@ class _CustomerPicker extends HookConsumerWidget {
               },
             )
           : Column(
-        children: [
-          const _Handle(),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-            child: Row(
               children: [
-                const Text(
-                  'Add Customer',
-                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+                const _Handle(),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                  child: Row(
+                    children: [
+                      const Text(
+                        'Add Customer',
+                        style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const Spacer(),
+                      GestureDetector(
+                        onTap: () => Navigator.pop(context),
+                        child: const Text(
+                          'Cancel',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                const Spacer(),
-                GestureDetector(
-                  onTap: () => Navigator.pop(context),
-                  child: const Text(
-                    'Cancel',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: AppColors.textSecondary,
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: TextField(
+                    controller: ctrl,
+                    autofocus: true,
+                    onChanged: (v) => q.value = v,
+                    decoration: InputDecoration(
+                      hintText: 'Search name or phone…',
+                      hintStyle: const TextStyle(
+                        color: AppColors.textTertiary,
+                        fontSize: 14,
+                      ),
+                      prefixIcon: const Icon(
+                        Icons.search,
+                        size: 18,
+                        color: AppColors.textTertiary,
+                      ),
+                      filled: true,
+                      fillColor: AppColors.surfaceVariant,
+                      border: OutlineInputBorder(
+                        borderSide: BorderSide.none,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(vertical: 10),
                     ),
                   ),
                 ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: TextField(
-              controller: ctrl,
-              autofocus: true,
-              onChanged: (v) => q.value = v,
-              decoration: InputDecoration(
-                hintText: 'Search name or phone…',
-                hintStyle: const TextStyle(
-                  color: AppColors.textTertiary,
-                  fontSize: 14,
-                ),
-                prefixIcon: const Icon(
-                  Icons.search,
-                  size: 18,
-                  color: AppColors.textTertiary,
-                ),
-                filled: true,
-                fillColor: AppColors.surfaceVariant,
-                border: OutlineInputBorder(
-                  borderSide: BorderSide.none,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                contentPadding: const EdgeInsets.symmetric(vertical: 10),
-              ),
-            ),
-          ),
-          const SizedBox(height: 4),
-          InkWell(
-            onTap: () => showAddForm.value = true,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              child: Row(
-                children: [
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(18),
+                const SizedBox(height: 4),
+                InkWell(
+                  onTap: () => showAddForm.value = true,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 12,
                     ),
-                    child: const Icon(
-                      Icons.person_add_alt_1,
-                      size: 18,
-                      color: AppColors.primary,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  const Text(
-                    'Add New Customer',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.primary,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const Divider(height: 1, color: AppColors.divider),
-          Expanded(
-            child: all.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => Center(child: Text('$e')),
-              data: (list) {
-                final filtered = q.value.isEmpty
-                    ? list
-                    : list
-                          .where(
-                            (c) =>
-                                c.fullName.toLowerCase().contains(
-                                  q.value.toLowerCase(),
-                                ) ||
-                                (c.phone ?? '').contains(q.value),
-                          )
-                          .toList();
-
-                return ListView.separated(
-                  padding: EdgeInsets.zero,
-                  itemCount: filtered.length + 1,
-                  separatorBuilder: (_, _) => const Divider(
-                    height: 1,
-                    indent: 66,
-                    color: AppColors.surfaceVariant,
-                  ),
-                  itemBuilder: (_, i) {
-                    if (i == filtered.length) {
-                      return ListTile(
-                        leading: Container(
-                          width: 40,
-                          height: 40,
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 36,
+                          height: 36,
                           decoration: BoxDecoration(
-                            color: AppColors.surfaceVariant,
-                            borderRadius: BorderRadius.circular(20),
+                            color: AppColors.primary.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(18),
                           ),
                           child: const Icon(
-                            Icons.person_outline_rounded,
-                            size: 20,
-                            color: AppColors.textTertiary,
+                            Icons.person_add_alt_1,
+                            size: 18,
+                            color: AppColors.primary,
                           ),
                         ),
-                        title: const Text(
-                          'Continue as Guest',
+                        const SizedBox(width: 12),
+                        const Text(
+                          'Add New Customer',
                           style: TextStyle(
-                            color: AppColors.textSecondary,
                             fontSize: 14,
-                          ),
-                        ),
-                        onTap: () {
-                          onSelected(null);
-                          Navigator.pop(context);
-                        },
-                      );
-                    }
-                    final c = filtered[i];
-                    return ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: AppColors.surfaceVariant,
-                        child: Text(
-                          c.initials,
-                          style: const TextStyle(
                             fontWeight: FontWeight.w600,
-                            color: Colors.black,
-                            fontSize: 14,
+                            color: AppColors.primary,
                           ),
                         ),
-                      ),
-                      title: Text(
-                        c.fullName,
-                        style: const TextStyle(fontSize: 15),
-                      ),
-                      subtitle: c.phone != null
-                          ? Text(
-                              c.phone!,
+                      ],
+                    ),
+                  ),
+                ),
+                const Divider(height: 1, color: AppColors.divider),
+                Expanded(
+                  child: all.when(
+                    loading: () =>
+                        const Center(child: CircularProgressIndicator()),
+                    error: (e, _) => Center(child: Text('$e')),
+                    data: (list) {
+                      final filtered = q.value.isEmpty
+                          ? list
+                          : list
+                                .where(
+                                  (c) =>
+                                      c.fullName.toLowerCase().contains(
+                                        q.value.toLowerCase(),
+                                      ) ||
+                                      (c.phone ?? '').contains(q.value),
+                                )
+                                .toList();
+
+                      return ListView.separated(
+                        padding: EdgeInsets.zero,
+                        itemCount: filtered.length + 1,
+                        separatorBuilder: (_, _) => const Divider(
+                          height: 1,
+                          indent: 66,
+                          color: AppColors.surfaceVariant,
+                        ),
+                        itemBuilder: (_, i) {
+                          if (i == filtered.length) {
+                            return ListTile(
+                              leading: Container(
+                                width: 40,
+                                height: 40,
+                                decoration: BoxDecoration(
+                                  color: AppColors.surfaceVariant,
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: const Icon(
+                                  Icons.person_outline_rounded,
+                                  size: 20,
+                                  color: AppColors.textTertiary,
+                                ),
+                              ),
+                              title: const Text(
+                                'Continue as Guest',
+                                style: TextStyle(
+                                  color: AppColors.textSecondary,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              onTap: () {
+                                onSelected(null);
+                                Navigator.pop(context);
+                              },
+                            );
+                          }
+                          final c = filtered[i];
+                          return ListTile(
+                            leading: CircleAvatar(
+                              backgroundColor: AppColors.surfaceVariant,
+                              child: Text(
+                                c.initials,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.black,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ),
+                            title: Text(
+                              c.fullName,
+                              style: const TextStyle(fontSize: 15),
+                            ),
+                            subtitle: c.phone != null
+                                ? Text(
+                                    c.phone!,
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: AppColors.textTertiary,
+                                    ),
+                                  )
+                                : null,
+                            trailing: Text(
+                              '${c.visitCount} visits',
                               style: const TextStyle(
                                 fontSize: 12,
                                 color: AppColors.textTertiary,
                               ),
-                            )
-                          : null,
-                      trailing: Text(
-                        '${c.visitCount} visits',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: AppColors.textTertiary,
-                        ),
-                      ),
-                      onTap: () {
-                        onSelected(c);
-                        Navigator.pop(context);
-                      },
-                    );
-                  },
-                );
-              },
+                            ),
+                            onTap: () {
+                              onSelected(c);
+                              Navigator.pop(context);
+                            },
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
             ),
-          ),
-        ],
-      ),
     );
   }
 }
 
 class _QuickAddCustomerForm extends HookConsumerWidget {
-  const _QuickAddCustomerForm({required this.onCancel, required this.onCreated});
+  const _QuickAddCustomerForm({
+    required this.onCancel,
+    required this.onCreated,
+  });
   final VoidCallback onCancel;
   final ValueChanged<CustomerModel> onCreated;
 
@@ -1649,7 +1736,10 @@ class _QuickAddCustomerForm extends HookConsumerWidget {
                   const SizedBox(height: 10),
                   Text(
                     error.value!,
-                    style: const TextStyle(fontSize: 12, color: AppColors.danger),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.danger,
+                    ),
                   ),
                 ],
               ],
@@ -1815,9 +1905,7 @@ class _Chip extends StatelessWidget {
       decoration: BoxDecoration(
         color: selected ? Colors.white : Colors.black,
         borderRadius: BorderRadius.circular(20),
-        border: selected
-            ? Border.all(color: Colors.black, width: 1.5)
-            : null,
+        border: selected ? Border.all(color: Colors.black, width: 1.5) : null,
       ),
       child: Text(
         label,
@@ -1891,7 +1979,10 @@ class _CustomPaymentStep extends StatelessWidget {
                         decoration: BoxDecoration(
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: AppColors.divider, width: 2),
+                          border: Border.all(
+                            color: AppColors.divider,
+                            width: 2,
+                          ),
                           boxShadow: [
                             BoxShadow(
                               color: Colors.black.withValues(alpha: 0.06),
@@ -1908,19 +1999,24 @@ class _CustomPaymentStep extends StatelessWidget {
                               mode.qrImageUrl,
                               fit: BoxFit.contain,
                               errorBuilder: (_, _, _) => const Center(
-                                child: Icon(Icons.qr_code_2_rounded,
-                                    size: 150, color: Colors.black87),
+                                child: Icon(
+                                  Icons.qr_code_2_rounded,
+                                  size: 150,
+                                  color: Colors.black87,
+                                ),
                               ),
                               loadingBuilder: (context, child, progress) =>
                                   progress == null
-                                      ? child
-                                      : const Center(
-                                          child: SizedBox(
-                                            width: 28,
-                                            height: 28,
-                                            child: CircularProgressIndicator(strokeWidth: 2),
-                                          ),
+                                  ? child
+                                  : const Center(
+                                      child: SizedBox(
+                                        width: 28,
+                                        height: 28,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
                                         ),
+                                      ),
+                                    ),
                             ),
                           ),
                         ),
@@ -1952,7 +2048,10 @@ class _CustomPaymentStep extends StatelessWidget {
                 Text(
                   'Show this to the customer and confirm once they\'ve paid.',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textSecondary,
+                  ),
                 ),
                 const SizedBox(height: 12),
               ],

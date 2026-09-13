@@ -6,35 +6,40 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/widgets/quick_logo.dart';
 import '../providers/auth_provider.dart';
 
-class ForgotPasswordScreen extends ConsumerStatefulWidget {
-  const ForgotPasswordScreen({super.key});
+/// Step 1 of password reset: enter the 6-digit code that was emailed after
+/// [ForgotPasswordScreen]. Only once a well-formed code is entered here does
+/// the router move the user on to [ResetPasswordScreen] to set a new
+/// password — the two used to be a single combined form.
+class VerifyResetCodeScreen extends ConsumerStatefulWidget {
+  const VerifyResetCodeScreen({super.key});
 
   @override
-  ConsumerState<ForgotPasswordScreen> createState() => _ForgotPasswordScreenState();
+  ConsumerState<VerifyResetCodeScreen> createState() => _VerifyResetCodeScreenState();
 }
 
-class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
+class _VerifyResetCodeScreenState extends ConsumerState<VerifyResetCodeScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _emailCtrl = TextEditingController();
+  final _otpCtrl = TextEditingController();
 
   @override
   void dispose() {
-    _emailCtrl.dispose();
+    _otpCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _submit() async {
+  void _submit() {
     if (!(_formKey.currentState?.validate() ?? false)) return;
-    await ref.read(authProvider.notifier).forgotPassword(_emailCtrl.text.trim());
+    // No standalone "verify reset code" endpoint exists on the backend — the
+    // code is only actually checked when the new password is submitted on
+    // the next screen. This just records it and advances the flow; a wrong
+    // code will surface as an error there instead.
+    ref.read(authProvider.notifier).confirmResetCode(_otpCtrl.text.trim());
   }
 
   @override
   Widget build(BuildContext context) {
-    ref.listen(authProvider, (_, next) {
-      if (next.status == AuthStatus.resetPending) context.go(AppRoutes.verifyResetCode);
-    });
-
     final authState = ref.watch(authProvider);
+    final email = authState.resetEmail ?? '';
 
     return Scaffold(
       backgroundColor: AppColors.sidebarBg,
@@ -42,14 +47,14 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
         child: LayoutBuilder(
           builder: (context, constraints) {
             final isWide = constraints.maxWidth >= 700;
-            return isWide ? _wideLayout(authState) : _narrowLayout(authState);
+            return isWide ? _wideLayout(authState, email) : _narrowLayout(authState, email);
           },
         ),
       ),
     );
   }
 
-  Widget _wideLayout(AuthState authState) {
+  Widget _wideLayout(AuthState authState, String email) {
     return Row(
       children: [
         Expanded(child: _BrandPanel()),
@@ -58,14 +63,14 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
           child: Container(
             color: AppColors.surface,
             padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 56),
-            child: _buildForm(authState),
+            child: _buildForm(authState, email),
           ),
         ),
       ],
     );
   }
 
-  Widget _narrowLayout(AuthState authState) {
+  Widget _narrowLayout(AuthState authState, String email) {
     return SingleChildScrollView(
       child: ConstrainedBox(
         constraints: BoxConstraints(
@@ -84,7 +89,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                   borderRadius: AppRadius.xlBR,
                 ),
                 padding: const EdgeInsets.all(28),
-                child: _buildForm(authState),
+                child: _buildForm(authState, email),
               ),
             ],
           ),
@@ -93,9 +98,10 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
     );
   }
 
-  Widget _buildForm(AuthState authState) {
+  Widget _buildForm(AuthState authState, String email) {
     return Form(
       key: _formKey,
+      autovalidateMode: AutovalidateMode.onUserInteraction,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -107,31 +113,44 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
               color: AppColors.primary.withAlpha(24),
               borderRadius: AppRadius.mdBR,
             ),
-            child: const Icon(Icons.lock_reset_rounded, color: AppColors.primary, size: 24),
+            child: const Icon(Icons.mark_email_read_outlined, color: AppColors.primary, size: 24),
           ),
           const SizedBox(height: 20),
-          Text('Forgot password?', style: AppTextStyles.displayMedium),
+          Text('Enter verification code', style: AppTextStyles.displayMedium),
           const SizedBox(height: 6),
-          Text(
-            "Enter your email and we'll send you a reset code.",
-            style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary),
+          RichText(
+            text: TextSpan(
+              style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary),
+              children: [
+                const TextSpan(text: 'We sent a 6-digit code to '),
+                TextSpan(
+                  text: email,
+                  style: AppTextStyles.bodyMedium.copyWith(
+                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 32),
 
-          _FieldLabel('Email'),
+          _FieldLabel('Reset Code'),
           const SizedBox(height: 8),
           TextFormField(
-            controller: _emailCtrl,
-            keyboardType: TextInputType.emailAddress,
+            controller: _otpCtrl,
+            keyboardType: TextInputType.number,
             textInputAction: TextInputAction.done,
-            autofillHints: const [AutofillHints.email],
+            maxLength: 6,
+            autofocus: true,
             decoration: const InputDecoration(
-              hintText: 'you@example.com',
-              prefixIcon: Icon(Icons.mail_outline_rounded, size: 18),
+              hintText: '123456',
+              prefixIcon: Icon(Icons.tag_rounded, size: 18),
+              counterText: '',
             ),
             validator: (v) {
-              if (v == null || v.trim().isEmpty) return 'Email is required';
-              if (!RegExp(r'^[\w.-]+@[\w.-]+\.\w+$').hasMatch(v.trim())) return 'Enter a valid email';
+              if (v == null || v.trim().isEmpty) return 'Code is required';
+              if (!RegExp(r'^\d{6}$').hasMatch(v.trim())) return 'Enter the 6-digit code';
               return null;
             },
             onFieldSubmitted: (_) => _submit(),
@@ -154,26 +173,47 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                       height: 20,
                       child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                     )
-                  : const Text('Send Reset Code'),
+                  : const Text('Verify Code'),
             ),
           ),
 
-          const SizedBox(height: 24),
+          const SizedBox(height: 20),
           Center(
             child: GestureDetector(
               onTap: () {
-                ref.read(authProvider.notifier).clearError();
+                // Doesn't actually resend anything itself — it drops out of
+                // AuthStatus.resetPending (so the router stops forcing the
+                // user back into this flow) and sends them to the email
+                // screen, where submitting again is what triggers a fresh
+                // code.
+                ref.read(authProvider.notifier).cancelPasswordReset();
+                context.go(AppRoutes.forgotPassword);
+              },
+              child: Text(
+                'Resend code',
+                style: AppTextStyles.bodySmall.copyWith(
+                  color: AppColors.primary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Center(
+            child: GestureDetector(
+              onTap: () {
+                ref.read(authProvider.notifier).cancelPasswordReset();
                 context.go(AppRoutes.login);
               },
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.arrow_back_rounded, size: 14, color: AppColors.primary),
+                  const Icon(Icons.arrow_back_rounded, size: 14, color: AppColors.textSecondary),
                   const SizedBox(width: 4),
                   Text(
-                    'Back to sign in',
+                    'Cancel and back to sign in',
                     style: AppTextStyles.bodySmall.copyWith(
-                      color: AppColors.primary,
+                      color: AppColors.textSecondary,
                       fontWeight: FontWeight.w600,
                     ),
                   ),

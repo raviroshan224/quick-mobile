@@ -35,6 +35,7 @@ class AuthState {
     this.error,
     this.pendingEmail,
     this.resetEmail,
+    this.resetOtp,
     this.profiles,
     this.ownerUserId,
   });
@@ -44,6 +45,12 @@ class AuthState {
   final String? error;
   final String? pendingEmail;
   final String? resetEmail;
+  // Set once the user has entered a code on the verify-reset-code screen —
+  // still just held client-side (see AuthNotifier.confirmResetCode) since
+  // there's no standalone "verify reset OTP" endpoint, only the combined
+  // /auth/reset-password call. Its presence is what the router uses to move
+  // the user from the code-entry screen on to the new-password screen.
+  final String? resetOtp;
   final List<ProfileModel>? profiles;
   final String? ownerUserId;
 
@@ -56,6 +63,8 @@ class AuthState {
     String? error,
     String? pendingEmail,
     String? resetEmail,
+    String? resetOtp,
+    bool clearResetOtp = false,
     List<ProfileModel>? profiles,
     String? ownerUserId,
   }) =>
@@ -65,6 +74,7 @@ class AuthState {
         error: error,
         pendingEmail: pendingEmail ?? this.pendingEmail,
         resetEmail: resetEmail ?? this.resetEmail,
+        resetOtp: clearResetOtp ? null : (resetOtp ?? this.resetOtp),
         profiles: profiles ?? this.profiles,
         ownerUserId: ownerUserId ?? this.ownerUserId,
       );
@@ -166,7 +176,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
         // waiting in their inbox is guaranteed current.
         final trimmedEmail = email.trim();
         state = AuthState(status: AuthStatus.pendingOtp, pendingEmail: trimmedEmail);
-        unawaited(resendOtp());
+        // Fire-and-forget: there's no UI on this screen to report a resend
+        // failure to, and the OTP screen's own "Resend" button is still
+        // there as a fallback — just don't let a failure here go unhandled.
+        unawaited(resendOtp().catchError((_) {}));
         return;
       }
       state = AuthState(status: AuthStatus.error, error: e.toString());
@@ -226,12 +239,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
+  // Lets exceptions propagate — the caller (OtpScreen) needs to know a
+  // resend actually failed instead of showing a false "code sent" message
+  // and burning the resend cooldown for nothing.
   Future<void> resendOtp() async {
     final email = state.pendingEmail;
     if (email == null) return;
-    try {
-      await _repo.resendOtp(email);
-    } catch (_) {}
+    await _repo.resendOtp(email);
   }
 
   Future<void> forgotPassword(String email) async {
@@ -244,15 +258,40 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  Future<void> resetPassword(String otp, String newPassword) async {
+  // Called from the verify-reset-code screen once a 6-digit code has been
+  // entered. This doesn't call the backend — there's no standalone endpoint
+  // to verify a reset OTP on its own, only the combined reset-password call
+  // below — it just records the code and lets the router move the user on
+  // to the new-password screen. Status is forced back to resetPending (not
+  // just left as-is) because a prior failed resetPassword() attempt leaves
+  // status at AuthStatus.error — without this, re-entering a fresh code
+  // after "Entered the wrong code?" would never trigger the router's
+  // resetPending redirect, stranding the user on this screen.
+  void confirmResetCode(String otp) {
+    state = state.copyWith(status: AuthStatus.resetPending, resetOtp: otp.trim());
+  }
+
+  // Sends the user back to re-enter the code (e.g. after a failed reset, or
+  // "wrong code" tap) without losing the email the code was sent to.
+  void clearResetOtp() {
+    state = state.copyWith(clearResetOtp: true);
+  }
+
+  Future<void> resetPassword(String newPassword) async {
     final email = state.resetEmail;
-    if (email == null) return;
+    final otp = state.resetOtp;
+    if (email == null || otp == null) return;
     state = state.copyWith(status: AuthStatus.loading, error: null);
     try {
-      await _repo.resetPassword(email, otp.trim(), newPassword);
+      await _repo.resetPassword(email, otp, newPassword);
       state = const AuthState(status: AuthStatus.resetSuccess);
     } catch (e) {
-      state = AuthState(status: AuthStatus.error, error: e.toString(), resetEmail: email);
+      state = AuthState(
+        status: AuthStatus.error,
+        error: e.toString(),
+        resetEmail: email,
+        resetOtp: otp,
+      );
     }
   }
 
@@ -275,6 +314,15 @@ class AuthNotifier extends StateNotifier<AuthState> {
   // /verify-otp while that status holds. This resets to a clean
   // unauthenticated state so leaving the OTP screen actually leaves it.
   void cancelPendingOtp() {
+    state = const AuthState(status: AuthStatus.unauthenticated);
+  }
+
+  // Same idea as cancelPendingOtp() above, for the password-reset flow:
+  // the router unconditionally redirects any navigation back to the
+  // verify-code or new-password screen while AuthStatus.resetPending
+  // holds, so without this a user has no way to bail out of an in-progress
+  // reset back to the login screen — not even the system back gesture.
+  void cancelPasswordReset() {
     state = const AuthState(status: AuthStatus.unauthenticated);
   }
 

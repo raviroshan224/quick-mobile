@@ -71,8 +71,13 @@ class ServicesRepository {
       'name': ?name,
       'price': ?price,
       'duration': ?duration,
-      'description': ?description,
-      'categoryId': ?categoryId,
+      // Sent as an explicit key even when null (not omitted), same reason
+      // as clearColor below — the only caller (service_form_screen._save)
+      // always submits the form's full current state, so a description the
+      // user cleared, or a category they unselected, must actually clear
+      // on the backend rather than silently keeping its old value.
+      'description': description,
+      'categoryId': categoryId,
       // clearColor lets the form explicitly reset back to "auto" — sending
       // null (rather than omitting the key) so the backend actually clears
       // a previously-chosen color instead of leaving the old one in place.

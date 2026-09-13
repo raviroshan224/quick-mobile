@@ -768,10 +768,10 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
                                   : null,
                             ),
                             validator: (v) {
-                              if (v != null && v.trim().isNotEmpty && !v.contains('@')) {
-                                return 'Enter a valid email';
-                              }
-                              return null;
+                              if (v == null || v.trim().isEmpty) return null;
+                              final ok =
+                                  RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(v.trim());
+                              return ok ? null : 'Enter a valid email';
                             },
                           ),
                         ),

@@ -311,10 +311,11 @@ class _PinSheet extends HookConsumerWidget {
       if (authState.status == AuthStatus.authenticated) {
         Navigator.of(context).pop();
       } else {
-        // Wrong PIN
+        // Login failed — show the actual reason (wrong PIN, network error,
+        // deactivated account, etc.) instead of always blaming the PIN.
         loading.value = false;
         pin.value = '';
-        error.value = 'Incorrect PIN. Try again.';
+        error.value = authState.error ?? 'Incorrect PIN. Try again.';
         shakeKey.value++;
         HapticFeedback.heavyImpact();
       }

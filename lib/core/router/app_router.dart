@@ -8,6 +8,7 @@ import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/auth/presentation/screens/signup_screen.dart';
 import '../../features/auth/presentation/screens/otp_screen.dart';
 import '../../features/auth/presentation/screens/forgot_password_screen.dart';
+import '../../features/auth/presentation/screens/verify_reset_code_screen.dart';
 import '../../features/auth/presentation/screens/reset_password_screen.dart';
 import '../../features/auth/presentation/screens/profile_picker_screen.dart';
 import '../../features/checkout/presentation/screens/checkout_screen.dart';
@@ -25,6 +26,7 @@ import '../../features/more/presentation/screens/item_form_screen.dart';
 import '../../features/more/presentation/screens/services_screen.dart';
 import '../../features/more/presentation/screens/service_form_screen.dart';
 import '../../features/more/presentation/screens/customers_screen.dart';
+import '../../features/more/presentation/screens/bookings_screen.dart';
 import '../../features/more/presentation/screens/customer_detail_screen.dart';
 import '../../features/more/presentation/screens/customer_form_screen.dart';
 import '../../features/more/presentation/screens/drawers_screen.dart';
@@ -74,15 +76,22 @@ final routerProvider = Provider<GoRouter>((ref) {
       }
 
       final isLoggedIn = auth.isAuthenticated;
-      // Redirect to reset-password screen when OTP was sent for password reset.
-      if (auth.status == AuthStatus.resetPending && loc != AppRoutes.resetPassword) {
-        return AppRoutes.resetPassword;
+      // Password reset is two steps: verify the code first, then set a new
+      // password. Send the user to whichever step they haven't finished yet.
+      if (auth.status == AuthStatus.resetPending) {
+        if (auth.resetOtp == null && loc != AppRoutes.verifyResetCode) {
+          return AppRoutes.verifyResetCode;
+        }
+        if (auth.resetOtp != null && loc != AppRoutes.resetPassword) {
+          return AppRoutes.resetPassword;
+        }
       }
 
       final onAuthScreen = loc == AppRoutes.login ||
           loc == AppRoutes.signup ||
           loc == '/verify-otp' ||
           loc == AppRoutes.forgotPassword ||
+          loc == AppRoutes.verifyResetCode ||
           loc == AppRoutes.resetPassword ||
           loc == AppRoutes.profiles;
 
@@ -138,6 +147,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.forgotPassword,
         builder: (_, _) => const ForgotPasswordScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.verifyResetCode,
+        builder: (_, _) => const VerifyResetCodeScreen(),
       ),
       GoRoute(
         path: AppRoutes.resetPassword,
@@ -207,6 +220,9 @@ final routerProvider = Provider<GoRouter>((ref) {
               builder: (_, state) => CustomerFormScreen(
                     customerId: state.pathParameters['id'],
                   )),
+          GoRoute(
+              path: AppRoutes.moreBookings,
+              builder: (_, _) => const BookingsScreen()),
           GoRoute(
               path: AppRoutes.moreDrawers,
               builder: (_, _) => const DrawersScreen()),

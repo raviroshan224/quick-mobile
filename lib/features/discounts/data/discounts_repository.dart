@@ -57,6 +57,11 @@ class DiscountsRepository {
       'isActive': ?isActive,
       if (scope != null) 'scope': scope == DiscountScope.service ? 'SERVICE' : 'ALL',
       if (scope == DiscountScope.service) 'serviceId': serviceId,
+      // Scope flipped back to "all" — explicitly clear serviceId server-side
+      // (an omitted key on this PATCH means "leave unchanged"), otherwise
+      // the discount keeps pointing at its old service even though the UI
+      // now shows it as "All services & items".
+      if (scope == DiscountScope.all) 'serviceId': null,
     }) as Map<String, dynamic>;
     return _fromJson(data);
   }

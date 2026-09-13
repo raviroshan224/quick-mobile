@@ -35,11 +35,19 @@ class RefreshInterceptor extends Interceptor {
     required this.dio,
     required this.storage,
     required this.onUnauthenticated,
+    required this.ref,
   });
 
   final Dio dio;
   final FlutterSecureStorage storage;
   final void Function() onUnauthenticated;
+  // Refresh/retry requests run on a bare `refreshDio` with no interceptors
+  // of its own (to avoid recursing back into this same handler), so
+  // ConnectivityInterceptor never sees their responses — a success here has
+  // to mark the app back online itself, or a stale "offline" banner from
+  // before the refresh can be left showing indefinitely even though the
+  // backend just proved it's reachable.
+  final Ref ref;
 
   // Non-null while a token refresh triggered by a concurrent 401 is in
   // flight — lets sibling requests that 401 at the same moment await the
@@ -91,6 +99,7 @@ class RefreshInterceptor extends Interceptor {
           final opts = err.requestOptions;
           opts.headers['Authorization'] = 'Bearer $newAccess';
           final retryResponse = await dio.fetch(opts);
+          ref.read(isBackendUnreachableProvider.notifier).markOnline();
           handler.resolve(retryResponse);
         } catch (_) {
           handler.reject(err);
@@ -115,6 +124,9 @@ class RefreshInterceptor extends Interceptor {
           '/auth/refresh-token',
           data: {'refreshToken': refreshToken},
         );
+        // The refresh call alone already proves the backend is reachable,
+        // regardless of what happens with the retry below.
+        ref.read(isBackendUnreachableProvider.notifier).markOnline();
 
         final data = refreshResponse.data['data'] as Map<String, dynamic>;
         final newAccess = data['accessToken'] as String;
@@ -305,9 +317,16 @@ class ErrorInterceptor extends Interceptor {
       final body = response.data;
       if (body is Map<String, dynamic>) {
         final raw = body['message'];
-        final msg = raw is List
-            ? raw.join(', ')
-            : (raw as String? ?? 'An error occurred');
+        // `raw as String?` would throw if the backend ever sends `message`
+        // as something other than a String/List/null (e.g. a nested
+        // object or number) — falling back on type instead of casting
+        // means a malformed error body degrades to the generic message
+        // rather than crashing with an unrelated TypeError.
+        final msg = switch (raw) {
+          String s => s,
+          List l => l.join(', '),
+          _ => 'An error occurred',
+        };
         final statusCode = response.statusCode;
         handler.reject(
           DioException(

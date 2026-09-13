@@ -15,7 +15,6 @@ class ResetPasswordScreen extends ConsumerStatefulWidget {
 
 class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _otpCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
   final _confirmCtrl = TextEditingController();
   bool _obscurePassword = true;
@@ -23,7 +22,6 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
 
   @override
   void dispose() {
-    _otpCtrl.dispose();
     _passwordCtrl.dispose();
     _confirmCtrl.dispose();
     super.dispose();
@@ -31,7 +29,7 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
 
   Future<void> _submit() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
-    await ref.read(authProvider.notifier).resetPassword(_otpCtrl.text.trim(), _passwordCtrl.text);
+    await ref.read(authProvider.notifier).resetPassword(_passwordCtrl.text);
   }
 
   @override
@@ -111,6 +109,7 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
   Widget _buildForm(AuthState authState, String email) {
     return Form(
       key: _formKey,
+      autovalidateMode: AutovalidateMode.onUserInteraction,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -125,13 +124,13 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
             child: const Icon(Icons.mark_email_read_outlined, color: AppColors.primary, size: 24),
           ),
           const SizedBox(height: 20),
-          Text('Reset your password', style: AppTextStyles.displayMedium),
+          Text('Set a new password', style: AppTextStyles.displayMedium),
           const SizedBox(height: 6),
           RichText(
             text: TextSpan(
               style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary),
               children: [
-                const TextSpan(text: 'We sent a 6-digit code to '),
+                const TextSpan(text: 'Code verified for '),
                 TextSpan(
                   text: email,
                   style: AppTextStyles.bodyMedium.copyWith(
@@ -139,30 +138,11 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
+                const TextSpan(text: '. Choose a new password below.'),
               ],
             ),
           ),
           const SizedBox(height: 32),
-
-          _FieldLabel('Reset Code'),
-          const SizedBox(height: 8),
-          TextFormField(
-            controller: _otpCtrl,
-            keyboardType: TextInputType.number,
-            textInputAction: TextInputAction.next,
-            maxLength: 6,
-            decoration: const InputDecoration(
-              hintText: '123456',
-              prefixIcon: Icon(Icons.tag_rounded, size: 18),
-              counterText: '',
-            ),
-            validator: (v) {
-              if (v == null || v.trim().isEmpty) return 'Code is required';
-              if (!RegExp(r'^\d{6}$').hasMatch(v.trim())) return 'Enter the 6-digit code';
-              return null;
-            },
-          ),
-          const SizedBox(height: 20),
 
           _FieldLabel('New Password'),
           const SizedBox(height: 8),
@@ -243,19 +223,42 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
             ),
           ),
 
-          const SizedBox(height: 24),
+          const SizedBox(height: 20),
           Center(
             child: GestureDetector(
               onTap: () {
-                ref.read(authProvider.notifier).clearError();
-                context.go(AppRoutes.forgotPassword);
+                ref.read(authProvider.notifier).clearResetOtp();
+                context.go(AppRoutes.verifyResetCode);
               },
               child: Text(
-                'Resend code',
+                'Entered the wrong code?',
                 style: AppTextStyles.bodySmall.copyWith(
                   color: AppColors.primary,
                   fontWeight: FontWeight.w600,
                 ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Center(
+            child: GestureDetector(
+              onTap: () {
+                ref.read(authProvider.notifier).cancelPasswordReset();
+                context.go(AppRoutes.login);
+              },
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.arrow_back_rounded, size: 14, color: AppColors.textSecondary),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Cancel and back to sign in',
+                    style: AppTextStyles.bodySmall.copyWith(
+                      color: AppColors.textSecondary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),

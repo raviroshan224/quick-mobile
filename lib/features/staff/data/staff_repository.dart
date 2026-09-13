@@ -161,14 +161,19 @@ class StaffRepository {
     String? address,
   }) async {
     final data = await _api.patch('/staff/$id', data: {
-      'phone': ?phone,
+      // These are sent as an explicit key even when null (not omitted) —
+      // the only caller (staff_form_screen._saveEdit) always submits the
+      // form's full current state, so a field the user cleared must
+      // actually clear on the backend rather than silently keeping its old
+      // value (an omitted key means "leave unchanged" in this PATCH).
+      'phone': phone,
       'specialties': ?specialties,
-      'commissionRate': ?commissionRate,
+      'commissionRate': commissionRate,
       'isActive': ?isActive,
-      'emergencyContact': ?emergencyContact,
-      'emergencyContactName': ?emergencyContactName,
-      'emergencyRelationship': ?emergencyRelationship,
-      'address': ?address,
+      'emergencyContact': emergencyContact,
+      'emergencyContactName': emergencyContactName,
+      'emergencyRelationship': emergencyRelationship,
+      'address': address,
     }) as Map<String, dynamic>;
     return StaffModel.fromJson(data);
   }

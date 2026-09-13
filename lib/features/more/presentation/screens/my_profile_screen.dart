@@ -557,9 +557,13 @@ class _TxRow extends StatelessWidget {
     final isToday = txDate.year == now.year &&
         txDate.month == now.month &&
         txDate.day == now.day;
-    final isYesterday = txDate.year == now.year &&
-        txDate.month == now.month &&
-        txDate.day == now.day - 1;
+    // DateTime subtraction (not `now.day - 1`, which breaks on the 1st of a
+    // month — day 0 never matches anything) so "yesterday" still resolves
+    // correctly across a month boundary.
+    final yesterday = now.subtract(const Duration(days: 1));
+    final isYesterday = txDate.year == yesterday.year &&
+        txDate.month == yesterday.month &&
+        txDate.day == yesterday.day;
     final dayLabel =
         isToday ? 'Today' : isYesterday ? 'Yesterday' : '${txDate.day}/${txDate.month}';
 

@@ -108,6 +108,11 @@ class MoreScreen extends ConsumerWidget {
                       onTap: () => context.go(AppRoutes.moreServices),
                     ),
                     _MoreTile(
+                      icon: Icons.calendar_month_outlined,
+                      label: 'Bookings',
+                      onTap: () => context.go(AppRoutes.moreBookings),
+                    ),
+                    _MoreTile(
                       icon: Icons.tag,
                       label: 'Inventory',
                       onTap: () => context.go(AppRoutes.moreItems),

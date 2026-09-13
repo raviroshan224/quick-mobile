@@ -242,6 +242,7 @@ class _PaymentModeFormScreenState extends ConsumerState<PaymentModeFormScreen> {
       ),
       body: Form(
         key: _formKey,
+        autovalidateMode: AutovalidateMode.onUserInteraction,
         child: ListView(
           padding: const EdgeInsets.only(bottom: 120),
           children: [

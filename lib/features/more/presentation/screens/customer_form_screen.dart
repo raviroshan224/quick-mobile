@@ -127,6 +127,12 @@ class _CustomerFormScreenState
         );
       }
       ref.invalidate(customersProvider);
+      if (widget.isEditing) {
+        // Otherwise the detail screen keeps showing the pre-edit customer
+        // (name/phone/email/etc.) if it's cached — customerDetailProvider
+        // isn't autoDispose, so it won't naturally pick up this change.
+        ref.invalidate(customerDetailProvider(widget.customerId!));
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

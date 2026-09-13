@@ -221,7 +221,11 @@ final transactionListProvider =
 
 // ─── Full paginated history for one staff member (owner view) ────────────────
 
-final staffHistoryProvider = StateNotifierProvider.family<
+// autoDispose: without it, every distinct staffId ever viewed here keeps
+// its own TransactionListNotifier (and fetched transaction list) alive in
+// memory for the rest of the app session, since nothing else ever
+// invalidates a `.family` provider on its own.
+final staffHistoryProvider = StateNotifierProvider.autoDispose.family<
     TransactionListNotifier, TransactionListState, String>((ref, staffId) {
   return TransactionListNotifier(
     ref.read(_transactionsRepoProvider),
@@ -374,22 +378,38 @@ final todayRevenueProvider = FutureProvider.autoDispose<
   // regardless of server timezone (e.g. NPT midnight = June 30 18:15 UTC).
   final fromUtc = _utcMs(DateTime(rangeFrom.year, rangeFrom.month, rangeFrom.day));
   final toUtc = _utcMs(DateTime(rangeTo.year, rangeTo.month, rangeTo.day, 23, 59, 59, 999));
-  final result = await ref
-      .read(_transactionsRepoProvider)
-      .getAll(limit: 100, from: fromUtc, to: toUtc, userId: staffUserId);
+  final repo = ref.read(_transactionsRepoProvider);
   var revenue = 0.0;
   var sales = 0;
   var refunds = 0;
-  for (final t in result.items) {
-    if (t.status == TransactionStatus.completed ||
-        t.status == TransactionStatus.partiallyRefunded) {
-      revenue += t.total;
-      sales++;
+  // Walk every page for the range instead of just the first 100 — a busy
+  // day/range can easily have more than that, and silently summing only
+  // page 1 understated the totals with no indication anything was cut off.
+  // Capped at 50 pages (5,000 transactions) as a sane upper bound so a
+  // backend that never reports hasMore: false correctly can't spin forever.
+  var page = 1;
+  const maxPages = 50;
+  while (true) {
+    final result = await repo.getAll(
+      page: page,
+      limit: 100,
+      from: fromUtc,
+      to: toUtc,
+      userId: staffUserId,
+    );
+    for (final t in result.items) {
+      if (t.status == TransactionStatus.completed ||
+          t.status == TransactionStatus.partiallyRefunded) {
+        revenue += t.total;
+        sales++;
+      }
+      if (t.status == TransactionStatus.refunded ||
+          t.status == TransactionStatus.partiallyRefunded) {
+        refunds++;
+      }
     }
-    if (t.status == TransactionStatus.refunded ||
-        t.status == TransactionStatus.partiallyRefunded) {
-      refunds++;
-    }
+    if (!result.hasMore || page >= maxPages) break;
+    page++;
   }
   return (
     revenue: revenue,

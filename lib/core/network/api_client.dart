@@ -54,6 +54,7 @@ final dioProvider = Provider<Dio>((ref) {
       dio: refreshDio,
       storage: _storage,
       onUnauthenticated: () => _unauthenticatedCallback?.call(),
+      ref: ref,
     ),
     ErrorInterceptor(),
     if (kDebugMode) DebugLogInterceptor(),
