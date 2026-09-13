@@ -29,6 +29,7 @@ class CustomersRepository {
     required String lastName,
     String? email,
     String? phone,
+    String? address,
     String? notes,
   }) async {
     final data = await _api.post('/customers', data: {
@@ -36,6 +37,7 @@ class CustomersRepository {
       'lastName': lastName,
       if (email != null && email.isNotEmpty) 'email': email,
       if (phone != null && phone.isNotEmpty) 'phone': phone,
+      if (address != null && address.isNotEmpty) 'address': address,
       if (notes != null && notes.isNotEmpty) 'notes': notes,
     }) as Map<String, dynamic>;
     return CustomerModel.fromJson(data);
@@ -47,6 +49,7 @@ class CustomersRepository {
     String? lastName,
     String? email,
     String? phone,
+    String? address,
     String? notes,
   }) async {
     final data = await _api.patch('/customers/$id', data: {
@@ -54,6 +57,7 @@ class CustomersRepository {
       'lastName': ?lastName,
       'email': ?email,
       'phone': ?phone,
+      'address': ?address,
       'notes': ?notes,
     }) as Map<String, dynamic>;
     return CustomerModel.fromJson(data);

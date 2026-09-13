@@ -5,6 +5,7 @@ class CustomerModel {
     required this.lastName,
     this.email,
     this.phone,
+    this.address,
     this.notes,
     this.photoUrl,
     this.visitCount = 0,
@@ -17,6 +18,7 @@ class CustomerModel {
   final String lastName;
   final String? email;
   final String? phone;
+  final String? address;
   final String? notes;
   final String? photoUrl;
   final int visitCount;
@@ -36,6 +38,7 @@ class CustomerModel {
         lastName: j['lastName'] as String? ?? '',
         email: j['email'] as String?,
         phone: j['phone'] as String?,
+        address: j['address'] as String?,
         notes: j['notes'] as String?,
         photoUrl: j['photoUrl'] as String?,
         visitCount: j['visitCount'] as int? ?? 0,
@@ -49,6 +52,7 @@ class CustomerModel {
         'lastName': lastName,
         'email': email,
         'phone': phone,
+        'address': address,
         'notes': notes,
         'photoUrl': photoUrl,
         'visitCount': visitCount,
@@ -66,12 +70,13 @@ class CustomerModel {
   }
 
   CustomerModel copyWith({
-    String? firstName, String? lastName, String? email, String? phone,
+    String? firstName, String? lastName, String? email, String? phone, String? address,
     String? notes, String? photoUrl, int? visitCount, double? totalSpent, DateTime? lastVisitDate,
   }) => CustomerModel(
         id: id,
         firstName: firstName ?? this.firstName, lastName: lastName ?? this.lastName,
-        email: email ?? this.email, phone: phone ?? this.phone, notes: notes ?? this.notes,
+        email: email ?? this.email, phone: phone ?? this.phone, address: address ?? this.address,
+        notes: notes ?? this.notes,
         photoUrl: photoUrl ?? this.photoUrl, visitCount: visitCount ?? this.visitCount,
         totalSpent: totalSpent ?? this.totalSpent, lastVisitDate: lastVisitDate ?? this.lastVisitDate,
       );

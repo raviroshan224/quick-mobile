@@ -13,6 +13,7 @@ import '../../../../features/transactions/presentation/providers/transactions_pr
 import '../../../../features/auth/data/auth_repository.dart';
 import '../../../../core/storage/secure_storage_service.dart';
 import '../../../../core/utils/pin_validator.dart';
+import '../../../../core/utils/phone_validator.dart';
 import 'settings_screen.dart' show salonSettingsProvider;
 
 // ─── Avatar colors (must stay in sync with staff_screen.dart) ─────────────────
@@ -640,14 +641,13 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
                             keyboardType: TextInputType.phone,
                             inputFormatters: [
                               FilteringTextInputFormatter.digitsOnly,
-                              LengthLimitingTextInputFormatter(15),
+                              LengthLimitingTextInputFormatter(10),
                             ],
                             decoration: const InputDecoration(
-                              hintText: 'e.g. 9841001001',
+                              hintText: 'e.g. 9800000000',
                             ),
-                            validator: (v) => (v == null || v.trim().isEmpty)
-                                ? 'Phone number is required'
-                                : null,
+                            validator: (v) =>
+                                phoneNumberError(v, required: true),
                           ),
                         ),
                         if (!widget.isEditing) ...[
@@ -789,11 +789,12 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
                             keyboardType: TextInputType.phone,
                             inputFormatters: [
                               FilteringTextInputFormatter.digitsOnly,
-                              LengthLimitingTextInputFormatter(15),
+                              LengthLimitingTextInputFormatter(10),
                             ],
                             decoration: const InputDecoration(
-                              hintText: 'e.g. 9801234567 (optional)',
+                              hintText: 'e.g. 9800000000 (optional)',
                             ),
+                            validator: (v) => phoneNumberError(v),
                           ),
                         ),
                         const _FieldDivider(),

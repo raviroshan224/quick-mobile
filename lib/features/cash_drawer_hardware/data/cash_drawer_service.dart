@@ -177,40 +177,54 @@ class CashDrawerService {
         ]);
       }
       ticket.separator();
-      if (r.subtotal != null) {
-        ticket.row([
-          PrintColumn(text: 'Subtotal', flex: 3),
-          PrintColumn(text: money(r.subtotal!), flex: 1, align: PrintAlign.right),
-        ]);
-      }
-      if (r.discountAmount > 0) {
-        ticket.row([
-          PrintColumn(text: 'Discount', flex: 3),
-          PrintColumn(text: '-${money(r.discountAmount)}', flex: 1, align: PrintAlign.right),
-        ]);
-      }
-      if (r.manualAdjustment.abs() >= 0.005) {
-        ticket.row([
-          PrintColumn(text: 'Adjustment', flex: 3),
-          PrintColumn(
-            text: '${r.manualAdjustment > 0 ? '+' : '-'}${money(r.manualAdjustment.abs())}',
-            flex: 1,
-            align: PrintAlign.right,
-          ),
-        ]);
-      }
-      if (r.tax > 0) {
-        ticket.row([
-          PrintColumn(text: 'Tax', flex: 3),
-          PrintColumn(text: money(r.tax), flex: 1, align: PrintAlign.right),
-        ]);
-      }
-      if (r.tip > 0) {
-        ticket.row([
-          PrintColumn(text: 'Tip', flex: 3),
-          PrintColumn(text: money(r.tip), flex: 1, align: PrintAlign.right),
-        ]);
-      }
+    }
+
+    // Money breakdown — printed for keypad/custom-amount sales too (which
+    // have no line items), so a discount, tax, tip or adjustment always
+    // shows on the printed receipt and not only in the app's transaction
+    // detail. Subtotal is printed whenever there are line items or at least
+    // one adjustment line below applies — otherwise it would just repeat the
+    // total.
+    final hasAdjustmentLine = r.discountAmount > 0 ||
+        r.manualAdjustment.abs() >= 0.005 ||
+        r.tax > 0 ||
+        r.tip > 0;
+    if (r.subtotal != null && (r.items.isNotEmpty || hasAdjustmentLine)) {
+      ticket.row([
+        PrintColumn(text: 'Subtotal', flex: 3),
+        PrintColumn(text: money(r.subtotal!), flex: 1, align: PrintAlign.right),
+      ]);
+    }
+    if (r.discountAmount > 0) {
+      ticket.row([
+        PrintColumn(text: 'Discount', flex: 3),
+        PrintColumn(text: '-${money(r.discountAmount)}', flex: 1, align: PrintAlign.right),
+      ]);
+    }
+    if (r.manualAdjustment.abs() >= 0.005) {
+      ticket.row([
+        PrintColumn(text: 'Adjustment', flex: 3),
+        PrintColumn(
+          text: '${r.manualAdjustment > 0 ? '+' : '-'}${money(r.manualAdjustment.abs())}',
+          flex: 1,
+          align: PrintAlign.right,
+        ),
+      ]);
+    }
+    if (r.tax > 0) {
+      ticket.row([
+        PrintColumn(text: 'Tax', flex: 3),
+        PrintColumn(text: money(r.tax), flex: 1, align: PrintAlign.right),
+      ]);
+    }
+    if (r.tip > 0) {
+      ticket.row([
+        PrintColumn(text: 'Tip', flex: 3),
+        PrintColumn(text: money(r.tip), flex: 1, align: PrintAlign.right),
+      ]);
+    }
+    if (r.items.isEmpty && hasAdjustmentLine) {
+      ticket.separator();
     }
 
     ticket.row([

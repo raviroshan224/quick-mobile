@@ -350,6 +350,25 @@ class _HeroSection extends StatelessWidget {
             ),
             const SizedBox(height: 4),
           ],
+          if (customer.address != null) ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.location_on_outlined,
+                    size: 13, color: AppColors.textSecondary),
+                const SizedBox(width: 4),
+                Flexible(
+                  child: Text(
+                    customer.address!,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                        fontSize: 13, color: AppColors.textSecondary),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+          ],
           if (customer.notes != null) ...[
             const SizedBox(height: 10),
             Container(

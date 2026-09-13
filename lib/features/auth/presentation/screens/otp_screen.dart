@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -17,13 +19,41 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
   final List<TextEditingController> _ctrls =
       List.generate(6, (_) => TextEditingController());
   final List<FocusNode> _nodes = List.generate(6, (_) => FocusNode());
-  bool _resent = false;
+
+  // Seconds left before "Resend" can be tapped again. Starts ticking as soon
+  // as the screen opens (a code was just sent to get here) and restarts after
+  // every resend — so hammering the button while a slow request is in flight
+  // can't fan out into a burst of codes.
+  static const _cooldownDuration = 30;
+  int _cooldown = _cooldownDuration;
+  bool _resending = false;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _startCooldown();
+  }
 
   @override
   void dispose() {
+    _timer?.cancel();
     for (final c in _ctrls) { c.dispose(); }
     for (final n in _nodes) { n.dispose(); }
     super.dispose();
+  }
+
+  void _startCooldown() {
+    _timer?.cancel();
+    _cooldown = _cooldownDuration;
+    _timer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted) {
+        t.cancel();
+        return;
+      }
+      setState(() => _cooldown--);
+      if (_cooldown <= 0) t.cancel();
+    });
   }
 
   String get _otp => _ctrls.map((c) => c.text).join();
@@ -34,10 +64,24 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
   }
 
   Future<void> _resend() async {
-    await ref.read(authProvider.notifier).resendOtp();
-    setState(() => _resent = true);
-    await Future.delayed(const Duration(seconds: 3));
-    if (mounted) setState(() => _resent = false);
+    if (_resending || _cooldown > 0) return;
+    setState(() => _resending = true);
+    try {
+      await ref.read(authProvider.notifier).resendOtp();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('A new code is on its way.'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _resending = false);
+        _startCooldown();
+      }
+    }
   }
 
   @override
@@ -150,15 +194,23 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                     const SizedBox(height: 20),
                     Center(
                       child: TextButton(
-                        onPressed: _resent ? null : _resend,
-                        child: Text(
-                          _resent ? 'Code sent!' : "Didn't get it? Resend",
-                          style: AppTextStyles.bodySmall.copyWith(
-                            color: _resent
-                                ? AppColors.success
-                                : AppColors.primary,
-                          ),
-                        ),
+                        onPressed: (_cooldown > 0 || _resending) ? null : _resend,
+                        child: _resending
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : Text(
+                                _cooldown > 0
+                                    ? 'Resend code in ${_cooldown}s'
+                                    : "Didn't get it? Resend",
+                                style: AppTextStyles.bodySmall.copyWith(
+                                  color: _cooldown > 0
+                                      ? AppColors.textSecondary
+                                      : AppColors.primary,
+                                ),
+                              ),
                       ),
                     ),
                   ],

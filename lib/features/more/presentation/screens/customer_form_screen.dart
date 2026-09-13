@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/phone_validator.dart';
 import '../../../../features/auth/presentation/providers/auth_provider.dart';
 import '../../../../features/customers/domain/customer_models.dart';
 import '../../../../features/customers/presentation/providers/customers_provider.dart';
@@ -32,6 +33,7 @@ class _CustomerFormScreenState
   final _lastNameCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
+  final _addressCtrl = TextEditingController();
   final _notesCtrl = TextEditingController();
 
   PickedImage? _pickedImage;
@@ -45,6 +47,7 @@ class _CustomerFormScreenState
     _lastNameCtrl.dispose();
     _phoneCtrl.dispose();
     _emailCtrl.dispose();
+    _addressCtrl.dispose();
     _notesCtrl.dispose();
     super.dispose();
   }
@@ -57,6 +60,7 @@ class _CustomerFormScreenState
     _lastNameCtrl.text = c.lastName;
     _phoneCtrl.text = c.phone ?? '';
     _emailCtrl.text = c.email ?? '';
+    _addressCtrl.text = c.address ?? '';
     _notesCtrl.text = c.notes ?? '';
   }
 
@@ -95,6 +99,8 @@ class _CustomerFormScreenState
         _phoneCtrl.text.trim().isEmpty ? null : _phoneCtrl.text.trim();
     final email =
         _emailCtrl.text.trim().isEmpty ? null : _emailCtrl.text.trim();
+    final address =
+        _addressCtrl.text.trim().isEmpty ? null : _addressCtrl.text.trim();
     final notes =
         _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim();
 
@@ -107,6 +113,7 @@ class _CustomerFormScreenState
           lastName: lastName,
           phone: phone,
           email: email,
+          address: address,
           notes: notes,
         );
       } else {
@@ -115,6 +122,7 @@ class _CustomerFormScreenState
           lastName: lastName,
           phone: phone,
           email: email,
+          address: address,
           notes: notes,
         );
       }
@@ -321,12 +329,15 @@ class _CustomerFormScreenState
                             keyboardType: TextInputType.phone,
                             inputFormatters: [
                               FilteringTextInputFormatter.digitsOnly,
+                              LengthLimitingTextInputFormatter(10),
                             ],
                             decoration: InputDecoration(
                                 hintText: contactFieldsHidden
                                     ? 'Hidden — ask the owner'
-                                    : 'e.g. 9801234567'),
+                                    : 'e.g. 9800000000'),
                             onChanged: (_) => setState(() {}),
+                            validator: (v) =>
+                                contactFieldsHidden ? null : phoneNumberError(v),
                           ),
                         ),
                         const _FieldDivider(),
@@ -354,6 +365,32 @@ class _CustomerFormScreenState
                               }
                               return null;
                             },
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+
+                    // ── Location field ────────────────────────────
+                    const _SectionLabel(text: 'LOCATION'),
+                    _FormCard(
+                      children: [
+                        _FormField(
+                          label: 'Address',
+                          child: TextFormField(
+                            controller: _addressCtrl,
+                            enabled: !contactFieldsHidden,
+                            maxLines: 3,
+                            minLines: 2,
+                            textCapitalization:
+                                TextCapitalization.words,
+                            decoration: InputDecoration(
+                              hintText: contactFieldsHidden
+                                  ? 'Hidden — ask the owner'
+                                  : 'e.g. Baluwatar, Kathmandu',
+                              alignLabelWithHint: true,
+                            ),
+                            onChanged: (_) => setState(() {}),
                           ),
                         ),
                       ],

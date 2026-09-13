@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../../../core/network/api_client.dart';
+import '../../../../core/utils/phone_validator.dart';
 import '../../../../features/cash_drawer_hardware/data/cash_drawer_service.dart';
 import '../../../../features/cash_drawer_hardware/domain/printer_connection_config.dart';
 import '../../../../features/cash_drawer_hardware/domain/receipt_data.dart';
@@ -117,6 +118,13 @@ class ReviewSaleSheet extends HookConsumerWidget {
     final total = quote.value?.total ?? estimatedTotal;
     final tendered = double.tryParse(cashInput.value) ?? 0;
 
+    // What was actually charged. After checkout() succeeds the live cart is
+    // cleared, which makes `total` above fall back to a discount-free
+    // re-estimate — so the Success step and the printed receipt must read
+    // the amount (and its discount/tax breakdown) from this snapshot, not
+    // from `total`.
+    final settledTotal = completedQuote.value?.total ?? total;
+
     void done() {
       if (isProcessing.value) return;
       // The quote is re-validated here (not just at the Pick-step tap)
@@ -189,8 +197,9 @@ class ReviewSaleSheet extends HookConsumerWidget {
       final quoteSnapshot = completedQuote.value;
       final methodLabelValue =
           method.value == PaymentMethod.cash ? 'Cash' : (selectedMode.value?.name ?? 'Other');
-      final changeValue =
-          method.value == PaymentMethod.cash && tendered > total ? tendered - total : null;
+      final changeValue = method.value == PaymentMethod.cash && tendered > settledTotal
+          ? tendered - settledTotal
+          : null;
 
       final receipt = ReceiptData(
         salonName: salon.salonName,
@@ -206,7 +215,7 @@ class ReviewSaleSheet extends HookConsumerWidget {
         tax: quoteSnapshot?.totalTax ?? 0,
         tip: quoteSnapshot?.tipAmount ?? 0,
         manualAdjustment: quoteSnapshot?.manualAdjustment ?? 0,
-        total: quoteSnapshot?.total ?? total,
+        total: settledTotal,
         paymentMethodLabel: methodLabelValue,
         change: changeValue,
         customerName: customer.value?.fullName,
@@ -313,14 +322,17 @@ class ReviewSaleSheet extends HookConsumerWidget {
           isProcessing: isProcessing.value,
         ),
         _Step.success => _SuccessStep(
-          total: total,
+          total: settledTotal,
           methodLabel: method.value == PaymentMethod.cash ? 'Cash' : (selectedMode.value?.name ?? 'Other'),
           customer: customer.value,
-          change: method.value == PaymentMethod.cash && tendered > total
-              ? tendered - total
+          change: method.value == PaymentMethod.cash && tendered > settledTotal
+              ? tendered - settledTotal
               : null,
           items: completedItems.value,
           subtotal: completedQuote.value?.subtotal,
+          discountAmount: completedQuote.value?.discountAmount ?? 0,
+          tax: completedQuote.value?.totalTax ?? 0,
+          tip: completedQuote.value?.tipAmount ?? 0,
           manualAdjustment: completedQuote.value?.manualAdjustment ?? 0,
           onNewSale: () => Navigator.pop(context),
           onPrintReceipt: printReceipt,
@@ -1517,6 +1529,12 @@ class _QuickAddCustomerForm extends HookConsumerWidget {
         error.value = 'Enter a name';
         return;
       }
+      final phone = phoneCtrl.text.trim();
+      final phoneErr = phoneNumberError(phone);
+      if (phoneErr != null) {
+        error.value = phoneErr;
+        return;
+      }
       if (saving.value) return;
       saving.value = true;
       error.value = null;
@@ -1527,7 +1545,7 @@ class _QuickAddCustomerForm extends HookConsumerWidget {
             .create(
               firstName: parts.first,
               lastName: parts.length > 1 ? parts.sublist(1).join(' ') : '',
-              phone: phoneCtrl.text.trim().isEmpty ? null : phoneCtrl.text.trim(),
+              phone: phone.isEmpty ? null : phone,
             );
         ref.invalidate(customersProvider);
         onCreated(created);
@@ -1609,6 +1627,10 @@ class _QuickAddCustomerForm extends HookConsumerWidget {
                 TextField(
                   controller: phoneCtrl,
                   keyboardType: TextInputType.phone,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(10),
+                  ],
                   decoration: InputDecoration(
                     hintText: 'Phone number',
                     filled: true,
@@ -1959,6 +1981,9 @@ class _SuccessStep extends StatelessWidget {
     required this.change,
     required this.items,
     required this.subtotal,
+    required this.discountAmount,
+    required this.tax,
+    required this.tip,
     required this.manualAdjustment,
     required this.onNewSale,
     required this.onPrintReceipt,
@@ -1968,6 +1993,9 @@ class _SuccessStep extends StatelessWidget {
   final String methodLabel;
   final CustomerModel? customer;
   final double? change;
+  final double discountAmount;
+  final double tax;
+  final double tip;
   // Services / Subtotal / Manual Adjustment breakdown — snapshotted at the
   // moment checkout() succeeded (see ReviewSaleSheet.build's completedItems/
   // completedQuote), since the live cart is cleared right after. Empty
@@ -1979,6 +2007,15 @@ class _SuccessStep extends StatelessWidget {
   final VoidCallback onNewSale;
   final VoidCallback onPrintReceipt;
   final bool isPrintingReceipt;
+
+  // True when at least one line between Subtotal and Grand Total applies —
+  // used to decide whether the breakdown is worth showing for a keypad-only
+  // custom charge (which has no line items).
+  bool get _hasBreakdown =>
+      discountAmount > 0 ||
+      tax > 0 ||
+      tip > 0 ||
+      manualAdjustment.abs() >= 0.005;
 
   @override
   Widget build(BuildContext context) {
@@ -2034,24 +2071,36 @@ class _SuccessStep extends StatelessWidget {
                     const SizedBox(height: 10),
                     _Row('Customer', customer!.fullName),
                   ],
-                  // Services / Subtotal / Manual Adjustment / Grand Total —
-                  // omitted for a keypad-only custom charge, which has no
-                  // service breakdown (subtotal == total by definition there).
-                  if (items.isNotEmpty && subtotal != null) ...[
+                  // Line items (if any) + the Subtotal / Discount / Tax / Tip /
+                  // Adjustment / Grand Total breakdown. Shown whenever there
+                  // are line items OR any adjustment applies — so a discount on
+                  // a keypad-only custom charge is still spelled out here and
+                  // on the printed receipt, not just in the transaction detail.
+                  if (subtotal != null &&
+                      (items.isNotEmpty || _hasBreakdown)) ...[
                     const Divider(height: 20, color: AppColors.divider),
-                    ...items.map(
-                      (item) => Padding(
-                        padding: const EdgeInsets.only(bottom: 6),
-                        child: _Row(
-                          item.quantity > 1
-                              ? '${item.name} ×${item.quantity}'
-                              : item.name,
-                          'Rs ${item.totalPrice.toStringAsFixed(0)}',
+                    if (items.isNotEmpty) ...[
+                      ...items.map(
+                        (item) => Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: _Row(
+                            item.quantity > 1
+                                ? '${item.name} ×${item.quantity}'
+                                : item.name,
+                            'Rs ${item.totalPrice.toStringAsFixed(0)}',
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 4),
+                      const SizedBox(height: 4),
+                    ],
                     _Row('Subtotal', 'Rs ${subtotal!.toStringAsFixed(0)}'),
+                    if (discountAmount > 0) ...[
+                      const SizedBox(height: 6),
+                      _Row(
+                        'Discount',
+                        '- Rs ${discountAmount.toStringAsFixed(0)}',
+                      ),
+                    ],
                     if (manualAdjustment.abs() >= 0.005) ...[
                       const SizedBox(height: 6),
                       _Row(
@@ -2059,6 +2108,14 @@ class _SuccessStep extends StatelessWidget {
                         '${manualAdjustment > 0 ? '+' : '-'}Rs '
                             '${manualAdjustment.abs().toStringAsFixed(0)}',
                       ),
+                    ],
+                    if (tax > 0) ...[
+                      const SizedBox(height: 6),
+                      _Row('Tax', 'Rs ${tax.toStringAsFixed(0)}'),
+                    ],
+                    if (tip > 0) ...[
+                      const SizedBox(height: 6),
+                      _Row('Tip', 'Rs ${tip.toStringAsFixed(0)}'),
                     ],
                     const Divider(height: 20, color: AppColors.divider),
                     _Row('Grand Total', 'Rs ${total.toStringAsFixed(2)}'),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/constants/app_constants.dart';
@@ -24,6 +25,22 @@ class MainShell extends ConsumerWidget {
     return 0;
   }
 
+  /// Where the Android hardware back button should land from [loc].
+  ///
+  /// The app navigates its own hierarchy with `context.go` (every in-app back
+  /// arrow does), which leaves the router with a single-page stack — so the
+  /// system back button would otherwise skip straight past every screen and
+  /// close the app (which, for a staff PIN session, reads as being logged
+  /// out on the next launch). This walks one level up that hierarchy instead;
+  /// `null` means "already at the Dashboard root — let the OS handle it".
+  String? _backTarget(String loc) {
+    final segments = Uri.parse(loc).pathSegments;
+    if (segments.length <= 1) {
+      return loc == AppRoutes.dashboard ? null : AppRoutes.dashboard;
+    }
+    return '/${segments.sublist(0, segments.length - 1).join('/')}';
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final location = GoRouterState.of(context).matchedLocation;
@@ -31,14 +48,27 @@ class MainShell extends ConsumerWidget {
     final logs = ref.watch(notificationLogsProvider).valueOrNull ?? [];
     final failedCount = logs.where((l) => !l.isSent).length;
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: _TopBar(),
-      body: child,
-      bottomNavigationBar: _BottomNav(
-        selectedIndex: index,
-        failedCount: failedCount,
-        onTap: (i) => context.go(_tabs[i]),
+    return PopScope(
+      // Never let the framework pop the shell route itself — decide here.
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        final target = _backTarget(location);
+        if (target == null) {
+          SystemNavigator.pop();
+        } else {
+          context.go(target);
+        }
+      },
+      child: Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: _TopBar(),
+        body: child,
+        bottomNavigationBar: _BottomNav(
+          selectedIndex: index,
+          failedCount: failedCount,
+          onTap: (i) => context.go(_tabs[i]),
+        ),
       ),
     );
   }

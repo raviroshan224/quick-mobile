@@ -876,7 +876,7 @@ class BookingFormSheet extends HookConsumerWidget {
                     decoration: InputDecoration(
                       hintText: contactFieldsHidden
                           ? 'Hidden — ask the owner'
-                          : 'e.g. 9841123456',
+                          : 'e.g. 9800000000',
                     ),
                     validator: (v) {
                       if (contactFieldsHidden) return null;
