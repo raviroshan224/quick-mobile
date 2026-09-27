@@ -24,13 +24,6 @@ String _utcMs(DateTime local) {
 
 // ─── File-level providers ─────────────────────────────────────────────────────
 
-final _myStaffProfileProvider = FutureProvider<StaffModel?>((ref) async {
-  final user = ref.watch(currentUserProvider);
-  if (user == null) return null;
-  final all = await ref.watch(staffListProvider.future);
-  return all.where((s) => s.userId == user.id).firstOrNull;
-});
-
 final _txRepoProvider = Provider<TransactionsRepository>(
   (ref) => TransactionsRepository(ref.read(apiClientProvider)),
 );
@@ -102,7 +95,7 @@ class MyProfileScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(currentUserProvider);
-    final staffAsync = ref.watch(_myStaffProfileProvider);
+    final staffAsync = ref.watch(myStaffProfileProvider);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -137,7 +130,7 @@ class MyProfileScreen extends ConsumerWidget {
             Expanded(
               child: PullToRefresh(
                 onRefresh: () => Future.wait([
-                  ref.refresh(_myStaffProfileProvider.future),
+                  ref.refresh(myStaffProfileProvider.future),
                   ref.refresh(_myWeekStatsProvider.future),
                   ref.refresh(_myMonthStatsProvider.future),
                   ref.refresh(_myRecentTxProvider.future),

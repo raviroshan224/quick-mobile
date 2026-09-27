@@ -66,6 +66,13 @@ class MoreScreen extends ConsumerWidget {
 
                   // ── Staff-only section ────────────────────────────────
                   if (!isOwner) ...[
+                    _SectionLabel(text: 'BOOKINGS'),
+                    _MoreTile(
+                      icon: Icons.calendar_month_outlined,
+                      label: 'My Bookings',
+                      onTap: () => context.go(AppRoutes.moreBookings),
+                    ),
+                    const SizedBox(height: 8),
                     _SectionLabel(text: 'CUSTOMERS'),
                     _MoreTile(
                       icon: Icons.person_outline_rounded,

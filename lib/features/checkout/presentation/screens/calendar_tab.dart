@@ -99,7 +99,11 @@ final bookingsProvider =
 // ─── Calendar Tab ─────────────────────────────────────────────────────────────
 
 class CalendarTab extends HookConsumerWidget {
-  const CalendarTab({super.key});
+  const CalendarTab({super.key, this.staffId});
+
+  /// When set, only bookings assigned to this staff member (staff record id,
+  /// the same id the booking form stores as [Booking.staffId]) are listed.
+  final String? staffId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -107,8 +111,10 @@ class CalendarTab extends HookConsumerWidget {
     final dateKey = _dateKey(selectedDate.value);
     final bookingsState = ref.watch(bookingsProvider(dateKey));
 
-    final todayBookings = [...bookingsState.items]
-      ..sort((a, b) {
+    final todayBookings = [
+      for (final b in bookingsState.items)
+        if (staffId == null || b.staffId == staffId) b,
+    ]..sort((a, b) {
         return a.time.compareTo(b.time);
       });
 
@@ -136,6 +142,7 @@ class CalendarTab extends HookConsumerWidget {
                   )
                 : todayBookings.isEmpty
                 ? _EmptyBookings(
+                    assignedOnly: staffId != null,
                     onAdd: () =>
                         _showBookingForm(context, ref, selectedDate.value),
                   )
@@ -441,8 +448,9 @@ class _DateStrip extends StatelessWidget {
 // ─── Empty bookings state ─────────────────────────────────────────────────────
 
 class _EmptyBookings extends StatelessWidget {
-  const _EmptyBookings({required this.onAdd});
+  const _EmptyBookings({required this.onAdd, this.assignedOnly = false});
   final VoidCallback onAdd;
+  final bool assignedOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -471,8 +479,10 @@ class _EmptyBookings extends StatelessWidget {
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 6),
-            const Text(
-              'No bookings scheduled for this date.\nTap below to create one.',
+            Text(
+              assignedOnly
+                  ? 'No bookings assigned to you for this date.'
+                  : 'No bookings scheduled for this date.\nTap below to create one.',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
             ),
