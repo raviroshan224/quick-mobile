@@ -45,6 +45,7 @@ import '../../features/more/presentation/screens/refunds_screen.dart';
 import '../../features/more/presentation/screens/image_library_screen.dart';
 import '../../features/more/presentation/screens/stock_movement_screen.dart';
 import '../../features/more/presentation/screens/my_profile_screen.dart';
+import '../../features/settings/presentation/providers/business_type_provider.dart';
 import '../../shared/widgets/main_shell.dart';
 import '../constants/app_constants.dart';
 
@@ -116,6 +117,19 @@ final routerProvider = Provider<GoRouter>((ref) {
           '/more/stock-movement',
         ];
         if (ownerOnly.any((p) => loc == p || loc.startsWith('$p/'))) {
+          return AppRoutes.more;
+        }
+      }
+
+      // Features this kind of business doesn't use (e.g. a pharmacy has no
+      // services or bookings) — hidden in More, and not reachable by link.
+      if (isLoggedIn) {
+        final businessType = ref.read(businessTypeProvider);
+        final disabled = [
+          if (!businessType.hasServices) AppRoutes.moreServices,
+          if (!businessType.hasBookings) AppRoutes.moreBookings,
+        ];
+        if (disabled.any((p) => loc == p || loc.startsWith('$p/'))) {
           return AppRoutes.more;
         }
       }

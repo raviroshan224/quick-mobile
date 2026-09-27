@@ -6,6 +6,7 @@ import '../../../../core/storage/secure_storage_service.dart';
 import '../../data/auth_repository.dart';
 import '../../domain/user_model.dart';
 import '../../domain/profile_model.dart';
+import '../../../../core/models/business_type.dart';
 
 // Must match AuthService.login()'s exact message on the backend for the
 // not-verified case — see auth.service.ts. Not a great coupling, but the
@@ -142,11 +143,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
     String firstName,
     String lastName,
     String email,
-    String password,
-  ) async {
+    String password, {
+    BusinessType businessType = BusinessType.salon,
+  }) async {
     state = state.copyWith(status: AuthStatus.loading, error: null);
     try {
-      await _repo.signup(companyName, firstName, lastName, email, password);
+      await _repo.signup(companyName, firstName, lastName, email, password,
+          businessType: businessType);
       state = AuthState(status: AuthStatus.pendingOtp, pendingEmail: email.trim());
     } catch (e) {
       state = AuthState(status: AuthStatus.error, error: e.toString());

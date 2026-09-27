@@ -15,6 +15,7 @@ import '../../../../core/storage/secure_storage_service.dart';
 import '../../../../core/utils/pin_validator.dart';
 import '../../../../core/utils/phone_validator.dart';
 import 'settings_screen.dart' show salonSettingsProvider;
+import '../../../settings/presentation/providers/business_type_provider.dart';
 
 // ─── Avatar colors (must stay in sync with staff_screen.dart) ─────────────────
 
@@ -758,7 +759,7 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
                                   : Colors.black,
                             ),
                             decoration: InputDecoration(
-                              hintText: 'e.g. priya@salon.com (optional)',
+                              hintText: 'e.g. priya@example.com (optional)',
                               suffixIcon: widget.isEditing
                                   ? const Icon(
                                       Icons.lock_outline,
@@ -1063,7 +1064,8 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
                       ),
                     ],
 
-                    // ── Specialties ───────────────────────────────────────
+                    // ── Specialties (salon only) ──────────────────────────
+                    if (ref.watch(businessTypeProvider).hasStaffSpecialties) ...[
                     const _SectionHeader(label: 'Specialties'),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -1094,6 +1096,7 @@ class _StaffFormScreenState extends ConsumerState<StaffFormScreen> {
                         ),
                       ),
                     ),
+                    ],
 
                     // ── Status ────────────────────────────────────────────
                     const _SectionHeader(label: 'Status'),

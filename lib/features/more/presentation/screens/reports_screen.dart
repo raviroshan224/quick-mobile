@@ -483,13 +483,13 @@ class _SalesTab extends StatelessWidget {
 
         const SizedBox(height: 20),
 
-        // ── Salon checkout: Service Value / Manual Adjustments / Final
+        // ── Checkout: Service Value / Manual Adjustments / Final
         // Collected — kept as its own section, separate from "Discounts"
         // in the hero card above. A manual adjustment (the cashier-entered
         // Final Payable Amount) is a different mechanism from a catalog
         // discount and is never mixed into that figure.
         if (s.serviceValue != 0 || s.manualAdjustments != 0) ...[
-          const _SectionLabel('Salon Checkout'),
+          const _SectionLabel('Checkout'),
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -593,7 +593,7 @@ class _SummaryMetric extends StatelessWidget {
 }
 
 // Same layout as _SummaryMetric, but dark text for a light card background
-// (the hero card above is black; the "Salon Checkout" card is not).
+// (the hero card above is black; the "Checkout" card is not).
 class _LightMetric extends StatelessWidget {
   const _LightMetric({required this.label, required this.value});
   final String label;

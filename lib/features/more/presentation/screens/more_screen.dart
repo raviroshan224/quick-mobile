@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../settings/presentation/providers/business_type_provider.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../features/auth/presentation/providers/auth_provider.dart';
@@ -30,6 +31,7 @@ class MoreScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(currentUserProvider);
     final isOwner = ref.watch(isOwnerProvider);
+    final businessType = ref.watch(businessTypeProvider);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -66,13 +68,15 @@ class MoreScreen extends ConsumerWidget {
 
                   // ── Staff-only section ────────────────────────────────
                   if (!isOwner) ...[
-                    _SectionLabel(text: 'BOOKINGS'),
-                    _MoreTile(
-                      icon: Icons.calendar_month_outlined,
-                      label: 'My Bookings',
-                      onTap: () => context.go(AppRoutes.moreBookings),
-                    ),
-                    const SizedBox(height: 8),
+                    if (businessType.hasBookings) ...[
+                      _SectionLabel(text: 'BOOKINGS'),
+                      _MoreTile(
+                        icon: Icons.calendar_month_outlined,
+                        label: 'My Bookings',
+                        onTap: () => context.go(AppRoutes.moreBookings),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
                     _SectionLabel(text: 'CUSTOMERS'),
                     _MoreTile(
                       icon: Icons.person_outline_rounded,
@@ -109,16 +113,18 @@ class MoreScreen extends ConsumerWidget {
                       label: 'Setup Guide',
                       onTap: () => context.go(AppRoutes.moreSetupGuide),
                     ),
-                    _MoreTile(
-                      icon: Icons.spa_outlined,
-                      label: 'Services',
-                      onTap: () => context.go(AppRoutes.moreServices),
-                    ),
-                    _MoreTile(
-                      icon: Icons.calendar_month_outlined,
-                      label: 'Bookings',
-                      onTap: () => context.go(AppRoutes.moreBookings),
-                    ),
+                    if (businessType.hasServices)
+                      _MoreTile(
+                        icon: Icons.spa_outlined,
+                        label: 'Services',
+                        onTap: () => context.go(AppRoutes.moreServices),
+                      ),
+                    if (businessType.hasBookings)
+                      _MoreTile(
+                        icon: Icons.calendar_month_outlined,
+                        label: 'Bookings',
+                        onTap: () => context.go(AppRoutes.moreBookings),
+                      ),
                     _MoreTile(
                       icon: Icons.tag,
                       label: 'Inventory',

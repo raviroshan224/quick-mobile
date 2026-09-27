@@ -283,7 +283,7 @@ class _BrandPanel extends StatelessWidget {
           Text('Quick', style: AppTextStyles.displayLarge.copyWith(color: Colors.white)),
           const SizedBox(height: 12),
           Text(
-            'Fast, beautiful point-of-sale\nfor modern salons.',
+            'Fast, beautiful point-of-sale\nfor modern businesses.',
             style: AppTextStyles.bodyLarge.copyWith(color: AppColors.sidebarText, height: 1.6),
           ),
         ],

@@ -7,6 +7,7 @@ import '../../../../core/network/api_client.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../features/inventory/data/inventory_repository.dart';
 import '../../../../features/inventory/presentation/providers/inventory_provider.dart';
+import '../../../settings/presentation/providers/business_type_provider.dart';
 
 final _inventoryRepoProvider = Provider<InventoryRepository>(
   (ref) => InventoryRepository(ref.read(apiClientProvider)),
@@ -256,8 +257,9 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
                 child: TextFormField(
                   controller: _categoryCtrl,
                   textCapitalization: TextCapitalization.words,
-                  decoration: const InputDecoration(
-                      hintText: 'e.g. Hair Care (optional)'),
+                  decoration: InputDecoration(
+                      hintText:
+                          ref.watch(businessTypeProvider).itemCategoryHint),
                 ),
               ),
               const _FieldDivider(),

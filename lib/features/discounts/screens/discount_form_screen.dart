@@ -9,6 +9,7 @@ import '../../services/domain/service_models.dart';
 import '../../services/presentation/providers/services_provider.dart';
 import '../models/discount_model.dart';
 import '../providers/discounts_provider.dart';
+import '../../settings/presentation/providers/business_type_provider.dart';
 
 class DiscountFormScreen extends ConsumerStatefulWidget {
   final String? discountId;
@@ -250,8 +251,9 @@ class _DiscountFormScreenState extends ConsumerState<DiscountFormScreen> {
                 child: TextFormField(
                   controller: _nameCtrl,
                   textCapitalization: TextCapitalization.words,
-                  decoration: const InputDecoration(
-                      hintText: 'e.g. Hair 10% Off, Facial Special'),
+                  decoration: InputDecoration(
+                      hintText:
+                          ref.watch(businessTypeProvider).discountNameHint),
                   onChanged: (_) => setState(() {}),
                   validator: (v) => (v == null || v.trim().isEmpty)
                       ? 'Name is required'

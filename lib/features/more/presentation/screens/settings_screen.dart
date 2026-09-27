@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_constants.dart';
+import '../../../../core/models/business_type.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../features/auth/presentation/providers/auth_provider.dart';
 import '../../../../features/settings/data/settings_repository.dart';
+import '../../../../features/settings/presentation/providers/business_type_provider.dart';
 
 // ─── Settings state ───────────────────────────────────────────────────────────
 
@@ -22,8 +24,12 @@ class SalonSettings {
   final bool commissionEnabled;
   final bool staffCanViewCustomerDetails;
 
+  /// Null until GET /settings has loaded — businessTypeProvider falls back
+  /// to the last value cached on this device until then.
+  final BusinessType? businessType;
+
   const SalonSettings({
-    this.salonName = 'My Salon',
+    this.salonName = 'My Business',
     this.address = 'Kathmandu, Nepal',
     this.phone = '+977-9800000000',
     this.receiptFooter = 'Thank you for visiting!',
@@ -34,6 +40,7 @@ class SalonSettings {
     this.currency = 'Rs',
     this.commissionEnabled = true,
     this.staffCanViewCustomerDetails = true,
+    this.businessType,
   });
 
   SalonSettings copyWith({
@@ -48,6 +55,7 @@ class SalonSettings {
     String? currency,
     bool? commissionEnabled,
     bool? staffCanViewCustomerDetails,
+    BusinessType? businessType,
   }) => SalonSettings(
     salonName: salonName ?? this.salonName,
     address: address ?? this.address,
@@ -61,6 +69,7 @@ class SalonSettings {
     commissionEnabled: commissionEnabled ?? this.commissionEnabled,
     staffCanViewCustomerDetails:
         staffCanViewCustomerDetails ?? this.staffCanViewCustomerDetails,
+    businessType: businessType ?? this.businessType,
   );
 }
 
@@ -102,6 +111,7 @@ class _SettingsNotifier extends StateNotifier<SalonSettings> {
         staffCanViewCustomerDetails:
             j['staffCanViewCustomerDetails'] as bool? ??
                 state.staffCanViewCustomerDetails,
+        businessType: BusinessType.tryParse(j['businessType'] as String?),
       );
       loadError = null;
     } catch (e) {
@@ -136,6 +146,7 @@ class _SettingsNotifier extends StateNotifier<SalonSettings> {
         'currency': s.currency,
         'commissionEnabled': s.commissionEnabled,
         'staffCanViewCustomerDetails': s.staffCanViewCustomerDetails,
+        if (s.businessType != null) 'businessType': s.businessType!.toApi(),
       });
     } catch (e) {
       state = previous;
@@ -159,6 +170,7 @@ class SettingsScreen extends ConsumerWidget {
     final user = ref.watch(currentUserProvider);
     final settings = ref.watch(salonSettingsProvider);
     final notifier = ref.read(salonSettingsProvider.notifier);
+    final businessType = ref.watch(businessTypeProvider);
 
     // Every save on this screen routes through here — on failure the field
     // has already been reverted by _SettingsNotifier.update() itself; this
@@ -260,10 +272,16 @@ class SettingsScreen extends ConsumerWidget {
                 // ── Business ───────────────────────────────────────────────
                 _Section(title: 'Business', tiles: [
                   _EditTile(
+                    icon: Icons.category_outlined,
+                    label: 'Business Type',
+                    value: businessType.label,
+                    onTap: () => _pickBusinessType(context, ref, businessType),
+                  ),
+                  _EditTile(
                     icon: Icons.store_outlined,
-                    label: 'Salon Name',
+                    label: 'Business Name',
                     value: settings.salonName,
-                    onTap: () => edit('Salon Name', settings.salonName,
+                    onTap: () => edit('Business Name', settings.salonName,
                         (v) => saveSetting(() =>
                             notifier.update(settings.copyWith(salonName: v)))),
                   ),
@@ -414,7 +432,7 @@ class SettingsScreen extends ConsumerWidget {
                   _InfoTile(
                       icon: Icons.business_outlined,
                       label: 'Built for',
-                      value: 'Nepal Salons'),
+                      value: 'Nepal businesses'),
                 ]),
                 const SizedBox(height: 20),
 
@@ -428,6 +446,63 @@ class SettingsScreen extends ConsumerWidget {
             ),
           ),
         ]),
+      ),
+    );
+  }
+
+  void _pickBusinessType(
+      BuildContext context, WidgetRef ref, BusinessType current) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 20, 20, 4),
+              child: Text('Business Type',
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+            ),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 0, 20, 8),
+              child: Text(
+                'Changes the wording and which features the app shows. '
+                'Your data is not affected.',
+                style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+              ),
+            ),
+            for (final t in BusinessType.values)
+              ListTile(
+                title: Text(t.label),
+                subtitle: Text(t.description),
+                trailing: t == current
+                    ? const Icon(Icons.check_rounded, color: Colors.black)
+                    : null,
+                onTap: () {
+                  Navigator.pop(ctx);
+                  if (t == current) return;
+                  final notifier = ref.read(salonSettingsProvider.notifier);
+                  notifier
+                      .update(ref
+                          .read(salonSettingsProvider)
+                          .copyWith(businessType: t))
+                      .catchError((Object e) {
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text('Could not save — $e'),
+                      backgroundColor: AppColors.danger,
+                      behavior: SnackBarBehavior.floating,
+                    ));
+                  });
+                },
+              ),
+            const SizedBox(height: 8),
+          ],
+        ),
       ),
     );
   }

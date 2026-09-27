@@ -78,9 +78,9 @@ class _SupportScreenState extends State<SupportScreen> {
     ),
     _FAQ(
       category: 'Settings',
-      question: 'How do I change my salon name or address?',
+      question: 'How do I change my business name or address?',
       answer:
-          'Go to More → Settings → Business section. Tap any field (Salon Name, Address, Phone) to edit and save.',
+          'Go to More → Settings → Business section. Tap any field (Business Name, Address, Phone) to edit and save.',
     ),
     _FAQ(
       category: 'Settings',

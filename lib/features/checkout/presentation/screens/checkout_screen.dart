@@ -10,6 +10,7 @@ import '../../../../features/services/presentation/providers/services_provider.d
 import '../../../../features/inventory/domain/inventory_models.dart';
 import '../../../../features/inventory/presentation/providers/inventory_provider.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../settings/presentation/providers/business_type_provider.dart';
 import 'review_sale_sheet.dart';
 import 'calendar_tab.dart';
 import '../../../../shared/widgets/pull_to_refresh.dart';
@@ -26,7 +27,19 @@ class CheckoutScreen extends HookConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final tabIndex = useState(0); // 0=Keypad 1=Calendar 2=Services 3=Items
+    final businessType = ref.watch(businessTypeProvider);
+    final tabs = [
+      _CheckoutTab.keypad,
+      if (businessType.hasBookings) _CheckoutTab.calendar,
+      if (businessType.hasServices) _CheckoutTab.services,
+      _CheckoutTab.items,
+    ];
+    // Service businesses start on the keypad; product businesses (pharmacy,
+    // retail) sell mostly from stock, so they start on Items.
+    final selected = useState<_CheckoutTab?>(null);
+    final tab = tabs.contains(selected.value)
+        ? selected.value!
+        : (businessType.hasServices ? _CheckoutTab.keypad : _CheckoutTab.items);
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -34,15 +47,16 @@ class CheckoutScreen extends HookConsumerWidget {
         child: Column(
           children: [
             _SegmentedHeader(
-              selected: tabIndex.value,
-              onChanged: (i) => tabIndex.value = i,
+              tabs: tabs,
+              selected: tab,
+              onChanged: (t) => selected.value = t,
             ),
             Expanded(
-              child: switch (tabIndex.value) {
-                0 => _KeypadView(),
-                1 => const CalendarTab(),
-                2 => _ServicesView(),
-                _ => _ItemsView(),
+              child: switch (tab) {
+                _CheckoutTab.keypad => _KeypadView(),
+                _CheckoutTab.calendar => const CalendarTab(),
+                _CheckoutTab.services => _ServicesView(),
+                _CheckoutTab.items => _ItemsView(),
               },
             ),
           ],
@@ -52,12 +66,27 @@ class CheckoutScreen extends HookConsumerWidget {
   }
 }
 
-// ─── 3-tab segmented header ───────────────────────────────────────────────────
+// ─── Segmented header ───────────────────────────────────────────────────
+
+enum _CheckoutTab {
+  keypad('Keypad'),
+  calendar('Calendar'),
+  services('Services'),
+  items('Items');
+
+  const _CheckoutTab(this.label);
+  final String label;
+}
 
 class _SegmentedHeader extends StatelessWidget {
-  const _SegmentedHeader({required this.selected, required this.onChanged});
-  final int selected;
-  final ValueChanged<int> onChanged;
+  const _SegmentedHeader({
+    required this.tabs,
+    required this.selected,
+    required this.onChanged,
+  });
+  final List<_CheckoutTab> tabs;
+  final _CheckoutTab selected;
+  final ValueChanged<_CheckoutTab> onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -70,37 +99,16 @@ class _SegmentedHeader extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Expanded(
-            child: _SegTab(
-              label: 'Keypad',
-              active: selected == 0,
-              onTap: () => onChanged(0),
+          for (final (i, t) in tabs.indexed) ...[
+            if (i > 0) const SizedBox(width: 6),
+            Expanded(
+              child: _SegTab(
+                label: t.label,
+                active: selected == t,
+                onTap: () => onChanged(t),
+              ),
             ),
-          ),
-          const SizedBox(width: 6),
-          Expanded(
-            child: _SegTab(
-              label: 'Calendar',
-              active: selected == 1,
-              onTap: () => onChanged(1),
-            ),
-          ),
-          const SizedBox(width: 6),
-          Expanded(
-            child: _SegTab(
-              label: 'Services',
-              active: selected == 2,
-              onTap: () => onChanged(2),
-            ),
-          ),
-          const SizedBox(width: 6),
-          Expanded(
-            child: _SegTab(
-              label: 'Items',
-              active: selected == 3,
-              onTap: () => onChanged(3),
-            ),
-          ),
+          ],
         ],
       ),
     );
@@ -326,8 +334,9 @@ class _NoteSheet extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final ctrl = useTextEditingController();
-    const quickTags = [
-      'Tip', '#cash', '#card', '#online', 'staff', 'gst',
+    final quickTags = [
+      if (ref.watch(businessTypeProvider).hasTips) 'Tip',
+      '#cash', '#card', '#online', 'staff', 'gst',
       // Cash handover tracking — lets staff flag whether cash collected from
       // a customer has already been handed to the owner, since a cash sale
       // a staff member processes isn't otherwise distinguishable from one

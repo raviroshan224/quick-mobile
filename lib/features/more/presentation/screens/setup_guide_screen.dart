@@ -3,11 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/network/api_client.dart';
+import '../../../../core/models/business_type.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../features/services/presentation/providers/services_provider.dart';
 import '../../../../features/inventory/presentation/providers/inventory_provider.dart';
 import '../../../../features/customers/presentation/providers/customers_provider.dart';
 import '../../../../features/discounts/providers/discounts_provider.dart';
+import '../../../settings/presentation/providers/business_type_provider.dart';
 
 // Tracks which optional steps the user has manually marked done.
 final _dismissedProvider = StateProvider<Set<int>>((_) => {});
@@ -50,11 +52,12 @@ class SetupGuideScreen extends ConsumerWidget {
     final hasDrawer = ref.watch(_hasDrawerHistoryProvider).valueOrNull ?? false;
     final hasAnySale = ref.watch(_hasAnySaleProvider).valueOrNull ?? false;
     final dismissed = ref.watch(_dismissedProvider);
+    final businessType = ref.watch(businessTypeProvider);
 
     final steps = _buildSteps(
         context, ref, dismissed,
         serviceCount, itemCount, customerCount,
-        discountCount, hasDrawer, hasAnySale);
+        discountCount, hasDrawer, hasAnySale, businessType);
     final doneCount = steps.where((s) => s.done).length;
     final total = steps.length;
     final progress = doneCount / total;
@@ -93,7 +96,7 @@ class SetupGuideScreen extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Get your salon ready',
+                  Text('Get your ${businessType.noun} ready',
                       style: TextStyle(
                           color: Colors.white,
                           fontSize: 18,
@@ -149,7 +152,7 @@ class SetupGuideScreen extends ConsumerWidget {
                 step: steps[i],
                 onMarkDone: () => ref
                     .read(_dismissedProvider.notifier)
-                    .update((s) => {...s, i}),
+                    .update((s) => {...s, steps[i].id}),
               ),
             ),
           ),
@@ -168,22 +171,27 @@ class SetupGuideScreen extends ConsumerWidget {
     int discountCount,
     bool hasDrawer,
     bool hasAnySale,
+    BusinessType businessType,
   ) {
+    // Step ids are stable across business types — they key [dismissed], so
+    // they must not shift when a step (e.g. services) is left out.
     return [
       _GuideStep(
+        id: 0,
         icon: Icons.person_rounded,
         iconColor: AppColors.primary,
         title: 'Create your account',
-        description: 'Sign in to start managing your salon.',
+        description: 'Sign in to start managing your ${businessType.noun}.',
         done: true,
         autoComplete: true,
       ),
-      _GuideStep(
+      if (businessType.hasServices) _GuideStep(
+        id: 1,
         icon: Icons.spa_outlined,
         iconColor: AppColors.primary,
         title: 'Add your services',
         description: serviceCount > 0
-            ? '$serviceCount services ready — Hair, Nails, Skin, Makeup & Massage.'
+            ? '$serviceCount services ready.'
             : 'Add the treatments your salon offers.',
         done: serviceCount > 0,
         autoComplete: serviceCount > 0,
@@ -191,11 +199,12 @@ class SetupGuideScreen extends ConsumerWidget {
         onAction: () => context.go(AppRoutes.moreServices),
       ),
       _GuideStep(
+        id: 2,
         icon: Icons.inventory_2_outlined,
         iconColor: const Color(0xFFF59E0B),
         title: 'Add inventory items',
         description: itemCount > 0
-            ? '$itemCount products ready — shampoos, scissors, blades & more.'
+            ? '$itemCount products ready.'
             : 'Add retail products you sell at the counter.',
         done: itemCount > 0,
         autoComplete: itemCount > 0,
@@ -203,6 +212,7 @@ class SetupGuideScreen extends ConsumerWidget {
         onAction: () => context.go(AppRoutes.moreItems),
       ),
       _GuideStep(
+        id: 3,
         icon: Icons.person_add_outlined,
         iconColor: const Color(0xFF10B981),
         title: 'Add your first customer',
@@ -216,12 +226,15 @@ class SetupGuideScreen extends ConsumerWidget {
         skippable: true,
       ),
       _GuideStep(
+        id: 4,
         icon: Icons.local_offer_outlined,
         iconColor: AppColors.textSecondary,
         title: 'Create a discount',
         description: discountCount > 0
             ? '$discountCount discount${discountCount == 1 ? '' : 's'} set up.'
-            : 'Offer percentage or fixed discounts on services and items.',
+            : businessType.hasServices
+                ? 'Offer percentage or fixed discounts on services and items.'
+                : 'Offer percentage or fixed discounts on items.',
         done: discountCount > 0 || dismissed.contains(4),
         autoComplete: discountCount > 0,
         actionLabel: 'Set Up Discounts',
@@ -229,6 +242,7 @@ class SetupGuideScreen extends ConsumerWidget {
         skippable: true,
       ),
       _GuideStep(
+        id: 5,
         icon: Icons.point_of_sale_outlined,
         iconColor: AppColors.primary,
         title: 'Open your cash drawer',
@@ -242,6 +256,7 @@ class SetupGuideScreen extends ConsumerWidget {
         skippable: true,
       ),
       _GuideStep(
+        id: 6,
         icon: Icons.shopping_cart_checkout_rounded,
         iconColor: Colors.black,
         title: 'Make your first sale',
@@ -262,6 +277,7 @@ class SetupGuideScreen extends ConsumerWidget {
 
 class _GuideStep {
   const _GuideStep({
+    required this.id,
     required this.icon,
     required this.iconColor,
     required this.title,
@@ -272,6 +288,7 @@ class _GuideStep {
     this.onAction,
     this.skippable = false,
   });
+  final int id;
   final IconData icon;
   final Color iconColor;
   final String title;

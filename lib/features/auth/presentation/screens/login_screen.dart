@@ -103,7 +103,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         children: [
           Text('Welcome back', style: AppTextStyles.displayMedium),
           const SizedBox(height: 6),
-          Text('Sign in to your salon dashboard',
+          Text('Sign in to your business dashboard',
               style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary)),
           const SizedBox(height: 32),
 
@@ -234,7 +234,7 @@ class _BrandPanel extends StatelessWidget {
           Text('Quick', style: AppTextStyles.displayLarge.copyWith(color: Colors.white)),
           const SizedBox(height: 12),
           Text(
-            'Fast, beautiful point-of-sale\nfor modern salons.',
+            'Fast, beautiful point-of-sale\nfor modern businesses.',
             style: AppTextStyles.bodyLarge.copyWith(color: AppColors.sidebarText, height: 1.6),
           ),
           const SizedBox(height: 48),

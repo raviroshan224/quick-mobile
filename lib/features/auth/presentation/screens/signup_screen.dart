@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_constants.dart';
+import '../../../../core/models/business_type.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/widgets/quick_logo.dart';
 import '../providers/auth_provider.dart';
@@ -21,6 +22,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
   bool _obscure = true;
+  BusinessType _businessType = BusinessType.salon;
 
   @override
   void dispose() {
@@ -40,6 +42,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
           _lastNameCtrl.text.trim(),
           _emailCtrl.text.trim(),
           _passwordCtrl.text,
+          businessType: _businessType,
         );
   }
 
@@ -118,23 +121,39 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
           Text('Create your account', style: AppTextStyles.displayMedium),
           const SizedBox(height: 6),
           Text(
-            'Set up your salon in minutes',
+            'Set up your business in minutes',
             style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary),
           ),
           const SizedBox(height: 32),
 
-          _FieldLabel('Salon name'),
+          _FieldLabel('Business type'),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final t in BusinessType.values)
+                ChoiceChip(
+                  label: Text(t.label),
+                  selected: _businessType == t,
+                  onSelected: (_) => setState(() => _businessType = t),
+                ),
+            ],
+          ),
+          const SizedBox(height: 20),
+
+          _FieldLabel('Business name'),
           const SizedBox(height: 8),
           TextFormField(
             controller: _companyNameCtrl,
             textCapitalization: TextCapitalization.words,
             textInputAction: TextInputAction.next,
-            decoration: const InputDecoration(
-              hintText: "Jane's Salon",
-              prefixIcon: Icon(Icons.storefront_outlined, size: 18),
+            decoration: InputDecoration(
+              hintText: _businessType.nameHint,
+              prefixIcon: const Icon(Icons.storefront_outlined, size: 18),
             ),
             validator: (v) =>
-                (v == null || v.trim().isEmpty) ? 'Salon name is required' : null,
+                (v == null || v.trim().isEmpty) ? 'Business name is required' : null,
           ),
           const SizedBox(height: 20),
 
@@ -303,7 +322,7 @@ class _BrandPanel extends StatelessWidget {
           Text('Quick', style: AppTextStyles.displayLarge.copyWith(color: Colors.white)),
           const SizedBox(height: 12),
           Text(
-            'One account to manage your entire\nsalon — staff, sales, and clients.',
+            'One account to manage your entire\nbusiness — staff, sales, and customers.',
             style: AppTextStyles.bodyLarge.copyWith(color: AppColors.sidebarText, height: 1.6),
           ),
           const SizedBox(height: 48),

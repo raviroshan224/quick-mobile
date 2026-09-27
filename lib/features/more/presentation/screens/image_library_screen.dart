@@ -64,7 +64,7 @@ class _ImageLibraryScreenState extends ConsumerState<ImageLibraryScreen> {
         content: TextField(
           controller: nameCtrl,
           autofocus: true,
-          decoration: const InputDecoration(hintText: 'e.g. Haircut Icon'),
+          decoration: const InputDecoration(hintText: 'e.g. Product Icon'),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),

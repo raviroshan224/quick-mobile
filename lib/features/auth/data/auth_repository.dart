@@ -2,6 +2,7 @@ import '../../../core/network/api_client.dart';
 import '../../../core/storage/secure_storage_service.dart';
 import '../domain/user_model.dart';
 import '../domain/profile_model.dart';
+import '../../../core/models/business_type.dart';
 
 class AuthRepository {
   AuthRepository(this._api, this._storage);
@@ -14,10 +15,12 @@ class AuthRepository {
     String firstName,
     String lastName,
     String email,
-    String password,
-  ) async {
+    String password, {
+    BusinessType businessType = BusinessType.salon,
+  }) async {
     await _api.post('/auth/signup', data: {
       'companyName': companyName,
+      'businessType': businessType.toApi(),
       'firstName': firstName,
       'lastName': lastName,
       'email': email.trim(),
