@@ -9,7 +9,7 @@ class QuickLogo extends StatelessWidget {
   final double size;
   final bool onDark;
 
-  static const _asset = 'assets/images/black Q bg removed.png.png';
+  static const _asset = 'assets/images/quick_logo.png';
 
   @override
   Widget build(BuildContext context) {
