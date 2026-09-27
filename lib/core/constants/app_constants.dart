@@ -59,6 +59,7 @@ class AppRoutes {
   static const String moreRefunds = '/more/refunds';
   static const String moreImageLibrary = '/more/image-library';
   static const String moreStockMovement = '/more/stock-movement';
+  static const String moreExpiringStock = '/more/expiring-stock';
 
   // Legacy aliases (keep for any leftover references)
   static const String home = '/checkout';

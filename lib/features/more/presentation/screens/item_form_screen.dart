@@ -2,20 +2,29 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../features/inventory/data/inventory_repository.dart';
+import '../../../../features/inventory/domain/inventory_models.dart';
 import '../../../../features/inventory/presentation/providers/inventory_provider.dart';
+import '../../../../shared/widgets/barcode_scanner_screen.dart';
 import '../../../settings/presentation/providers/business_type_provider.dart';
 
 final _inventoryRepoProvider = Provider<InventoryRepository>(
   (ref) => InventoryRepository(ref.read(apiClientProvider)),
 );
 
+/// Create/edit a product. When pushed (e.g. from Checkout after scanning an
+/// unknown barcode) it pops with the saved [ProductModel]; when reached by
+/// `go` from the Items list it returns there.
 class ItemFormScreen extends ConsumerStatefulWidget {
-  const ItemFormScreen({super.key, this.productId});
+  const ItemFormScreen({super.key, this.productId, this.initialBarcode});
   final String? productId;
+
+  /// Pre-fills the barcode of a new item.
+  final String? initialBarcode;
 
   bool get isEditing => productId != null;
 
@@ -33,10 +42,16 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
   final _thresholdCtrl = TextEditingController(text: '5');
   final _descCtrl = TextEditingController();
   final _categoryCtrl = TextEditingController();
+  late final _barcodeCtrl = TextEditingController(text: widget.initialBarcode);
+  final _genericNameCtrl = TextEditingController();
+  final _manufacturerCtrl = TextEditingController();
+  final _strengthCtrl = TextEditingController();
+  final _dosageFormCtrl = TextEditingController();
 
   bool _isActive = true;
+  bool _requiresPrescription = false;
   bool _loading = false;
-
+  List<ProductBatch> _batches = const [];
 
   @override
   void initState() {
@@ -56,8 +71,29 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
     _thresholdCtrl.dispose();
     _descCtrl.dispose();
     _categoryCtrl.dispose();
+    _barcodeCtrl.dispose();
+    _genericNameCtrl.dispose();
+    _manufacturerCtrl.dispose();
+    _strengthCtrl.dispose();
+    _dosageFormCtrl.dispose();
     super.dispose();
   }
+
+  void _close([ProductModel? saved]) {
+    if (context.canPop()) {
+      context.pop(saved);
+    } else {
+      context.go(AppRoutes.moreItems);
+    }
+  }
+
+  Future<void> _scanBarcode() async {
+    final code = await BarcodeScannerScreen.scan(context);
+    if (code != null && mounted) _barcodeCtrl.text = code;
+  }
+
+  static String? _textOrNull(TextEditingController c) =>
+      c.text.trim().isEmpty ? null : c.text.trim();
 
   Future<void> _loadProduct() async {
     try {
@@ -72,9 +108,23 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
       _thresholdCtrl.text = product.lowStockThreshold.toString();
       _descCtrl.text = product.description ?? '';
       _categoryCtrl.text = product.category ?? '';
+      _barcodeCtrl.text = product.barcode ?? '';
+      _genericNameCtrl.text = product.genericName ?? '';
+      _manufacturerCtrl.text = product.manufacturer ?? '';
+      _strengthCtrl.text = product.strength ?? '';
+      _dosageFormCtrl.text = product.dosageForm ?? '';
       setState(() {
         _isActive = product.isActive;
+        _requiresPrescription = product.requiresPrescription;
       });
+      if (ref.read(businessTypeProvider).hasExpiryTracking) {
+        try {
+          final batches = await repo.getBatches(product.id);
+          if (mounted) setState(() => _batches = batches);
+        } catch (_) {
+          // Batches are informational here; the form works without them.
+        }
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -93,13 +143,18 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
       final stock = int.tryParse(_stockCtrl.text.trim()) ?? 0;
       final cost = double.tryParse(_costCtrl.text.trim());
       final threshold = int.tryParse(_thresholdCtrl.text.trim()) ?? 5;
-      final sku = _skuCtrl.text.trim().isEmpty ? null : _skuCtrl.text.trim();
-      final desc = _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim();
-      final category =
-          _categoryCtrl.text.trim().isEmpty ? null : _categoryCtrl.text.trim();
+      final sku = _textOrNull(_skuCtrl);
+      final desc = _textOrNull(_descCtrl);
+      final category = _textOrNull(_categoryCtrl);
+      final barcode = _textOrNull(_barcodeCtrl);
+      final genericName = _textOrNull(_genericNameCtrl);
+      final manufacturer = _textOrNull(_manufacturerCtrl);
+      final strength = _textOrNull(_strengthCtrl);
+      final dosageForm = _textOrNull(_dosageFormCtrl);
 
+      final ProductModel saved;
       if (widget.isEditing) {
-        await repo.update(
+        saved = await repo.update(
           widget.productId!,
           name: _nameCtrl.text.trim(),
           price: price,
@@ -110,9 +165,15 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
           category: category,
           lowStockThreshold: threshold,
           isActive: _isActive,
+          barcode: barcode,
+          genericName: genericName,
+          manufacturer: manufacturer,
+          strength: strength,
+          dosageForm: dosageForm,
+          requiresPrescription: _requiresPrescription,
         );
       } else {
-        await repo.create(
+        saved = await repo.create(
           name: _nameCtrl.text.trim(),
           price: price,
           stock: stock,
@@ -122,11 +183,17 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
           category: category,
           lowStockThreshold: threshold,
           isActive: _isActive,
+          barcode: barcode,
+          genericName: genericName,
+          manufacturer: manufacturer,
+          strength: strength,
+          dosageForm: dosageForm,
+          requiresPrescription: _requiresPrescription,
         );
       }
 
       ref.invalidate(productsProvider);
-      if (mounted) context.go(AppRoutes.moreItems);
+      if (mounted) _close(saved);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -140,6 +207,7 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final businessType = ref.watch(businessTypeProvider);
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -148,7 +216,7 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded,
               size: 18, color: Colors.black),
-          onPressed: () => context.go(AppRoutes.moreItems),
+          onPressed: _close,
         ),
         title: Text(
           widget.isEditing ? 'Edit Item' : 'New Item',
@@ -176,7 +244,22 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
               ),
               const _FieldDivider(),
               _Field(
-                label: 'SKU / Barcode',
+                label: 'Barcode',
+                child: TextFormField(
+                  controller: _barcodeCtrl,
+                  decoration: InputDecoration(
+                    hintText: 'Scan or type (optional)',
+                    suffixIcon: IconButton(
+                      tooltip: 'Scan barcode',
+                      icon: const Icon(Icons.qr_code_scanner_rounded, size: 20),
+                      onPressed: _scanBarcode,
+                    ),
+                  ),
+                ),
+              ),
+              const _FieldDivider(),
+              _Field(
+                label: 'SKU',
                 child: TextFormField(
                   controller: _skuCtrl,
                   decoration:
@@ -184,6 +267,63 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
                 ),
               ),
             ]),
+
+            if (businessType.hasMedicineFields) ...[
+              const SizedBox(height: 16),
+              const _SectionLabel(text: 'Medicine'),
+              _FormCard(children: [
+                _Field(
+                  label: 'Generic Name',
+                  child: TextFormField(
+                    controller: _genericNameCtrl,
+                    textCapitalization: TextCapitalization.words,
+                    decoration: const InputDecoration(
+                        hintText: 'e.g. Paracetamol (optional)'),
+                  ),
+                ),
+                const _FieldDivider(),
+                _Field(
+                  label: 'Strength',
+                  child: TextFormField(
+                    controller: _strengthCtrl,
+                    decoration:
+                        const InputDecoration(hintText: 'e.g. 500 mg (optional)'),
+                  ),
+                ),
+                const _FieldDivider(),
+                _Field(
+                  label: 'Dosage Form',
+                  child: TextFormField(
+                    controller: _dosageFormCtrl,
+                    textCapitalization: TextCapitalization.words,
+                    decoration: const InputDecoration(
+                        hintText: 'e.g. Tablet, Syrup (optional)'),
+                  ),
+                ),
+                const _FieldDivider(),
+                _Field(
+                  label: 'Manufacturer',
+                  child: TextFormField(
+                    controller: _manufacturerCtrl,
+                    textCapitalization: TextCapitalization.words,
+                    decoration: const InputDecoration(hintText: 'Optional'),
+                  ),
+                ),
+                const _FieldDivider(),
+                SwitchListTile(
+                  value: _requiresPrescription,
+                  onChanged: (v) => setState(() => _requiresPrescription = v),
+                  title: const Text('Prescription required',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                  subtitle: const Text(
+                    'Shown as Rx at checkout',
+                    style: TextStyle(fontSize: 12, color: AppColors.textTertiary),
+                  ),
+                  activeThumbColor: Colors.black,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                ),
+              ]),
+            ],
 
             const SizedBox(height: 16),
             const _SectionLabel(text: 'Pricing'),
@@ -249,6 +389,27 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
               ),
             ]),
 
+            if (_batches.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              const _SectionLabel(text: 'Batches'),
+              _FormCard(children: [
+                for (var i = 0; i < _batches.length; i++) ...[
+                  if (i > 0) const _FieldDivider(),
+                  _BatchTile(batch: _batches[i]),
+                ],
+                const _FieldDivider(),
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 10, 16, 12),
+                  child: Text(
+                    'Stock in batches is sold soonest-expiry first. To remove '
+                    'it, use Stock Movement → Stock Out.',
+                    style: TextStyle(
+                        fontSize: 12, color: AppColors.textTertiary),
+                  ),
+                ),
+              ]),
+            ],
+
             const SizedBox(height: 16),
             const _SectionLabel(text: 'Details'),
             _FormCard(children: [
@@ -258,8 +419,7 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
                   controller: _categoryCtrl,
                   textCapitalization: TextCapitalization.words,
                   decoration: InputDecoration(
-                      hintText:
-                          ref.watch(businessTypeProvider).itemCategoryHint),
+                      hintText: businessType.itemCategoryHint),
                 ),
               ),
               const _FieldDivider(),
@@ -334,6 +494,47 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+class _BatchTile extends StatelessWidget {
+  const _BatchTile({required this.batch});
+  final ProductBatch batch;
+
+  @override
+  Widget build(BuildContext context) {
+    final expiry = batch.expiryDate;
+    final expiryText = expiry == null
+        ? 'No expiry date'
+        : '${batch.isExpired ? 'Expired' : 'Expires'} '
+            '${DateFormat('dd MMM yyyy').format(expiry)}';
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(batch.label,
+                    style: const TextStyle(
+                        fontSize: 14, fontWeight: FontWeight.w500)),
+                const SizedBox(height: 2),
+                Text(expiryText,
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: batch.isExpired
+                            ? AppColors.danger
+                            : AppColors.textSecondary)),
+              ],
+            ),
+          ),
+          Text('${batch.quantity}',
+              style:
+                  const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+        ],
+      ),
+    );
+  }
+}
 
 class _FormCard extends StatelessWidget {
   const _FormCard({required this.children});

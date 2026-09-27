@@ -8,6 +8,7 @@ import '../../../../features/auth/presentation/providers/auth_provider.dart';
 import '../../../../features/reports/domain/reports_models.dart';
 import '../../../../features/reports/presentation/providers/reports_provider.dart';
 import 'settings_screen.dart' show salonSettingsProvider;
+import '../../../settings/presentation/providers/business_type_provider.dart';
 import '../../../../shared/widgets/pull_to_refresh.dart';
 
 // ─── Formatting ───────────────────────────────────────────────────────────────
@@ -36,7 +37,12 @@ String _pct(double part, double total) {
 class ReportsScreen extends HookConsumerWidget {
   const ReportsScreen({super.key});
 
-  static const _tabs = ['Sales', 'Staff', 'Services', 'Inventory'];
+  static String _tabLabel(ReportsTab t) => switch (t) {
+        ReportsTab.sales => 'Sales',
+        ReportsTab.staff => 'Staff',
+        ReportsTab.services => 'Services',
+        ReportsTab.inventory => 'Inventory',
+      };
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -58,7 +64,14 @@ class ReportsScreen extends HookConsumerWidget {
         ref.watch(salonSettingsProvider).commissionEnabled;
     final state = ref.watch(reportsProvider);
     final notifier = ref.read(reportsProvider.notifier);
-    final tabIndex = useState(state.activeTab.index);
+    // Businesses without services (pharmacy, retail) have no Services report.
+    final hasServices = ref.watch(businessTypeProvider).hasServices;
+    final tabs = [
+      for (final t in ReportsTab.values)
+        if (t != ReportsTab.services || hasServices) t,
+    ];
+    final activeTab =
+        tabs.contains(state.activeTab) ? state.activeTab : ReportsTab.sales;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -130,15 +143,12 @@ class ReportsScreen extends HookConsumerWidget {
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 20),
-                itemCount: _tabs.length,
+                itemCount: tabs.length,
                 separatorBuilder: (_, _) => const SizedBox(width: 8),
                 itemBuilder: (_, i) => _TopTab(
-                  label: _tabs[i],
-                  selected: tabIndex.value == i,
-                  onTap: () {
-                    tabIndex.value = i;
-                    notifier.setTab(ReportsTab.values[i]);
-                  },
+                  label: _tabLabel(tabs[i]),
+                  selected: activeTab == tabs[i],
+                  onTap: () => notifier.setTab(tabs[i]),
                 ),
               ),
             ),
@@ -150,7 +160,7 @@ class ReportsScreen extends HookConsumerWidget {
               child: PullToRefresh(
                 onRefresh: notifier.refresh,
                 child: _TabBody(
-                  tabIndex: tabIndex.value,
+                  tab: activeTab,
                   state: state,
                   onRetry: notifier.retry,
                   commissionEnabled: commissionEnabled,
@@ -195,13 +205,13 @@ class ReportsScreen extends HookConsumerWidget {
 
 class _TabBody extends StatelessWidget {
   const _TabBody({
-    required this.tabIndex,
+    required this.tab,
     required this.state,
     required this.onRetry,
     required this.commissionEnabled,
   });
 
-  final int tabIndex;
+  final ReportsTab tab;
   final ReportsState state;
   final VoidCallback onRetry;
   final bool commissionEnabled;
@@ -214,12 +224,12 @@ class _TabBody extends StatelessWidget {
     if (state.error != null) {
       return _ErrorView(message: state.error!, onRetry: onRetry);
     }
-    return switch (tabIndex) {
-      0 => _SalesTab(summary: state.salesSummary),
-      1 => _StaffTab(
+    return switch (tab) {
+      ReportsTab.sales => _SalesTab(summary: state.salesSummary),
+      ReportsTab.staff => _StaffTab(
           rows: state.staffPerformance, commissionEnabled: commissionEnabled),
-      2 => _ServicesTab(rows: state.servicePopularity),
-      _ => _InventoryTab(report: state.inventoryReport),
+      ReportsTab.services => _ServicesTab(rows: state.servicePopularity),
+      ReportsTab.inventory => _InventoryTab(report: state.inventoryReport),
     };
   }
 }

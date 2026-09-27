@@ -44,6 +44,7 @@ import '../../features/more/presentation/screens/staff_history_screen.dart';
 import '../../features/more/presentation/screens/refunds_screen.dart';
 import '../../features/more/presentation/screens/image_library_screen.dart';
 import '../../features/more/presentation/screens/stock_movement_screen.dart';
+import '../../features/more/presentation/screens/expiring_stock_screen.dart';
 import '../../features/more/presentation/screens/my_profile_screen.dart';
 import '../../features/settings/presentation/providers/business_type_provider.dart';
 import '../../shared/widgets/main_shell.dart';
@@ -115,6 +116,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           '/more/cash-drawer',
           '/more/image-library',
           '/more/stock-movement',
+          '/more/expiring-stock',
         ];
         if (ownerOnly.any((p) => loc == p || loc.startsWith('$p/'))) {
           return AppRoutes.more;
@@ -128,6 +130,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         final disabled = [
           if (!businessType.hasServices) AppRoutes.moreServices,
           if (!businessType.hasBookings) AppRoutes.moreBookings,
+          if (!businessType.hasExpiryTracking) AppRoutes.moreExpiringStock,
         ];
         if (disabled.any((p) => loc == p || loc.startsWith('$p/'))) {
           return AppRoutes.more;
@@ -201,7 +204,9 @@ final routerProvider = Provider<GoRouter>((ref) {
               builder: (_, _) => const ItemsScreen()),
           GoRoute(
               path: '/more/items/new',
-              builder: (_, _) => const ItemFormScreen()),
+              builder: (_, state) => ItemFormScreen(
+                    initialBarcode: state.uri.queryParameters['barcode'],
+                  )),
           GoRoute(
               path: '/more/items/:id/edit',
               builder: (_, state) => ItemFormScreen(
@@ -313,6 +318,9 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
               path: AppRoutes.moreStockMovement,
               builder: (_, _) => const StockMovementScreen()),
+          GoRoute(
+              path: AppRoutes.moreExpiringStock,
+              builder: (_, _) => const ExpiringStockScreen()),
         ],
       ),
     ],

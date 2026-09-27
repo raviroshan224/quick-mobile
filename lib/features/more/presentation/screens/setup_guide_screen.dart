@@ -218,7 +218,7 @@ class SetupGuideScreen extends ConsumerWidget {
         title: 'Add your first customer',
         description: customerCount > 0
             ? '$customerCount customers in your directory.'
-            : 'Build a client list to track visits and preferences.',
+            : 'Build a customer list to track visits and preferences.',
         done: customerCount > 0 || dismissed.contains(3),
         autoComplete: customerCount > 0,
         actionLabel: 'View Customers',

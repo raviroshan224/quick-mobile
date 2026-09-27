@@ -69,8 +69,8 @@ const _kLibrary = <_LibImage>[
   _LibImage(id: 'svc-keratin', name: 'Keratin',   category: ImagePickerCategory.service, iconData: Icons.waves,                    color: _kServiceColor),
   _LibImage(id: 'svc-nailart', name: 'Nail Art',  category: ImagePickerCategory.service, iconData: Icons.brush,                    color: _kServiceColor),
   // ── Staff ─────────────────────────────────────────────────────────────────
-  _LibImage(id: 'stf-f1',  name: 'Female Stylist', category: ImagePickerCategory.staff, iconData: Icons.person,  color: _kStaffColor, initials: 'FS'),
-  _LibImage(id: 'stf-m1',  name: 'Male Stylist',   category: ImagePickerCategory.staff, iconData: Icons.person,  color: AppColors.primary, initials: 'MS'),
+  _LibImage(id: 'stf-f1',  name: 'Female Staff', category: ImagePickerCategory.staff, iconData: Icons.person,  color: _kStaffColor, initials: 'FS'),
+  _LibImage(id: 'stf-m1',  name: 'Male Staff',     category: ImagePickerCategory.staff, iconData: Icons.person,  color: AppColors.primary, initials: 'MS'),
   _LibImage(id: 'stf-mgr', name: 'Manager',        category: ImagePickerCategory.staff, iconData: Icons.manage_accounts, color: Color(0xFF10B981), initials: 'MG'),
   _LibImage(id: 'stf-rec', name: 'Receptionist',   category: ImagePickerCategory.staff, iconData: Icons.support_agent,   color: Color(0xFFF59E0B), initials: 'RC'),
   // ── Products ──────────────────────────────────────────────────────────────

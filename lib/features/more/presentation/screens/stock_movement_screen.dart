@@ -13,6 +13,7 @@ import '../../../../features/inventory/data/inventory_repository.dart';
 import '../../../../features/inventory/domain/inventory_models.dart';
 import '../../../../features/inventory/presentation/providers/inventory_provider.dart';
 import '../../../../shared/widgets/pull_to_refresh.dart';
+import '../../../settings/presentation/providers/business_type_provider.dart';
 
 // ─── Local repo provider ──────────────────────────────────────────────────────
 
@@ -25,6 +26,8 @@ final _stockRepoProvider = Provider<InventoryRepository>(
 final _dateFmt = DateFormat('dd MMM yyyy HH:mm');
 
 String _fmtDate(DateTime dt) => _dateFmt.format(dt);
+
+final _expiryFmt = DateFormat('dd MMM yyyy');
 
 // ─── Movement type ────────────────────────────────────────────────────────────
 
@@ -143,6 +146,36 @@ class _RecordTab extends HookConsumerWidget {
     final reasonText = useState('');
     final submitting = useState(false);
     final formKey = useMemoized(() => GlobalKey<FormState>());
+    final hasExpiryTracking =
+        ref.watch(businessTypeProvider).hasExpiryTracking;
+    // Stock in: optional batch the units belong to.
+    final batchNumberCtrl = useTextEditingController();
+    final expiryDate = useState<DateTime?>(null);
+    // Stock out: the product's batches, and which one to take from (null =
+    // untracked stock first, then soonest expiry).
+    final batches = useState<List<ProductBatch>>(const []);
+    final fromBatchId = useState<String?>(null);
+
+    useEffect(() {
+      final product = selectedProduct.value;
+      batches.value = const [];
+      fromBatchId.value = null;
+      if (product == null ||
+          movementType.value != _MovementType.stockOut) {
+        return null;
+      }
+      var cancelled = false;
+      () async {
+        try {
+          final list =
+              await ref.read(_stockRepoProvider).getBatches(product.id);
+          if (!cancelled) batches.value = list;
+        } catch (_) {
+          // No batch choice offered; stock out still works without one.
+        }
+      }();
+      return () => cancelled = true;
+    }, [selectedProduct.value?.id, movementType.value]);
 
     useEffect(() {
       void onReason() => reasonText.value = reasonCtrl.text;
@@ -229,6 +262,17 @@ class _RecordTab extends HookConsumerWidget {
         _snack(context, 'Quantity must be greater than 0', error: true);
         return;
       }
+      final fromBatch = batches.value
+          .where((b) => b.id == fromBatchId.value)
+          .firstOrNull;
+      if (!isIn && !isAdj && fromBatch != null &&
+          parsedQty > fromBatch.quantity) {
+        _snack(context,
+            'That batch only has ${fromBatch.quantity} unit(s) left',
+            error: true);
+        return;
+      }
+      final batchNumber = batchNumberCtrl.text.trim();
       submitting.value = true;
       try {
         final type = switch (movementType.value) {
@@ -241,8 +285,12 @@ class _RecordTab extends HookConsumerWidget {
               type: type,
               quantity: parsedQty,
               reason: reasonCtrl.text.trim(),
+              batchNumber: isIn && batchNumber.isNotEmpty ? batchNumber : null,
+              expiryDate: isIn ? expiryDate.value : null,
+              batchId: !isIn && !isAdj ? fromBatch?.id : null,
             );
         ref.invalidate(productsProvider);
+        ref.invalidate(expiringBatchesProvider);
         ref.invalidate(inventoryLogsProvider);
         ref.invalidate(logListProvider);
         if (!context.mounted) return;
@@ -356,6 +404,37 @@ class _RecordTab extends HookConsumerWidget {
             },
           ),
           const SizedBox(height: 20),
+
+          // Batch & expiry (stock in)
+          if (isIn && hasExpiryTracking) ...[
+            const _SectionLabel(
+                text: 'Batch & Expiry', subtitle: 'optional'),
+            const SizedBox(height: 8),
+            _BatchInFields(
+              batchNumberCtrl: batchNumberCtrl,
+              expiryDate: expiryDate.value,
+              onExpiryChanged: (d) => expiryDate.value = d,
+            ),
+            const SizedBox(height: 20),
+          ],
+
+          // Which batch (stock out)
+          if (movementType.value == _MovementType.stockOut &&
+              batches.value.isNotEmpty) ...[
+            const _SectionLabel(text: 'From Batch'),
+            const SizedBox(height: 8),
+            _BatchPicker(
+              batches: batches.value,
+              selectedId: fromBatchId.value,
+              onChanged: (b) {
+                fromBatchId.value = b?.id;
+                if (b != null && b.isExpired && reasonCtrl.text.isEmpty) {
+                  reasonCtrl.text = 'Expired';
+                }
+              },
+            ),
+            const SizedBox(height: 20),
+          ],
 
           // Reason
           const _SectionLabel(text: 'Reason'),
@@ -485,6 +564,202 @@ class _RecordTab extends HookConsumerWidget {
           RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
     ));
+  }
+}
+
+// ─── Batch fields ─────────────────────────────────────────────────────────────
+
+InputDecoration _fieldDecoration(String hint, {Widget? prefixIcon}) =>
+    InputDecoration(
+      hintText: hint,
+      hintStyle: const TextStyle(color: AppColors.textTertiary, fontSize: 14),
+      prefixIcon: prefixIcon,
+      filled: true,
+      fillColor: Colors.white,
+      border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.divider)),
+      enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.divider)),
+      focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Colors.black, width: 1.5)),
+      contentPadding:
+          const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+    );
+
+class _BatchInFields extends StatelessWidget {
+  const _BatchInFields({
+    required this.batchNumberCtrl,
+    required this.expiryDate,
+    required this.onExpiryChanged,
+  });
+  final TextEditingController batchNumberCtrl;
+  final DateTime? expiryDate;
+  final ValueChanged<DateTime?> onExpiryChanged;
+
+  Future<void> _pickExpiry(BuildContext context) async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: expiryDate ?? DateTime(now.year + 1, now.month, now.day),
+      firstDate: DateTime(now.year - 1),
+      lastDate: DateTime(now.year + 15),
+      helpText: 'Expiry date',
+      builder: (ctx, child) => Theme(
+        data: ThemeData.light().copyWith(
+          colorScheme: const ColorScheme.light(primary: Colors.black),
+        ),
+        child: child!,
+      ),
+    );
+    if (picked != null) onExpiryChanged(picked);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        TextFormField(
+          controller: batchNumberCtrl,
+          textCapitalization: TextCapitalization.characters,
+          decoration: _fieldDecoration('Batch / lot number',
+              prefixIcon: const Icon(Icons.qr_code_2_rounded,
+                  size: 18, color: AppColors.textSecondary)),
+        ),
+        const SizedBox(height: 10),
+        GestureDetector(
+          onTap: () => _pickExpiry(context),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.divider),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.event_outlined,
+                    size: 18, color: AppColors.textSecondary),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    expiryDate == null
+                        ? 'Expiry date'
+                        : 'Expires ${_expiryFmt.format(expiryDate!)}',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: expiryDate == null
+                          ? AppColors.textTertiary
+                          : AppColors.textPrimary,
+                    ),
+                  ),
+                ),
+                if (expiryDate != null)
+                  GestureDetector(
+                    onTap: () => onExpiryChanged(null),
+                    child: const Icon(Icons.close_rounded,
+                        size: 18, color: AppColors.textTertiary),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _BatchPicker extends StatelessWidget {
+  const _BatchPicker({
+    required this.batches,
+    required this.selectedId,
+    required this.onChanged,
+  });
+  final List<ProductBatch> batches;
+  final String? selectedId;
+  final ValueChanged<ProductBatch?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget option({
+      required String title,
+      required String subtitle,
+      required bool selected,
+      required VoidCallback onTap,
+      bool expired = false,
+    }) {
+      return GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: selected ? Colors.black : AppColors.divider,
+              width: selected ? 1.5 : 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                selected
+                    ? Icons.radio_button_checked_rounded
+                    : Icons.radio_button_unchecked_rounded,
+                size: 18,
+                color: selected ? Colors.black : AppColors.textTertiary,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title,
+                        style: const TextStyle(
+                            fontSize: 14, fontWeight: FontWeight.w500)),
+                    const SizedBox(height: 2),
+                    Text(subtitle,
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: expired
+                                ? AppColors.danger
+                                : AppColors.textSecondary)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      children: [
+        option(
+          title: 'Any',
+          subtitle: 'Stock without a batch first, then soonest expiry',
+          selected: selectedId == null,
+          onTap: () => onChanged(null),
+        ),
+        for (final b in batches) ...[
+          const SizedBox(height: 8),
+          option(
+            title: b.label,
+            subtitle: [
+              '${b.quantity} left',
+              if (b.expiryDate != null)
+                '${b.isExpired ? 'Expired' : 'Expires'} '
+                    '${_expiryFmt.format(b.expiryDate!)}',
+            ].join(' · '),
+            selected: selectedId == b.id,
+            expired: b.isExpired,
+            onTap: () => onChanged(b),
+          ),
+        ],
+      ],
+    );
   }
 }
 

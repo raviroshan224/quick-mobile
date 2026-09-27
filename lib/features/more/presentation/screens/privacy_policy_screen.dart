@@ -36,20 +36,20 @@ class PrivacyPolicyScreen extends StatelessWidget {
                 _Section(
                   title: '1. Introduction',
                   body:
-                      'Quick ("we", "our") is a point-of-sale application designed for salons and beauty businesses. This Privacy Policy explains what information we collect when you use Quick, how we use it, and the rights you have regarding your data.\n\n'
+                      'Quick ("we", "our") is a point-of-sale application designed for salons, pharmacies, retail shops and similar businesses. This Privacy Policy explains what information we collect when you use Quick, how we use it, and the rights you have regarding your data.\n\n'
                       'By using Quick you agree to the practices described in this policy. If you do not agree, please discontinue use of the app.',
                 ),
                 _Section(
                   title: '2. Information We Collect',
                   body:
                       '2.1  Business & Account Data\n'
-                      '• Salon name, address, phone number, and email address provided during setup\n'
+                      '• Business name, address, phone number, and email address provided during setup\n'
                       '• Owner and staff login credentials (email address; passwords are never stored in plain text)\n'
                       '• Staff profiles including name, phone, specialties, and commission rate\n\n'
                       '2.2  Customer Data\n'
                       '• Customer name, phone number, and email address (entered manually by your staff)\n'
-                      '• Appointment and visit history linked to each customer\n'
-                      '• Transaction totals and service details associated with a customer\n\n'
+                      '• Visit history (and, for salons, appointments) linked to each customer\n'
+                      '• Transaction totals and the services or products associated with a customer\n\n'
                       '2.3  Transaction Data\n'
                       '• Services or products added to each sale\n'
                       '• Payment method (Cash / an owner-configured payment mode)\n'
@@ -67,7 +67,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
                       '• Operate Quick: process sales, generate receipts, and maintain transaction history\n'
                       '• Customer management: display visit history, apply loyalty tracking, and allow customer lookup at checkout\n'
                       '• Staff management: calculate commission, display performance reports, and manage access credentials\n'
-                      '• Notifications: send low-stock alerts and appointment reminders via email using the contact details you provide\n'
+                      '• Notifications: send low-stock alerts and appointment reminders (salons) via email using the contact details you provide\n'
                       '• Reports: generate daily, weekly, and monthly sales analytics visible only to authorised Owner accounts\n'
                       '• Authentication: verify identity via one-time password (OTP) sent to your registered email',
                 ),

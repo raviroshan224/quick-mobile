@@ -7,6 +7,8 @@ import '../../../../core/network/api_client.dart';
 import '../../../../features/auth/presentation/providers/auth_provider.dart';
 import '../../../../features/dashboard/presentation/providers/dashboard_provider.dart';
 import '../../../../features/dashboard/models/dashboard_summary.dart';
+import '../../../../features/inventory/presentation/providers/inventory_provider.dart';
+import '../../../settings/presentation/providers/business_type_provider.dart';
 import '../../../../features/transactions/data/transactions_repository.dart';
 import '../../../../features/transactions/domain/transaction_models.dart';
 import '../../../../shared/widgets/pull_to_refresh.dart';
@@ -108,7 +110,10 @@ class DashboardScreen extends ConsumerWidget {
               header,
               Expanded(
                 child: PullToRefresh(
-                  onRefresh: () => ref.refresh(dashboardProvider.future),
+                  onRefresh: () {
+                    ref.invalidate(expiringBatchesProvider);
+                    return ref.refresh(dashboardProvider.future);
+                  },
                   child: dashboardAsync.when(
                   loading: () =>
                       const Center(child: CircularProgressIndicator()),
@@ -175,6 +180,7 @@ class DashboardScreen extends ConsumerWidget {
                               ),
                       ),
                       const SizedBox(height: 28),
+                      const _ExpiryAlert(),
                       if (summary.lowStockAlerts.isNotEmpty) ...[
                         const Text('Low Stock Alerts',
                             style: TextStyle(
@@ -445,6 +451,69 @@ class _CashDrawerCard extends StatelessWidget {
           ],
         ),
       );
+}
+
+/// Owner dashboard banner for expired / soon-expiring batches. Hidden when
+/// there are none, for salons, and if the lookup fails (it's a nudge, not
+/// the source of truth — that's the Expiring Stock screen).
+class _ExpiryAlert extends ConsumerWidget {
+  const _ExpiryAlert();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (!ref.watch(businessTypeProvider).hasExpiryTracking) {
+      return const SizedBox.shrink();
+    }
+    final batches = ref.watch(expiringBatchesProvider).value ?? const [];
+    final expired = batches.where((b) => b.isExpired).length;
+    final soon = batches
+        .where((b) => !b.isExpired && (b.daysToExpiry ?? 999) <= 30)
+        .length;
+    if (expired == 0 && soon == 0) return const SizedBox.shrink();
+
+    final parts = [
+      if (expired > 0) '$expired batch${expired == 1 ? '' : 'es'} expired',
+      if (soon > 0) '$soon expiring within 30 days',
+    ];
+    final urgent = expired > 0;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 28),
+      child: GestureDetector(
+        onTap: () => context.go(AppRoutes.moreExpiringStock),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            color: urgent ? const Color(0xFFFEE2E2) : const Color(0xFFFEF3C7),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.event_busy_outlined,
+                  size: 18,
+                  color: urgent
+                      ? const Color(0xFFB91C1C)
+                      : const Color(0xFFD97706)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(parts.join(' · '),
+                    style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: urgent
+                            ? const Color(0xFF991B1B)
+                            : const Color(0xFF92400E))),
+              ),
+              Icon(Icons.chevron_right_rounded,
+                  size: 18,
+                  color: urgent
+                      ? const Color(0xFFB91C1C)
+                      : const Color(0xFFD97706)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _LowStockCard extends StatelessWidget {

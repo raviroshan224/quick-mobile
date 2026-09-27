@@ -6,14 +6,39 @@ class InventoryRepository {
   InventoryRepository(this._api);
   final ApiClient _api;
 
+  /// Every active product. The API pages at most 100 at a time, so this
+  /// fetches page 1, then the remaining pages a few at a time — a pharmacy
+  /// can easily stock thousands of items, and checkout search, category
+  /// chips and barcode lookup all work on this full list.
   Future<List<ProductModel>> getProducts({bool? lowStock}) async {
-    final data = await _api.get('/products', queryParameters: {
-      'limit': 100,
-      'isActive': true,
-      if (lowStock == true) 'lowStock': true,
-    }) as Map<String, dynamic>;
-    return PaginatedResponse.fromJson(data, ProductModel.fromJson).data;
+    Future<PaginatedResponse<ProductModel>> page(int n) async {
+      final data = await _api.get('/products', queryParameters: {
+        'page': n,
+        'limit': _pageSize,
+        'isActive': true,
+        if (lowStock == true) 'lowStock': true,
+      }) as Map<String, dynamic>;
+      return PaginatedResponse.fromJson(data, ProductModel.fromJson);
+    }
+
+    final first = await page(1);
+    final products = [...first.data];
+    final lastPage = first.meta.totalPages.clamp(1, _maxPages);
+    for (var start = 2; start <= lastPage; start += _parallelPages) {
+      final end = (start + _parallelPages - 1).clamp(start, lastPage);
+      final pages = await Future.wait(
+          [for (var n = start; n <= end; n++) page(n)]);
+      for (final p in pages) {
+        products.addAll(p.data);
+      }
+    }
+    return products;
   }
+
+  static const _pageSize = 100;
+  static const _parallelPages = 4;
+  // 10,000 products — a safety cap, well above any single shop's catalogue.
+  static const _maxPages = 100;
 
   Future<ProductModel> getById(String id) async {
     final data = await _api.get('/products/$id') as Map<String, dynamic>;
@@ -30,6 +55,12 @@ class InventoryRepository {
     String? category,
     int lowStockThreshold = 5,
     bool isActive = true,
+    String? barcode,
+    String? genericName,
+    String? manufacturer,
+    String? strength,
+    String? dosageForm,
+    bool requiresPrescription = false,
   }) async {
     final data = await _api.post('/products', data: {
       'name': name,
@@ -41,6 +72,12 @@ class InventoryRepository {
       'category': ?category,
       'lowStockThreshold': lowStockThreshold,
       'isActive': isActive,
+      'barcode': ?barcode,
+      'genericName': ?genericName,
+      'manufacturer': ?manufacturer,
+      'strength': ?strength,
+      'dosageForm': ?dosageForm,
+      'requiresPrescription': requiresPrescription,
     }) as Map<String, dynamic>;
     return ProductModel.fromJson(data);
   }
@@ -55,6 +92,12 @@ class InventoryRepository {
     String? category,
     int? lowStockThreshold,
     bool? isActive,
+    String? barcode,
+    String? genericName,
+    String? manufacturer,
+    String? strength,
+    String? dosageForm,
+    bool? requiresPrescription,
   }) async {
     final data = await _api.patch('/products/$id', data: {
       'name': ?name,
@@ -69,8 +112,14 @@ class InventoryRepository {
       'sku': sku,
       'description': description,
       'category': category,
+      'barcode': barcode,
+      'genericName': genericName,
+      'manufacturer': manufacturer,
+      'strength': strength,
+      'dosageForm': dosageForm,
       'lowStockThreshold': ?lowStockThreshold,
       'isActive': ?isActive,
+      'requiresPrescription': ?requiresPrescription,
     }) as Map<String, dynamic>;
     return ProductModel.fromJson(data);
   }
@@ -86,18 +135,56 @@ class InventoryRepository {
     return PaginatedResponse.fromJson(data, ProductModel.fromJson).data;
   }
 
+  /// The active product with this scanned [code] (barcode, or SKU for older
+  /// products), or null if there is none.
+  Future<ProductModel?> findByCode(String code) async {
+    final byBarcode = await _api.get('/products', queryParameters: {
+      'barcode': code,
+      'limit': 1,
+      'isActive': true,
+    }) as Map<String, dynamic>;
+    final hit = PaginatedResponse.fromJson(byBarcode, ProductModel.fromJson).data;
+    if (hit.isNotEmpty) return hit.first;
+    // Search matches substrings, so keep only an exact SKU/barcode match.
+    return (await searchProducts(code)).where((p) => p.matchesCode(code)).firstOrNull;
+  }
+
   Future<void> recordMovement({
     required String productId,
     required InventoryMovementType type,
     required int quantity,
     required String reason,
+    String? batchNumber,
+    DateTime? expiryDate,
+    String? batchId,
   }) async {
     await _api.post('/inventory/movement', data: {
       'productId': productId,
       'type': _movementTypeToString(type),
       'quantity': quantity,
       'reason': reason,
+      'batchNumber': ?batchNumber,
+      if (expiryDate != null) 'expiryDate': formatApiDate(expiryDate),
+      'batchId': ?batchId,
     });
+  }
+
+  /// A product's batches that still hold stock, soonest expiry first.
+  Future<List<ProductBatch>> getBatches(String productId) async {
+    final data =
+        await _api.get('/inventory/products/$productId/batches') as List<dynamic>;
+    return data
+        .map((e) => ProductBatch.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// Batches expired or expiring within [days] days, soonest first.
+  Future<List<ProductBatch>> getExpiring({int days = 90}) async {
+    final data = await _api.get('/inventory/expiring',
+        queryParameters: {'days': days}) as List<dynamic>;
+    return data
+        .map((e) => ProductBatch.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
   Future<List<InventoryLogEntry>> getLogs({int page = 1, int limit = 50}) async {

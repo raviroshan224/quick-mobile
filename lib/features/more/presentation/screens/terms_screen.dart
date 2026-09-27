@@ -42,7 +42,7 @@ class TermsScreen extends StatelessWidget {
                 _Section(
                   title: '2. Description of Service',
                   body:
-                      'Quick is a point-of-sale application for salons and beauty businesses. It provides the following features:\n\n'
+                      'Quick is a point-of-sale application for salons, pharmacies, retail shops and similar businesses. It provides the following features:\n\n'
                       '• Sales checkout with service and product selection\n'
                       '• Cash and QR-based payment modes you configure (eSewa, Fonepay, etc.)\n'
                       '• Customer management and visit history\n'
@@ -56,7 +56,7 @@ class TermsScreen extends StatelessWidget {
                 _Section(
                   title: '3. Account Registration & Security',
                   body:
-                      '3.1  The first account registered for a salon is granted the Owner role. Subsequent staff accounts are created by the Owner.\n\n'
+                      '3.1  The first account registered for a business is granted the Owner role. Subsequent staff accounts are created by the Owner.\n\n'
                       '3.2  You are responsible for maintaining the confidentiality of your login credentials. Do not share your password or authentication tokens with unauthorised individuals.\n\n'
                       '3.3  You are responsible for all activity that occurs under your account. Notify us immediately at info@quick.com.np if you suspect unauthorised access.\n\n'
                       '3.4  We reserve the right to suspend or terminate accounts that violate these terms.',
@@ -69,7 +69,7 @@ class TermsScreen extends StatelessWidget {
                       '• Process transactions for goods or services that are illegal under Nepalese law\n'
                       '• Attempt to reverse-engineer, decompile, or modify the App\n'
                       '• Interfere with or disrupt the App\'s servers or networks\n'
-                      '• Use the App to collect or store customer data beyond what is needed for salon operations\n'
+                      '• Use the App to collect or store customer data beyond what is needed for your business operations\n'
                       '• Share customer data with third parties without the customer\'s consent',
                 ),
                 _Section(
@@ -92,7 +92,7 @@ class TermsScreen extends StatelessWidget {
                   title: '7. Intellectual Property',
                   body:
                       'Quick and all content, features, and functionality (including but not limited to the interface, design, logos, and software) are owned by Quick and are protected by applicable intellectual property laws.\n\n'
-                      'You are granted a limited, non-exclusive, non-transferable licence to use the App for your internal salon business operations. This licence does not include the right to resell, sublicense, or distribute the App.',
+                      'You are granted a limited, non-exclusive, non-transferable licence to use the App for your internal business operations. This licence does not include the right to resell, sublicense, or distribute the App.',
                 ),
                 _Section(
                   title: '8. Disclaimers',

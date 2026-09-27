@@ -62,11 +62,36 @@ class BookingsNotifier extends StateNotifier<BookingsState> {
   Future<void> refresh() async {
     state = state.copyWith(isLoading: true, clearError: true);
     try {
-      final result = await _repo.getAll(date: dateKey, limit: 100);
-      state = state.copyWith(items: result.items, isLoading: false);
+      final items = dateKey == upcomingBookingsKey
+          ? await _loadUpcoming()
+          : (await _repo.getAll(date: dateKey, limit: 100)).items;
+      state = state.copyWith(items: items, isLoading: false);
     } catch (e) {
       state = state.copyWith(isLoading: false, error: e.toString());
     }
+  }
+
+  /// Every booking from today on, soonest first. The API lists bookings
+  /// newest date first when no date is given, so page through until a
+  /// page reaches dates before today (capped, in case of a huge history).
+  Future<List<Booking>> _loadUpcoming() async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    bool upcoming(Booking b) =>
+        !DateTime(b.date.year, b.date.month, b.date.day).isBefore(today);
+
+    final result = <Booking>[];
+    for (var page = 1; page <= 10; page++) {
+      final res = await _repo.getAll(page: page, limit: 100);
+      result.addAll(res.items.where(upcoming));
+      if (!res.hasMore || res.items.any((b) => !upcoming(b))) break;
+    }
+    return result
+      ..sort((a, b) {
+        final byDate = DateTime(a.date.year, a.date.month, a.date.day)
+            .compareTo(DateTime(b.date.year, b.date.month, b.date.day));
+        return byDate != 0 ? byDate : a.time.compareTo(b.time);
+      });
   }
 
   Future<void> create(BookingRequest req) async {
@@ -90,6 +115,10 @@ class BookingsNotifier extends StateNotifier<BookingsState> {
   }
 }
 
+/// [bookingsProvider] key for every booking from today on, soonest first
+/// (instead of a single `YYYY-MM-DD` day).
+const upcomingBookingsKey = 'upcoming';
+
 final bookingsProvider =
     StateNotifierProvider.family<BookingsNotifier, BookingsState, String>(
       (ref, dateKey) =>
@@ -108,23 +137,57 @@ class CalendarTab extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final selectedDate = useState(DateTime.now());
-    final dateKey = _dateKey(selectedDate.value);
+    final showUpcoming = useState(false);
+    final dateKey =
+        showUpcoming.value ? upcomingBookingsKey : _dateKey(selectedDate.value);
     final bookingsState = ref.watch(bookingsProvider(dateKey));
 
+    // Upcoming comes back sorted by date then time; a single day by time.
     final todayBookings = [
       for (final b in bookingsState.items)
         if (staffId == null || b.staffId == staffId) b,
-    ]..sort((a, b) {
-        return a.time.compareTo(b.time);
-      });
+    ];
+    if (!showUpcoming.value) {
+      todayBookings.sort((a, b) => a.time.compareTo(b.time));
+    }
+
+    // Each view keeps its own cached list, so reload the one being switched
+    // to — a booking changed in the other view would otherwise show stale.
+    void setUpcoming(bool upcoming) {
+      if (upcoming == showUpcoming.value) return;
+      ref.invalidate(bookingsProvider(
+          upcoming ? upcomingBookingsKey : _dateKey(selectedDate.value)));
+      showUpcoming.value = upcoming;
+    }
+
+    final toggle = _ViewToggle(
+      upcoming: showUpcoming.value,
+      onChanged: setUpcoming,
+    );
 
     return Column(
       children: [
-        // ── Date strip ──────────────────────────────────────────────────
-        _DateStrip(
-          selectedDate: selectedDate.value,
-          onDateChanged: (d) => selectedDate.value = d,
-        ),
+        // ── Date strip / upcoming header ────────────────────────────────
+        if (showUpcoming.value)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+            child: Row(
+              children: [
+                const Text(
+                  'All upcoming bookings',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                ),
+                const Spacer(),
+                toggle,
+              ],
+            ),
+          )
+        else
+          _DateStrip(
+            selectedDate: selectedDate.value,
+            onDateChanged: (d) => selectedDate.value = d,
+            trailing: toggle,
+          ),
         const Divider(height: 1, color: AppColors.surfaceVariant),
 
         // ── Bookings list or empty state ────────────────────────────────
@@ -143,6 +206,7 @@ class CalendarTab extends HookConsumerWidget {
                 : todayBookings.isEmpty
                 ? _EmptyBookings(
                     assignedOnly: staffId != null,
+                    upcoming: showUpcoming.value,
                     onAdd: () =>
                         _showBookingForm(context, ref, selectedDate.value),
                   )
@@ -151,12 +215,13 @@ class CalendarTab extends HookConsumerWidget {
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 80),
                     itemCount: todayBookings.length,
                     separatorBuilder: (_, _) => const SizedBox(height: 10),
-                    itemBuilder: (_, i) => _BookingCard(
+                    itemBuilder: (_, i) {
+                      final card = _BookingCard(
                       booking: todayBookings[i],
                       onEdit: () => _showBookingForm(
                         context,
                         ref,
-                        selectedDate.value,
+                        todayBookings[i].date,
                         existing: todayBookings[i],
                       ),
                       onDelete: () => _confirmDelete(
@@ -170,7 +235,30 @@ class CalendarTab extends HookConsumerWidget {
                             .read(bookingsProvider(dateKey).notifier)
                             .updateStatus(todayBookings[i].id, status);
                       },
-                    ),
+                      );
+                      // In the upcoming list, a date heading starts each day.
+                      final day = todayBookings[i].date;
+                      final newDay = showUpcoming.value &&
+                          (i == 0 || !_sameDay(todayBookings[i - 1].date, day));
+                      if (!newDay) return card;
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Padding(
+                            padding: EdgeInsets.only(top: i == 0 ? 0 : 8, bottom: 8),
+                            child: Text(
+                              _dayHeading(day),
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ),
+                          card,
+                        ],
+                      );
+                    },
                   ),
           ),
         ),
@@ -182,8 +270,8 @@ class CalendarTab extends HookConsumerWidget {
             width: double.infinity,
             height: 48,
             child: ElevatedButton.icon(
-              onPressed: () =>
-                  _showBookingForm(context, ref, selectedDate.value),
+              onPressed: () => _showBookingForm(context, ref,
+                  showUpcoming.value ? DateTime.now() : selectedDate.value),
               icon: const Icon(Icons.add, size: 18),
               label: const Text(
                 'Create Booking',
@@ -317,9 +405,14 @@ class _ErrorState extends StatelessWidget {
 // ─── Date strip (horizontal day selector) ─────────────────────────────────────
 
 class _DateStrip extends StatelessWidget {
-  const _DateStrip({required this.selectedDate, required this.onDateChanged});
+  const _DateStrip({
+    required this.selectedDate,
+    required this.onDateChanged,
+    this.trailing,
+  });
   final DateTime selectedDate;
   final ValueChanged<DateTime> onDateChanged;
+  final Widget? trailing;
 
   static const _days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   static const _months = [
@@ -381,6 +474,10 @@ class _DateStrip extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (trailing != null) ...[
+                  const SizedBox(width: 8),
+                  trailing!,
+                ],
               ],
             ),
           ),
@@ -445,12 +542,77 @@ class _DateStrip extends StatelessWidget {
   }
 }
 
+// ─── Day / Upcoming toggle ────────────────────────────────────────────────────
+
+class _ViewToggle extends StatelessWidget {
+  const _ViewToggle({required this.upcoming, required this.onChanged});
+  final bool upcoming;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget option(String label, bool value) {
+      final selected = upcoming == value;
+      return GestureDetector(
+        onTap: () => onChanged(value),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: selected ? Colors.black : Colors.transparent,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: selected ? Colors.white : Colors.black,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(2),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceVariant,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [option('Day', false), option('Upcoming', true)],
+      ),
+    );
+  }
+}
+
+bool _sameDay(DateTime a, DateTime b) =>
+    a.year == b.year && a.month == b.month && a.day == b.day;
+
+/// "Today", "Tomorrow", or e.g. "Wed, 30 Sep".
+String _dayHeading(DateTime d) {
+  final now = DateTime.now();
+  if (_sameDay(d, now)) return 'Today';
+  if (_sameDay(d, now.add(const Duration(days: 1)))) return 'Tomorrow';
+  const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug',
+      'Sep', 'Oct', 'Nov', 'Dec'];
+  final year = d.year == now.year ? '' : ' ${d.year}';
+  return '${days[d.weekday - 1]}, ${d.day} ${months[d.month - 1]}$year';
+}
+
 // ─── Empty bookings state ─────────────────────────────────────────────────────
 
 class _EmptyBookings extends StatelessWidget {
-  const _EmptyBookings({required this.onAdd, this.assignedOnly = false});
+  const _EmptyBookings({
+    required this.onAdd,
+    this.assignedOnly = false,
+    this.upcoming = false,
+  });
   final VoidCallback onAdd;
   final bool assignedOnly;
+  final bool upcoming;
 
   @override
   Widget build(BuildContext context) {
@@ -480,9 +642,14 @@ class _EmptyBookings extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              assignedOnly
-                  ? 'No bookings assigned to you for this date.'
-                  : 'No bookings scheduled for this date.\nTap below to create one.',
+              switch ((assignedOnly, upcoming)) {
+                (true, true) => 'No upcoming bookings assigned to you.',
+                (true, false) => 'No bookings assigned to you for this date.',
+                (false, true) =>
+                  'No upcoming bookings.\nTap below to create one.',
+                (false, false) =>
+                  'No bookings scheduled for this date.\nTap below to create one.',
+              },
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
             ),
@@ -790,6 +957,9 @@ class BookingFormSheet extends HookConsumerWidget {
         } else {
           await notifier.create(req);
         }
+        // The upcoming list may be the one on screen; it isn't the day's
+        // notifier, so reload it too.
+        ref.invalidate(bookingsProvider(upcomingBookingsKey));
         if (context.mounted) Navigator.pop(context);
       } catch (e) {
         if (context.mounted) {

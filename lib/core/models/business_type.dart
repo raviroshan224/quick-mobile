@@ -71,4 +71,12 @@ enum BusinessType {
 
   /// Staff specialties (e.g. "Haircut") on the staff form.
   bool get hasStaffSpecialties => this == BusinessType.salon;
+
+  /// Medicine details on products (generic name, strength, prescription…).
+  bool get hasMedicineFields => this == BusinessType.pharmacy;
+
+  /// Batch numbers and expiry dates on stock, the expiring-stock screen and
+  /// the dashboard expiry alert. Off for salons, whose products rarely
+  /// need it; pharmacies and shops (food, cosmetics) do.
+  bool get hasExpiryTracking => this != BusinessType.salon;
 }

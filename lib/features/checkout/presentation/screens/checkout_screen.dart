@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import '../../../../features/auth/presentation/providers/auth_provider.dart';
 import '../../../../features/pos/domain/pos_models.dart';
 import '../../../../features/pos/presentation/providers/cart_provider.dart';
 import '../../../../features/services/domain/service_colors.dart';
@@ -10,6 +12,7 @@ import '../../../../features/services/presentation/providers/services_provider.d
 import '../../../../features/inventory/domain/inventory_models.dart';
 import '../../../../features/inventory/presentation/providers/inventory_provider.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../shared/widgets/barcode_scanner_screen.dart';
 import '../../../settings/presentation/providers/business_type_provider.dart';
 import 'review_sale_sheet.dart';
 import 'calendar_tab.dart';
@@ -692,6 +695,56 @@ class _ServicesView extends HookConsumerWidget {
 
 // ─── Items View (4th tab, sells retail products from inventory) ──────────────
 
+void _showToast(BuildContext context, String message) {
+  ScaffoldMessenger.of(context)
+    ..hideCurrentSnackBar()
+    ..showSnackBar(
+      SnackBar(
+        content: Text(message),
+        duration: const Duration(milliseconds: 1200),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: Colors.black,
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 80),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+        ),
+      ),
+    );
+}
+
+/// Adds one [product] to the active cart unless that would sell more than is
+/// in stock. Shared by tapping a product card and scanning its barcode.
+void _addProductToCart(
+    BuildContext context, WidgetRef ref, ProductModel product) {
+  final inCart = ref
+      .read(activeCartProvider)
+      .items
+      .where((i) => i.product?.id == product.id)
+      .length;
+  if (product.sellableStock - inCart <= 0) {
+    _showToast(
+      context,
+      product.expiredStock > 0 && product.sellableStock == 0
+          ? '${product.name}: only expired stock left'
+          : '${product.name} is out of stock',
+    );
+    return;
+  }
+  HapticFeedback.selectionClick();
+  ref.read(activeCartNotifierProvider).addProduct(product);
+  _showToast(
+    context,
+    product.requiresPrescription
+        ? '${product.name} added · prescription required'
+        : '${product.name} added',
+  );
+}
+
+/// Whether typed text looks like a barcode rather than a name search —
+/// used when Enter is pressed in the search field, which is what USB and
+/// Bluetooth barcode scanners do after typing the code.
+bool _looksLikeBarcode(String s) => RegExp(r'^\d{6,}$').hasMatch(s);
+
 class _ItemsView extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -701,6 +754,75 @@ class _ItemsView extends HookConsumerWidget {
     final selectedCat = useState<String?>(null);
     final cart = ref.watch(activeCartProvider);
 
+    // A code not in the loaded list (e.g. an item just added on another
+    // device) is looked up on the server before giving up.
+    Future<void> addByCode(String code) async {
+      ProductModel? product = productsAsync.valueOrNull
+          ?.where((p) => p.matchesCode(code))
+          .firstOrNull;
+      if (product == null) {
+        try {
+          product = await ref.read(inventoryRepositoryProvider).findByCode(code);
+        } catch (_) {
+          if (context.mounted) _showToast(context, 'Could not look up $code');
+          return;
+        }
+      }
+      if (!context.mounted) return;
+      if (product != null) {
+        _addProductToCart(context, ref, product);
+        return;
+      }
+      final isOwner = ref.read(isOwnerProvider);
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text('No item with barcode $code'),
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: Colors.black,
+            margin: const EdgeInsets.fromLTRB(16, 0, 16, 80),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            action: isOwner
+                ? SnackBarAction(
+                    label: 'Add item',
+                    textColor: Colors.white,
+                    onPressed: () async {
+                      final created = await context.push<ProductModel>(
+                        Uri(
+                          path: '/more/items/new',
+                          queryParameters: {'barcode': code},
+                        ).toString(),
+                      );
+                      if (created != null && context.mounted) {
+                        _addProductToCart(context, ref, created);
+                      }
+                    },
+                  )
+                : null,
+          ),
+        );
+    }
+
+    Future<void> scan() async {
+      final code = await BarcodeScannerScreen.scan(context);
+      if (code != null) await addByCode(code);
+    }
+
+    Future<void> onSubmitted(String raw) async {
+      final code = raw.trim();
+      final exact = productsAsync.valueOrNull
+          ?.where((p) => p.matchesCode(code))
+          .isNotEmpty ??
+          false;
+      if (!exact && !_looksLikeBarcode(code)) return;
+      searchCtrl.clear();
+      searchQ.value = '';
+      await addByCode(code);
+    }
+
     return Column(
       children: [
         // Search
@@ -709,8 +831,19 @@ class _ItemsView extends HookConsumerWidget {
           child: TextField(
             controller: searchCtrl,
             onChanged: (v) => searchQ.value = v,
+            onSubmitted: onSubmitted,
+            textInputAction: TextInputAction.search,
             decoration: InputDecoration(
-              hintText: 'Search items',
+              suffixIcon: IconButton(
+                tooltip: 'Scan barcode',
+                icon: const Icon(
+                  Icons.qr_code_scanner_rounded,
+                  size: 20,
+                  color: AppColors.textSecondary,
+                ),
+                onPressed: scan,
+              ),
+              hintText: 'Search or scan items',
               hintStyle: const TextStyle(
                 color: AppColors.textTertiary,
                 fontSize: 15,
@@ -739,11 +872,14 @@ class _ItemsView extends HookConsumerWidget {
             data: (products) {
               final categories = (products.map((p) => p.category).whereType<String>().toSet().toList()..sort());
 
+              final q = searchQ.value.trim().toLowerCase();
               final filtered = products.where((p) {
                 final matchCat = selectedCat.value == null || p.category == selectedCat.value;
-                final matchSearch =
-                    searchQ.value.isEmpty ||
-                    p.name.toLowerCase().contains(searchQ.value.toLowerCase());
+                final matchSearch = q.isEmpty ||
+                    p.name.toLowerCase().contains(q) ||
+                    (p.genericName?.toLowerCase().contains(q) ?? false) ||
+                    (p.barcode?.contains(q) ?? false) ||
+                    (p.sku?.toLowerCase().contains(q) ?? false);
                 return matchCat && matchSearch;
               }).toList();
 
@@ -1005,37 +1141,15 @@ class _ProductGridCard extends ConsumerWidget {
     final matching = cart.items.where((i) => i.product?.id == product.id).toList();
     final inCartCount = matching.length;
     final inCart = inCartCount > 0;
-    final outOfStock = product.stock - inCartCount <= 0;
+    final outOfStock = product.sellableStock - inCartCount <= 0;
+    final onlyExpired = product.sellableStock == 0 && product.expiredStock > 0;
 
-    void showToast(String message) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          duration: const Duration(milliseconds: 1200),
-          behavior: SnackBarBehavior.floating,
-          backgroundColor: Colors.black,
-          margin: const EdgeInsets.fromLTRB(16, 0, 16, 80),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-        ),
-      );
-    }
-
-    void addOne() {
-      if (outOfStock) {
-        showToast('${product.name} is out of stock');
-        return;
-      }
-      HapticFeedback.selectionClick();
-      ref.read(activeCartNotifierProvider).addProduct(product);
-      showToast('${product.name} added');
-    }
+    void addOne() => _addProductToCart(context, ref, product);
 
     void removeOne() {
       HapticFeedback.selectionClick();
       ref.read(activeCartNotifierProvider).removeItem(matching.last.id);
-      showToast('${product.name} removed');
+      _showToast(context, '${product.name} removed');
     }
 
     return GestureDetector(
@@ -1068,11 +1182,27 @@ class _ProductGridCard extends ConsumerWidget {
                           height: 1.2,
                         ),
                       ),
+                      if (product.medicineDetail != null) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          product.medicineDetail!,
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 6),
                       Text(
-                        outOfStock
-                            ? 'Out of stock'
-                            : 'Rs ${product.price.toStringAsFixed(0)}',
+                        onlyExpired
+                            ? 'Expired stock'
+                            : outOfStock
+                                ? 'Out of stock'
+                                : 'Rs ${product.price.toStringAsFixed(0)}',
                         style: TextStyle(
                           fontSize: 12.5,
                           fontWeight: FontWeight.w600,
@@ -1085,6 +1215,27 @@ class _ProductGridCard extends ConsumerWidget {
                   ),
                 ),
               ),
+              if (product.requiresPrescription)
+                Positioned(
+                  top: 8,
+                  left: 8,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 5, vertical: 2),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: accent),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      'Rx',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        color: accent,
+                      ),
+                    ),
+                  ),
+                ),
               if (inCart)
                 Positioned(
                   top: 8,

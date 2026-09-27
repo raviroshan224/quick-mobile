@@ -3,20 +3,26 @@ import '../../../../core/network/api_client.dart';
 import '../../data/inventory_repository.dart';
 import '../../domain/inventory_models.dart';
 
-final _inventoryRepoProvider = Provider<InventoryRepository>(
+final inventoryRepositoryProvider = Provider<InventoryRepository>(
   (ref) => InventoryRepository(ref.read(apiClientProvider)),
 );
 
 final productsProvider = FutureProvider<List<ProductModel>>((ref) {
-  return ref.watch(_inventoryRepoProvider).getProducts();
+  return ref.watch(inventoryRepositoryProvider).getProducts();
+});
+
+/// Batches expired or expiring within 90 days (the expiring-stock screen
+/// filters this further).
+final expiringBatchesProvider = FutureProvider<List<ProductBatch>>((ref) {
+  return ref.watch(inventoryRepositoryProvider).getExpiring(days: 90);
 });
 
 final lowStockProvider = FutureProvider<List<ProductModel>>((ref) {
-  return ref.watch(_inventoryRepoProvider).getProducts(lowStock: true);
+  return ref.watch(inventoryRepositoryProvider).getProducts(lowStock: true);
 });
 
 final inventoryLogsProvider = FutureProvider<List<InventoryLogEntry>>((ref) {
-  return ref.watch(_inventoryRepoProvider).getLogs();
+  return ref.watch(inventoryRepositoryProvider).getLogs();
 });
 
 // ─── Paginated log list with type filter ──────────────────────────────────────
@@ -109,5 +115,5 @@ class LogListNotifier extends StateNotifier<LogListState> {
 
 final logListProvider =
     StateNotifierProvider<LogListNotifier, LogListState>(
-  (ref) => LogListNotifier(ref.read(_inventoryRepoProvider)),
+  (ref) => LogListNotifier(ref.read(inventoryRepositoryProvider)),
 );

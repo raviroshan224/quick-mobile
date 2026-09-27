@@ -48,9 +48,9 @@
 		</dict>
 	</dict>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Salon POS needs access to your photo library to upload images.</string>
+	<string>Quick needs access to your photo library to upload images.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>Salon POS needs camera access to take photos.</string>
+	<string>Quick needs camera access to take photos and scan barcodes.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>

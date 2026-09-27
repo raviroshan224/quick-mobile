@@ -174,6 +174,12 @@ class MoreScreen extends ConsumerWidget {
                       label: 'Stock Movement',
                       onTap: () => context.go(AppRoutes.moreStockMovement),
                     ),
+                    if (businessType.hasExpiryTracking)
+                      _MoreTile(
+                        icon: Icons.event_busy_outlined,
+                        label: 'Expiring Stock',
+                        onTap: () => context.go(AppRoutes.moreExpiringStock),
+                      ),
                     _MoreTile(
                       icon: Icons.settings_outlined,
                       label: 'Settings',
